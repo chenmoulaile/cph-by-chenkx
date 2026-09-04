@@ -1,0 +1,9 @@
+{
+	"description": "Sublime Text plugin for competitive programming with cph-ng style verdict display, similar to FastOlympicCoding. Built-in Competitive Companion browser extension support.",
+	"author": "chenkx",
+	"homepage": "https://github.com/chenkx/cph-by-chenkx",
+	"issues": "https://github.com/chenkx/cph-by-chenkx/issues",
+	"license": "MIT",
+	"name": "cph-by-chenkx",
+	"readme": "https://raw.githubusercontent.com/chenkx/cph-by-chenkx/main/README.md"
+}

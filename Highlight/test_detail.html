@@ -1,0 +1,41 @@
+<div class="testcase-panel">
+	<div class="testcase-header">
+		<span class="verdict-badge {verdict_class}">{verdict_short}</span>
+		<span>{test_label} {test_id}</span>
+		<span class="runtime-info">{time_label}: {runtime}</span>
+		<span class="memory-info" style="display: {memory_display}; margin-left: 8px;">{memory_label}: {memory}</span>
+		<a class="config" href="test-close-detail" style="margin-left: auto; color: var(--redish);">&#10005;</a>
+	</div>
+
+	<div class="testcase-content">
+		<div class="testcase-section">
+			<div class="testcase-section-title">{input_label}:</div>
+			<div class="testcase-io">{stdin}</div>
+		</div>
+
+		<div class="testcase-section">
+			<div class="testcase-section-title">{expected_output_label}:</div>
+			<div class="testcase-io">{expected}</div>
+		</div>
+
+		<div class="testcase-section">
+			<div class="testcase-section-title">{actual_output_label}:</div>
+			<div class="testcase-io">{stdout}</div>
+		</div>
+
+		<div class="correct-answer-display">
+			<div class="correct-answer-label">{correct_answer_label}:</div>
+			{expected_clean}
+		</div>
+
+		<div class="testcase-section" style="display: {stderr_display};">
+			<div class="testcase-section-title">{error_output_label}:</div>
+			<div class="testcase-io">{stderr}</div>
+		</div>
+
+		<div class="testcase-section" style="display: {message_display};">
+			<div class="testcase-section-title">{message_label}:</div>
+			<div class="testcase-io">{message}</div>
+		</div>
+	</div>
+</div>
