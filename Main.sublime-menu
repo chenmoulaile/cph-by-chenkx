@@ -47,5 +47,34 @@
 				]
 			}
 		]
+	},
+	{
+		"caption": "Preferences",
+		"mnemonic": "P",
+		"id": "preferences",
+		"children": [
+			{
+				"caption": "Package Settings",
+				"mnemonic": "P",
+				"id": "package-settings",
+				"children": [
+					{
+						"caption": "cph-by-chenkx",
+						"children": [
+							{
+								"caption": "Settings",
+								"command": "open_file",
+								"args": {"file": "${packages}/cph-by-chenkx/cph-by-chenkx (${platform}).sublime-settings"}
+							},
+							{
+								"caption": "README（使用说明）",
+								"command": "open_file",
+								"args": {"file": "${packages}/cph-by-chenkx/README.md"}
+							}
+						]
+					}
+				]
+			}
+		]
 	}
 ]

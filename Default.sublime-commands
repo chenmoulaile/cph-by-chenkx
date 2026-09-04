@@ -10,5 +10,7 @@
 	{ "caption": "cph-by-chenkx: Stop stress test",         "command": "cph_stop_stress_test" },
 	{ "caption": "cph-by-chenkx: Switch to English",         "command": "cph_language_set_language", "args": {"language": "en"} },
 	{ "caption": "cph-by-chenkx: Switch to Chinese (切换为中文)", "command": "cph_language_set_language", "args": {"language": "zh"} },
-	{ "caption": "cph-by-chenkx: Toggle language",          "command": "cph_language_toggle_language" }
+	{ "caption": "cph-by-chenkx: Toggle language",          "command": "cph_language_toggle_language" },
+	{ "caption": "Preferences: cph-by-chenkx Settings",      "command": "edit_settings",
+		"args": { "base_file": "${packages}/cph-by-chenkx/cph-by-chenkx (${platform}).sublime-settings" } }
 ]
