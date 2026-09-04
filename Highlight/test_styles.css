@@ -11,6 +11,7 @@ a {
 	background-color: color(var(--foreground) alpha(0.25));
 	padding: 0px;
 	margin: 0px;
+	overflow: hidden;
 }
 
 .test {
@@ -18,6 +19,8 @@ a {
 	text-decoration: none;
 	background-color: color(var(--foreground) alpha(0.3));
 	padding: 1px;
+	display: inline-block;
+	white-space: nowrap;
 }
 
 .test-accept {
@@ -77,12 +80,13 @@ a {
 	font-weight: bold;
 	font-family: monospace;
 	line-height: 14px;
-	vertical-align: baseline;
+	vertical-align: middle;
 	text-decoration: none;
 	color: var(--foreground);
 	min-width: 28px;
-	height: 14px;
+	height: 16px;
 	text-align: center;
+	box-sizing: border-box;
 }
 
 .verdict-AC { background-color: color(var(--greenish) alpha(0.25)); color: var(--greenish); }
@@ -105,6 +109,7 @@ a {
 
 .test-wrong-answer {
 	background-color: color(var(--redish) alpha(0.25));
+	border-left: 3px solid var(--redish);
 }
 
 .test-time-limit-exceed {
@@ -247,4 +252,35 @@ a {
 	font-weight: bold;
 	color: var(--greenish);
 	margin-bottom: 4px;
+}
+
+.testcase-section-stderr {
+	margin-bottom: 8px;
+	background-color: color(var(--yellowish) alpha(0.1));
+	border-left: 3px solid var(--yellowish);
+	padding: 6px 8px;
+	border-radius: 0 3px 3px 0;
+}
+
+.testcase-section-stderr .testcase-section-title {
+	color: var(--yellowish);
+}
+
+.testcase-section-stderr .testcase-io {
+	background-color: color(var(--background) alpha(0.5));
+	margin-bottom: 0;
+}
+
+.testcase-stderr-indicator {
+	display: inline-block;
+	background-color: color(var(--yellowish) alpha(0.25));
+	color: var(--yellowish);
+	padding: 0 4px;
+	margin-left: 4px;
+	border-radius: 2px;
+	font-size: 10px;
+	font-weight: bold;
+	font-family: monospace;
+	line-height: 14px;
+	vertical-align: middle;
 }

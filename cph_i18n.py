@@ -1,13 +1,13 @@
 """
 cph-by-chenkx - 国际化 / Internationalization
-默认英文 (可切换为中文)
-Default English, can be switched to Chinese
+默认中文 (可切换为英文)
+Default Chinese, switchable to English
 """
 
 LANG_ZH = 'zh'
 LANG_EN = 'en'
 
-_current_lang = LANG_EN  # default is English (changed from 'zh')
+_current_lang = LANG_ZH  # default is Chinese
 
 STRINGS = {
     'edit': {
@@ -42,6 +42,10 @@ STRINGS = {
         'zh': '接受',
         'en': 'accept',
     },
+    'has_stderr': {
+        'zh': '有 stderr',
+        'en': 'stderr',
+    },
     'decline': {
         'zh': '拒绝',
         'en': 'decline',
@@ -71,8 +75,8 @@ STRINGS = {
         'en': 'Actual Output',
     },
     'error_output': {
-        'zh': '错误输出',
-        'en': 'Error Output',
+        'zh': '标准错误输出 (stderr)',
+        'en': 'Standard Error (stderr)',
     },
     'message': {
         'zh': '信息',

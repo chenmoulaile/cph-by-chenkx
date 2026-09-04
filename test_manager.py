@@ -196,6 +196,8 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 					memory_display = 'inline'
 					memory_str = self.get_nice_memory()
 
+				stderr_display = 'inline-block' if self.stderr and self.stderr.strip() else 'none'
+
 				content = content.format(
 					test_id=i + 1,
 					runtime=self.get_nice_runtime(),
@@ -204,6 +206,8 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 					test_type=test_type,
 					memory_display=memory_display,
 					memory=memory_str,
+					stderr_display=stderr_display,
+					stderr_label=t('has_stderr'),
 					edit_label=t('edit'),
 					run_label=t('run'),
 					detail_label=t('detail'),
