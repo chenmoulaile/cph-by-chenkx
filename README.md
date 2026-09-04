@@ -59,10 +59,27 @@ cph-by-chenkx 是基于 [FastOlympicCoding](https://github.com/Jatana/FastOlympi
 ## 使用方法
 
 1. 打开 C++ 源文件
-2. 按 `Ctrl+Shift+B` (Mac: `Cmd+Shift+B`) 启动测评
+2. 按 `Ctrl+Alt+B` (Mac: `Cmd+Alt+B`) 启动测评
 3. 右侧会打开一个测试运行窗口，可以输入/编辑测试数据
 4. 测评结束后，每个测试点会显示 verdict 徽章
 5. 点击 `详情` 展开详细结果
+
+## 快捷键
+
+| 按键 | 功能 |
+| --- | --- |
+| `Ctrl+Alt+B` (Mac: `Cmd+Alt+B`) | 运行测试 |
+| `Ctrl+Alt+I` (Mac: `Cmd+Alt+I`) | 从文件导入测试 |
+| `Ctrl+Alt+S` (Mac: `Cmd+Alt+S`) | 开始对拍 |
+| `Ctrl+Alt+Shift+S` (Mac: `Cmd+Alt+Shift+S`) | 停止对拍 |
+| `Ctrl+K, Ctrl+P` (Mac: `Cmd+K, Cmd+P`) | 同步 OPdebug |
+| `Tab` (在 C++ 源码中) | 插入模板 |
+| `Enter` (在 TestSyntax 中) | 插入行 |
+| `Ctrl+Enter` (在 TestSyntax 中) | 新建测试 |
+| `Ctrl+V` / `Cmd+V` (在 TestSyntax 中) | 粘贴 |
+| `Ctrl+X` / `Cmd+X` (在 TestSyntax 中) | 终止进程 |
+| `Ctrl+D` / `Cmd+D` (在 TestSyntax 中) | 删除测试 |
+| `Ctrl+Shift+Up/Down` (在 TestSyntax 中) | 交换测试顺序 |
 
 ## 致谢
 
