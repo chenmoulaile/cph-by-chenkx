@@ -18,7 +18,7 @@ a {
 	color: color(var(--foreground));
 	text-decoration: none;
 	background-color: color(var(--foreground) alpha(0.3));
-	padding: 2px;
+	padding: 1px;
 }
 
 .test-accept {
@@ -42,8 +42,8 @@ a {
 	color: color(var(--foreground));
 	text-decoration: none;
 	background-color: color(var(--foreground) alpha(0.3));
-	padding: 3px;
-	margin-right: 4px;
+	padding: 1px;
+	margin-right: 2px;
 }
 
 .config-run {
@@ -63,7 +63,7 @@ a {
 }
 
 .config-next {
-	padding: 3px;
+	padding: 1px;
 	color: color(var(--foreground));
 	text-decoration: none;
 	background-color: color(var(--foreground) alpha(0.5));
