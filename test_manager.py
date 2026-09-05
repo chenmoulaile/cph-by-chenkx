@@ -188,6 +188,7 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 
 				verdict_class = self.get_verdict_class()
 				verdict_short = self.verdict['name'] if self.verdict else 'UKE'
+				verdict_icon = '✓' if (self.verdict and self.verdict['name'] == 'AC') else '×'
 				test_type = self.get_test_class()
 
 				memory_display = 'none'
@@ -203,6 +204,7 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 					runtime=self.get_nice_runtime(),
 					verdict_class=verdict_class,
 					verdict_short=verdict_short,
+					verdict_icon=verdict_icon,
 					test_type=test_type,
 					memory_display=memory_display,
 					memory=memory_str,
@@ -442,7 +444,15 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 			tests = self.tests
 			process_manager = self.process_manager
 			self.on_status_change('COMPILE')
-			process_manager.compile()
+			try:
+				cmp_data = process_manager.compile()
+			except Exception as e:
+				cmp_data = (1, str(e))
+			if cmp_data is not None and cmp_data[0] != 0:
+				# do not run a stale binary after a failed compile
+				self.on_status_change('STOPPED')
+				sublime.status_message(t('compile_error'))
+				return
 			self.running_test = id
 			self.running_new = False
 			self.prog_out[id] = ''
@@ -583,7 +593,7 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 		v.window().focus_group(1)
 		edit_view = v.window().new_file()
 		v.window().set_view_index(edit_view, 1, 1)
-		# Get current correct answer for this test
+		# 'data' carries the current correct answer for the answer section
 		correct_answer = ''
 		if tester.tests[i].correct_answers:
 			correct_answer = next(iter(tester.tests[i].correct_answers))
@@ -666,12 +676,17 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 
 		if not hasattr(self, 'detail_phantoms'):
 			self.detail_phantoms = [PhantomSet(v, 'test-detail-' + str(j)) for j in range(10)]
+			self.detail_open = set()
 		while len(self.detail_phantoms) <= i:
 			self.detail_phantoms.append(PhantomSet(v, 'test-detail-' + str(len(self.detail_phantoms))))
 
 		self.detail_phantoms[i].update([detail])
+		self.detail_open.add(i)
 
 	def close_test_detail(self, i):
+		if not hasattr(self, 'detail_open'):
+			self.detail_open = set()
+		self.detail_open.discard(i)
 		if hasattr(self, 'detail_phantoms') and i < len(self.detail_phantoms):
 			self.detail_phantoms[i].update([])
 
@@ -701,15 +716,36 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 		self.memorize_tests()
 
 	def set_correct_answer(self, data=None, id=None):
-		"""Set the correct answer for a test. Triggers re-judgment."""
+		"""Set the correct answer for a test. Re-judges existing output."""
 		if id is None or data is None:
 			return
 		tester = self.tester
+		test = tester.tests[id]
 		# Clear and set new correct answer
-		tester.tests[id].correct_answers = set()
+		test.correct_answers = set()
 		answer = data.strip()
 		if answer:
-			tester.tests[id].accept_out(answer)
+			test.add_correct_answer(answer)
+
+		# Re-judge with the new answer if this test already has output
+		if id < len(tester.prog_out):
+			out = tester.prog_out[id].rstrip()
+			if out and str(getattr(test, 'rtcode', '0')) == '0':
+				pm = tester.process_manager
+				verdict = get_verdict_by_code(
+					rtcode=0,
+					runtime=int(test.runtime) if test.runtime not in ('-', None) else 0,
+					time_limit_ms=pm.get_time_limit_ms() if hasattr(pm, 'get_time_limit_ms') else None,
+					memory_limit_mb=pm.get_memory_limit_mb() if hasattr(pm, 'get_memory_limit_mb') else None,
+					stderr=test.stderr,
+					stdout=out,
+					expected_output=answer,
+					ignore_error=True,
+					regard_pe_as_ac=False
+				)
+				test.set_verdict(verdict)
+				test.set_expected_output(answer)
+
 		self.memorize_tests()
 		# Re-render to update the display
 		self.update_configs()
@@ -846,11 +882,13 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 		if hasattr(pm, 'get_memory_limit_mb'):
 			memory_limit_mb = pm.get_memory_limit_mb()
 
+		stderr = ''
+		if getattr(pm, 'separate_stderr', False) and hasattr(pm, 'get_stderr'):
+			stderr = pm.get_stderr()
+
 		expected_output = ''
 		if self.tester.tests[test_id].correct_answers:
 			expected_output = next(iter(self.tester.tests[test_id].correct_answers))
-
-		stderr = ''
 
 		verdict = get_verdict_by_code(
 			rtcode=int(rtcode) if rtcode is not None else 0,
@@ -912,11 +950,16 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 			sublime.set_timeout(self.update_configs, 100)
 
 		if hasattr(self, 'detail_phantoms') and test_id < len(self.detail_phantoms):
-			pt = self.get_tie_pos(test_id)
-			if not tester.tests[test_id].fold:
-				pt += len(_inp) + len(_outp) + 1
-			detail = tester.tests[test_id].get_detail(test_id, pt, self.on_test_action, self.view)
-			self.detail_phantoms[test_id].update([detail])
+			if tester.tests[test_id].fold:
+				# test folded (e.g. answer accepted): the detail phantom
+				# must not stay behind floating alone
+				self.close_test_detail(test_id)
+			elif test_id in getattr(self, 'detail_open', set()):
+				pt = self.get_tie_pos(test_id)
+				if not tester.tests[test_id].fold:
+					pt += len(_inp) + len(_outp) + 1
+				detail = tester.tests[test_id].get_detail(test_id, pt, self.on_test_action, self.view)
+				self.detail_phantoms[test_id].update([detail])
 
 	def change_process_status(self, status):
 		self.view.set_status('process_status', status)
@@ -943,8 +986,11 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 	def set_compile_bar(self, cmd, type=''):
 		view = self.view
 		styles = get_test_styles(view)
+		# escape html specials so compiler output shows up correctly in minihtml
+		cmd_escaped = (cmd or '').replace('&', '&amp;') \
+			.replace('<', '&lt;').replace('>', '&gt;')
 		content = open(root_dir + '/Highlight/compile.html').read().format(
-			cmd=cmd,
+			cmd=cmd_escaped,
 			compilation_error_label=t('compilation_error')
 		)
 		content = '<style>' + styles + '</style>' + content
@@ -969,8 +1015,13 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 		self.use_debugger = use_debugger
 		v = self.view
 
-		if v.get_status('process_status') == 'COMPILING':
+		# Re-entry guard: only block while a compile is genuinely in flight.
+		# A stale 'COMPILING' status left behind by an older crashed compile
+		# is auto-cleared after 30s so the user is never stuck forever.
+		compiling_since = getattr(self, 'compiling_since', None)
+		if compiling_since is not None and (time() - compiling_since) < 30:
 			return
+		self.compiling_since = time()
 
 		if v.get_status('process_status') == 'RUNNING':
 			print('terminating')
@@ -997,6 +1048,10 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 
 			sublime.set_timeout_async(rerun, 30)
 			return
+
+		# Clear any stale COMPILING status from a previous crashed compile
+		if v.get_status('process_status') == 'COMPILING':
+			self.compiling_since = None
 
 		if v.settings().get('edit_mode'):
 			self.apply_edit_changes()
@@ -1062,13 +1117,25 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 			run_settings=get_settings().get('run_settings')
 		)
 
+		# Optional: capture stderr (cerr etc.) separately so it is ignored
+		# when comparing the program output against the correct answer
+		if get_settings().get('ignore_stderr', True):
+			process_manager.set_separate_stderr(True)
+
 		if time_limit_ms is not None:
 			process_manager.set_time_limit(time_limit_ms)
 		if memory_limit_mb is not None:
 			process_manager.set_memory_limit(memory_limit_mb)
 
 		def compile(self=self, v=v):
-			cmp_data = process_manager.compile()
+			try:
+				cmp_data = process_manager.compile()
+				print('[cph-by-chenkx] compile rc: %s' % (cmp_data[0] if cmp_data else None))
+			except Exception as e:
+				print('[cph-by-chenkx] compile exception: %s' % e)
+				cmp_data = (1, '[cph-by-chenkx] compile failed: %s' % e)
+			finally:
+				self.compiling_since = None
 			self.change_process_status('COMPILED')
 			self.delta_input = 0
 			if cmp_data is None or cmp_data[0] == 0:

@@ -1,13 +1,24 @@
 {
+	// ================= cph-by-chenkx 设置（中文注释版 / OSX） =================
+	// 修改本文件后需要重启 Sublime Text 才能完全生效。
+
+	// 是否开启代码 lint（保存时用 lint_compile_cmd 静态检查代码）
 	"lint_enabled": true,
+	// lint 检出错误 / 警告时在编辑器里高亮所用的作用域
 	"lint_error_region_scope": "invalid.illegal",
 	"lint_warning_region_scope": "constant",
+	// 算法模板目录（暂未使用，保留兼容）
 	"algorithms_base": null,
+	// 比赛数据根目录
 	"contests_base": "~",
 
-	
+	// 界面语言: "zh" 中文 / "en" 英文
 	"language": "en",
 
+	// ================= 各语言编译/运行配置 =================
+	// 可用占位符: {source_file} 源文件路径, {source_file_dir} 所在目录,
+	//             {file_name} 不带扩展名的文件名, {args} 附加参数
+	// 注意: compile_cmd 里 "-o" 后面必须紧跟输出文件名 "{file_name}"！
 	"run_settings": [
 		{
 			"name": "C++",
@@ -36,10 +47,18 @@
 		}
 	],
 
+	// 对拍时每轮的时间限制(秒)
 	"stress_time_limit_seconds": 2,
+
+	// 是否启用 C++ 变量名补全
 	"cpp_complete_enabled": true,
+	// 打开测评面板时是否自动隐藏侧边栏
 	"close_sidebar": true,
 
+	// 是否在答案比较时忽略标准错误 (cerr / debug 输出)
+	"ignore_stderr": true,
+
+	// ================= 测试数据存储 =================
 	"tests_file_suffix": "__tests",
 	"tests_relative_dir": "",
 	"tests_folder_name": "tests"

@@ -7,6 +7,7 @@ import subprocess
 import shlex
 import signal
 import sublime
+import tempfile
 
 
 class ProcessManager(object):
@@ -21,6 +22,11 @@ class ProcessManager(object):
 		self.run = self.run_file
 		self.run_settings = run_settings
 		self.file_name = path.splitext(path.split(file)[1])[0]
+
+		# When enabled, stderr (e.g. cerr debug output) is captured separately
+		# so it never mixes into stdout and is ignored when comparing answers
+		self.separate_stderr = False
+		self.stderr_file = None
 
 		# Extract time/memory limits from run_settings
 		self.time_limit_ms = None
@@ -41,6 +47,27 @@ class ProcessManager(object):
 
 	def set_memory_limit(self, mem_mb):
 		self.memory_limit_override = mem_mb
+
+	def set_separate_stderr(self, separate=True):
+		self.separate_stderr = separate
+
+	def get_stderr(self):
+		"""Return captured stderr content (only in separate_stderr mode)."""
+		if self.stderr_file is not None:
+			try:
+				self.stderr_file.seek(0)
+				return self.stderr_file.read()
+			except Exception:
+				return ''
+		return ''
+
+	def close_stderr(self):
+		if self.stderr_file is not None:
+			try:
+				self.stderr_file.close()
+			except Exception:
+				pass
+			self.stderr_file = None
 
 	def get_time_limit_ms(self):
 		if self.time_limit_override is not None:
@@ -101,12 +128,28 @@ class ProcessManager(object):
 	def compile(self, wait_close=True):
 		cmd = self.get_compile_cmd()
 		if cmd is not None:
-			PIPE = subprocess.PIPE
-			p = subprocess.Popen(cmd, \
-				shell=True, stdin=PIPE, stdout=PIPE, stderr=subprocess.STDOUT, \
-					cwd=os.path.split(self.file)[0])
-			compile_result = p.communicate()[0].decode('utf-8', 'ignore')
-			return (p.returncode, compile_result)
+			try:
+				PIPE = subprocess.PIPE
+				# Windows: hide console window to avoid flashing
+				startupinfo = None
+				if sublime.platform() == 'windows':
+					startupinfo = subprocess.STARTUPINFO()
+					startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+				p = subprocess.Popen(cmd, \
+					shell=True, stdin=PIPE, stdout=PIPE, stderr=subprocess.STDOUT, \
+						cwd=os.path.split(self.file)[0], startupinfo=startupinfo)
+				# Timeout so a hanging compiler doesn't freeze the plugin forever
+				try:
+					compile_result = p.communicate(timeout=30)[0].decode('utf-8', 'ignore')
+				except subprocess.TimeoutExpired:
+					try:
+						p.kill()
+					except Exception:
+						pass
+					return (1, '[cph-by-chenkx] compile timed out after 30s\n(cmd: %s)' % cmd)
+				return (p.returncode, compile_result)
+			except Exception as e:
+				return (1, '[cph-by-chenkx] failed to run compile command: %s\n(cmd: %s)' % (e, cmd))
 
 	def run_file(self, args=[]):
 		if self.is_run and False:
@@ -114,6 +157,7 @@ class ProcessManager(object):
 		cmd = self.get_run_cmd(' '.join(args))
 
 		self.is_run = False
+		self.close_stderr()
 		PIPE = subprocess.PIPE
 		preexec_fn = None
 
@@ -127,12 +171,18 @@ class ProcessManager(object):
 			use_shell = True
 			preexec_fn = os.setsid
 
+		if self.separate_stderr:
+			stderr_target = tempfile.TemporaryFile(mode='w+', encoding='utf-8', errors='ignore')
+			self.stderr_file = stderr_target
+		else:
+			stderr_target = subprocess.STDOUT
+
 		self.process = subprocess.Popen(
 			cmd,
 			shell=use_shell,
 			stdin=PIPE,
 			stdout=PIPE,
-			stderr=subprocess.STDOUT,
+			stderr=stderr_target,
 			bufsize=0,
 			cwd=os.path.split(self.file)[0],
 			startupinfo=startupinfo,

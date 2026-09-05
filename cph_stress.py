@@ -55,7 +55,7 @@ class CphStartStressTestCommand(sublime_plugin.TextCommand):
 
     def _on_std(self, std_file, default_gen, user_file, window):
         if not std_file:
-            std_file = default_gen
+            std_file = os.path.join(os.path.dirname(user_file), 'std.cpp')
         if not os.path.exists(std_file):
             sublime.error_message(t('file_not_found') + ': ' + std_file)
             return
@@ -80,7 +80,7 @@ class CphStartStressTestCommand(sublime_plugin.TextCommand):
 
         window.show_input_panel(
             t('stress_time_limit') + ' (seconds):',
-            '2',
+            str(get_settings().get('stress_time_limit_seconds', 2)),
             lambda s: self._on_time(s.strip(), user_file, std_file, gen_file, window),
             None, None
         )
@@ -186,9 +186,15 @@ def _compile_program(file, time_limit=30):
 def _run_program(exe_path, input_data, cwd=None, time_limit=2.0):
     if cwd is None:
         cwd = os.path.dirname(exe_path)
+    # Python sources can't be executed directly on Windows; go through
+    # the interpreter instead
+    if exe_path.endswith('.py'):
+        argv = ['python', exe_path]
+    else:
+        argv = [exe_path]
     try:
         result = subprocess.run(
-            [exe_path],
+            argv,
             input=input_data,
             cwd=cwd,
             stdout=subprocess.PIPE,

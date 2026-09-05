@@ -6,6 +6,7 @@ import sublime, sublime_plugin
 import os
 from os.path import dirname
 import sys
+import re
 from subprocess import Popen, PIPE
 import subprocess
 import shlex
@@ -21,8 +22,10 @@ from .cph_i18n import t as _i18n_t
 from .Highlight.test_interface import get_test_styles
 
 
-# Separator between test input and correct answer in the edit view
-_ANSWER_SEPARATOR = '\n---correct_answer---\n'
+# Separator line between the test input section and the correct answer
+# section in the edit view
+_ANSWER_SEPARATOR = '------ answer ------'
+_ANSWER_LINE_RE = re.compile(r'^\s*-{2,}\s*answer\s*-{2,}\s*$')
 
 
 class TestEditCommand(sublime_plugin.TextCommand):
@@ -98,19 +101,21 @@ class TestEditCommand(sublime_plugin.TextCommand):
 		self.memorize_tests()
 
 	def _parse_edit_content(self, content):
-		"""Parse the edit view content into (test_input, correct_answer)."""
-		if _ANSWER_SEPARATOR in content:
-			idx = content.index(_ANSWER_SEPARATOR)
-			test_input = content[:idx]
-			correct_answer = content[idx + len(_ANSWER_SEPARATOR):]
-			return test_input, correct_answer
+		"""Split the edit view content into (test_input, correct_answer)."""
+		lines = content.split('\n')
+		for idx, line in enumerate(lines):
+			if _ANSWER_LINE_RE.match(line):
+				test_input = '\n'.join(lines[:idx])
+				correct_answer = '\n'.join(lines[idx + 1:])
+				if test_input.strip():
+					test_input = test_input.rstrip('\n') + '\n'
+				return test_input, correct_answer
 		return content, ''
 
 	def cb_action(self, event):
 		v = self.view
 		if event == 'test-save':
-			content = v.substr(Region(0, v.size()))
-			test_input, correct_answer = self._parse_edit_content(content)
+			test_input, correct_answer = self._parse_edit_content(v.substr(Region(1, v.size())))
 			for sub in v.window().views():
 				if sub.id() == self.source_view_id:
 					sub.run_command('test_manager', {
@@ -118,12 +123,11 @@ class TestEditCommand(sublime_plugin.TextCommand):
 						'data': test_input,
 						'id': self.test_id
 					})
-					if correct_answer and correct_answer.strip():
-						sub.run_command('test_manager', {
-							'action': 'set_correct_answer',
-							'data': correct_answer,
-							'id': self.test_id
-						})
+					sub.run_command('test_manager', {
+						'action': 'set_correct_answer',
+						'data': correct_answer,
+						'id': self.test_id
+					})
 					v.close()
 					break
 
@@ -144,11 +148,9 @@ class TestEditCommand(sublime_plugin.TextCommand):
 
 		content = content.format(
 			test_id=self.test_id,
-			input_label=_i18n_t('input'),
-			answer_label=_i18n_t('correct_answer'),
 			save_label=_i18n_t('save'),
 			delete_label=_i18n_t('delete'),
-			hint='--- ' + _i18n_t('correct_answer') + ' ---',
+			hint=_i18n_t('edit_answer_hint'),
 		)
 		content = '<style>' + styles + '</style>' + content
 		phantom = Phantom(Region(0), content, sublime.LAYOUT_BLOCK, self.cb_action)
@@ -197,10 +199,11 @@ class TestEditCommand(sublime_plugin.TextCommand):
 		v.run_command('set_setting', {'setting': 'fold_buttons', 'value': False})
 		v.settings().set('edit_mode', True)
 		v.set_syntax_file('Packages/%s/TestSyntax.tmLanguage' % base_name)
-		# Build content: test input + separator + correct answer
-		initial_content = '\n' + test
+		# Two sections: test input, then the correct answer below the
+		# separator line
+		initial_content = '\n' + test.rstrip('\n') + '\n' + _ANSWER_SEPARATOR + '\n'
 		if correct_answer and correct_answer.strip():
-			initial_content += _ANSWER_SEPARATOR + correct_answer
+			initial_content += correct_answer
 		v.insert(edit, 0, initial_content)
 		self.update_config()
 
@@ -255,7 +258,7 @@ class TestEditCommand(sublime_plugin.TextCommand):
 			self.apply_edit_changes()
 
 		elif action == 'init':
-			# Support loading with test + correct_answer separately
+			# 'data' carries the current correct answer of the test
 			correct_answer = data if data else ''
 			self.init(edit, run_file=run_file, build_sys=build_sys, clr_tests=clr_tests, \
 				test=test, source_view_id=source_view_id, test_id=test_id, \

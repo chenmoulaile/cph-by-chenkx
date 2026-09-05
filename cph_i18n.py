@@ -86,6 +86,10 @@ STRINGS = {
         'zh': '正确答案',
         'en': 'Correct Answer',
     },
+    'edit_answer_hint': {
+        'zh': '在 "------ answer ------" 行下方填写正确答案',
+        'en': 'Write the correct answer below the "------ answer ------" line',
+    },
     'diff': {
         'zh': '差异',
         'en': 'Diff',

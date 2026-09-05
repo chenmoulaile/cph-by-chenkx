@@ -1,11 +1,9 @@
 <div class="panel">
 	<a class="test {test_type}" href="test-click">
-		<span class="verdict-badge {verdict_class}">{verdict_short}</span>
 		{test_label} {test_id}
-		<span class="testcase-stderr-indicator" style="display: {stderr_display};">{stderr_label}</span>
 	</a>
-	
-	<a class="config" href="test-edit">
+
+	<a class="config config-edit" href="test-edit">
 		{edit_label}
 	</a>
 
@@ -29,4 +27,6 @@
 		</div>
 		<i class="memory-info" style="padding: 1px; position: relative; font-style: normal">{memory}</i>
 	</a>
+	<span class="verdict-badge {verdict_class}"><span class="verdict-icon">{verdict_icon}</span>{verdict_short}</span>
+	<span class="testcase-stderr-indicator" style="display: {stderr_display};">{stderr_label}</span>
 </div>
