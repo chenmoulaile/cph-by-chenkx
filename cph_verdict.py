@@ -133,8 +133,9 @@ def get_verdict_by_code(rtcode, runtime, time_limit_ms, memory_limit_mb,
     if time_limit_ms and runtime and runtime > time_limit_ms:
         return get_verdict('time_limit_exceed')
 
-    if not expected_output:
-        return get_verdict('accepted')
+    if not expected_output or not expected_output.strip():
+        # 没有设置正确答案时,不能判定为 AC,返回未评判
+        return get_verdict('unknown_error')
 
     if not ignore_error and stderr and stderr.strip():
         return get_verdict('runtime_error')

@@ -583,10 +583,15 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 		v.window().focus_group(1)
 		edit_view = v.window().new_file()
 		v.window().set_view_index(edit_view, 1, 1)
+		# Get current correct answer for this test
+		correct_answer = ''
+		if tester.tests[i].correct_answers:
+			correct_answer = next(iter(tester.tests[i].correct_answers))
 		edit_view.run_command('test_edit', {
 			'action': 'init',
 			'test_id': i,
 			'test': tester.tests[i].test_string,
+			'data': correct_answer,
 			'source_view_id': v.id()
 		})
 
@@ -694,6 +699,20 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 			self.toggle_fold(id)
 
 		self.memorize_tests()
+
+	def set_correct_answer(self, data=None, id=None):
+		"""Set the correct answer for a test. Triggers re-judgment."""
+		if id is None or data is None:
+			return
+		tester = self.tester
+		# Clear and set new correct answer
+		tester.tests[id].correct_answers = set()
+		answer = data.strip()
+		if answer:
+			tester.tests[id].accept_out(answer)
+		self.memorize_tests()
+		# Re-render to update the display
+		self.update_configs()
 
 	def get_next_title(self):
 		v = self.view
@@ -1292,6 +1311,9 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 
 		elif action == 'set_test_input':
 			self.set_test_input(id=id, test=data)
+
+		elif action == 'set_correct_answer':
+			self.set_correct_answer(id=id, data=data)
 
 		elif action == 'delete_test':
 			self.delete_test(edit, id)

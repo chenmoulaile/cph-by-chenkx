@@ -1,7 +1,7 @@
 """
 cph-by-chenkx - 测试编辑窗口
+支持编辑测试输入和设置正确答案
 """
-
 import sublime, sublime_plugin
 import os
 from os.path import dirname
@@ -17,7 +17,12 @@ import threading
 
 from .Modules.ProcessManager import ProcessManager
 from .cph_settings import base_name, get_settings, root_dir
+from .cph_i18n import t as _i18n_t
 from .Highlight.test_interface import get_test_styles
+
+
+# Separator between test input and correct answer in the edit view
+_ANSWER_SEPARATOR = '\n---correct_answer---\n'
 
 
 class TestEditCommand(sublime_plugin.TextCommand):
@@ -92,16 +97,33 @@ class TestEditCommand(sublime_plugin.TextCommand):
 		self.update_configs()
 		self.memorize_tests()
 
+	def _parse_edit_content(self, content):
+		"""Parse the edit view content into (test_input, correct_answer)."""
+		if _ANSWER_SEPARATOR in content:
+			idx = content.index(_ANSWER_SEPARATOR)
+			test_input = content[:idx]
+			correct_answer = content[idx + len(_ANSWER_SEPARATOR):]
+			return test_input, correct_answer
+		return content, ''
+
 	def cb_action(self, event):
 		v = self.view
 		if event == 'test-save':
+			content = v.substr(Region(0, v.size()))
+			test_input, correct_answer = self._parse_edit_content(content)
 			for sub in v.window().views():
 				if sub.id() == self.source_view_id:
 					sub.run_command('test_manager', {
 						'action': 'set_test_input',
-						'data': v.substr(Region(1, v.size())),
+						'data': test_input,
 						'id': self.test_id
 					})
+					if correct_answer and correct_answer.strip():
+						sub.run_command('test_manager', {
+							'action': 'set_correct_answer',
+							'data': correct_answer,
+							'id': self.test_id
+						})
 					v.close()
 					break
 
@@ -122,11 +144,14 @@ class TestEditCommand(sublime_plugin.TextCommand):
 
 		content = content.format(
 			test_id=self.test_id,
+			input_label=_i18n_t('input'),
+			answer_label=_i18n_t('correct_answer'),
+			save_label=_i18n_t('save'),
+			delete_label=_i18n_t('delete'),
+			hint='--- ' + _i18n_t('correct_answer') + ' ---',
 		)
 		content = '<style>' + styles + '</style>' + content
-
 		phantom = Phantom(Region(0), content, sublime.LAYOUT_BLOCK, self.cb_action)
-
 		self.phantoms.update([phantom])
 
 	def memorize_tests(self):
@@ -158,7 +183,8 @@ class TestEditCommand(sublime_plugin.TextCommand):
 				v.erase_regions('test_error_%d' % i)
 
 	def init(self, edit, run_file=None, build_sys=None, clr_tests=False, \
-		test='', source_view_id=None, test_id=None, load_session=False):
+		test='', source_view_id=None, test_id=None, load_session=False, \
+		correct_answer=''):
 		v = self.view
 
 		self.delta_input = 0
@@ -171,7 +197,11 @@ class TestEditCommand(sublime_plugin.TextCommand):
 		v.run_command('set_setting', {'setting': 'fold_buttons', 'value': False})
 		v.settings().set('edit_mode', True)
 		v.set_syntax_file('Packages/%s/TestSyntax.tmLanguage' % base_name)
-		v.insert(edit, 0, '\n' + test)
+		# Build content: test input + separator + correct answer
+		initial_content = '\n' + test
+		if correct_answer and correct_answer.strip():
+			initial_content += _ANSWER_SEPARATOR + correct_answer
+		v.insert(edit, 0, initial_content)
 		self.update_config()
 
 	def get_style_test_status(self, nth):
@@ -194,7 +224,7 @@ class TestEditCommand(sublime_plugin.TextCommand):
 
 	def run(self, edit, action=None, run_file=None, build_sys=None, text=None, clr_tests=False, \
 			test='', source_view_id=None, var_name=None, test_id=None, pos=None, \
-			load_session=False, region=None, frame_id=None):
+			load_session=False, region=None, frame_id=None, data=None):
 		v = self.view
 		pt = v.sel()[0].begin()
 		scope_name = (v.scope_name(pt).rstrip())
@@ -225,8 +255,11 @@ class TestEditCommand(sublime_plugin.TextCommand):
 			self.apply_edit_changes()
 
 		elif action == 'init':
+			# Support loading with test + correct_answer separately
+			correct_answer = data if data else ''
 			self.init(edit, run_file=run_file, build_sys=build_sys, clr_tests=clr_tests, \
-				test=test, source_view_id=source_view_id, test_id=test_id, load_session=load_session)
+				test=test, source_view_id=source_view_id, test_id=test_id, \
+				load_session=load_session, correct_answer=correct_answer)
 
 		elif action == 'redirect_var_value':
 			self.redirect_var_value(var_name, pos=pos)

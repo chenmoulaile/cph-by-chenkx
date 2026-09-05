@@ -166,6 +166,14 @@ STRINGS = {
         'zh': '隐藏面板',
         'en': 'hide phantoms',
     },
+    'save': {
+        'zh': '保存',
+        'en': 'save',
+    },
+    'delete': {
+        'zh': '删除',
+        'en': 'delete',
+    },
     'show_phantoms': {
         'zh': '显示面板',
         'en': 'show phantoms',
