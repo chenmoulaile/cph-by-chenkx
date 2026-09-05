@@ -443,7 +443,7 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 		def run_test(self, id):
 			tests = self.tests
 			process_manager = self.process_manager
-			self.on_status_change('COMPILE')
+			self.on_status_change('COMPILING')
 			try:
 				cmp_data = process_manager.compile()
 			except Exception as e:
@@ -1020,8 +1020,10 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 		# is auto-cleared after 30s so the user is never stuck forever.
 		compiling_since = getattr(self, 'compiling_since', None)
 		if compiling_since is not None and (time() - compiling_since) < 30:
+			sublime.status_message('[cph-by-chenkx] compiling in progress, wait or press again after 30s')
 			return
 		self.compiling_since = time()
+		print('[cph-by-chenkx] make_opd start: %s' % run_file)
 
 		if v.get_status('process_status') == 'RUNNING':
 			print('terminating')

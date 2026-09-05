@@ -14,18 +14,19 @@ a {
 }
 
 .test {
+	vertical-align: middle;
 	color: color(var(--foreground));
 	text-decoration: none;
 	background-color: color(var(--foreground) alpha(0.3));
-	padding: 1px;
+	padding: 2px;
 }
 
 .test-accept {
-	background-color: color(var(--greenish) alpha(0.2));
+	background-color: color(var(--greenish) alpha(0.35));
 }
 
 .test-decline {
-	background-color: color(var(--redish) alpha(0.3));
+	background-color: color(var(--redish) alpha(0.35));
 }
 
 .test-compiling {
@@ -37,10 +38,11 @@ a {
 }
 
 .config {
+	vertical-align: middle;
 	color: color(var(--foreground));
 	text-decoration: none;
 	background-color: color(var(--foreground) alpha(0.3));
-	padding: 1px;
+	padding: 3px;
 }
 
 .config-run {
@@ -60,7 +62,7 @@ a {
 }
 
 .config-next {
-	padding: 1px;
+	padding: 3px;
 	color: color(var(--foreground));
 	text-decoration: none;
 	background-color: color(var(--foreground) alpha(0.5));
@@ -83,8 +85,8 @@ a {
 	text-align: center;
 }
 
-.verdict-AC { background-color: color(var(--greenish) alpha(0.25)); color: var(--greenish); }
-.verdict-WA { background-color: color(var(--redish) alpha(0.25)); color: var(--redish); }
+.verdict-AC { background-color: color(var(--greenish) alpha(0.4)); color: var(--greenish); }
+.verdict-WA { background-color: color(var(--redish) alpha(0.4)); color: var(--redish); }
 .verdict-TLE { background-color: color(var(--yellowish) alpha(0.4)); color: var(--yellowish); }
 .verdict-MLE { background-color: color(var(--purplish) alpha(0.3)); color: var(--purplish); }
 .verdict-OLE { background-color: color(var(--purplish) alpha(0.3)); color: var(--purplish); }
@@ -98,7 +100,7 @@ a {
 .verdict-JG { background-color: color(var(--purplish) alpha(0.25)); color: var(--purplish); }
 
 .test-accepted {
-	background-color: color(var(--greenish) alpha(0.2));
+	background-color: color(var(--greenish) alpha(0.35));
 }
 
 .test-wrong-answer {
@@ -187,7 +189,7 @@ a {
 }
 
 .runtime-info {
-	color: var(--greenish);
+	color: var(--bluish);
 	font-family: monospace;
 }
 
@@ -215,7 +217,7 @@ a {
 }
 
 .diff-line-add {
-	background-color: color(var(--greenish) alpha(0.2));
+	background-color: color(var(--greenish) alpha(0.35));
 	color: var(--greenish);
 }
 

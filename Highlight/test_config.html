@@ -1,5 +1,6 @@
 <div class="panel">
 	<a class="test {test_type}" href="test-click">
+		<span class="verdict-badge {verdict_class}" style="font-weight:bold; font-size:10px; padding:0 3px; border-radius:2px; vertical-align:middle;">{verdict_short}</span>
 		{test_label} {test_id}
 	</a>
 
@@ -27,6 +28,5 @@
 		</div>
 		<i class="memory-info" style="padding: 1px; position: relative; font-style: normal">{memory}</i>
 	</a>
-	<span class="verdict-badge {verdict_class}"><span class="verdict-icon">{verdict_icon}</span>{verdict_short}</span>
-	<span class="testcase-stderr-indicator" style="display: {stderr_display};">{stderr_label}</span>
+
 </div>

@@ -28,7 +28,7 @@
 			"name": "C++",
 			"extensions": ["cpp"],
 			// 编译命令；不需要 -DLOCAL 调试宏的话直接删掉即可
-			"compile_cmd": "g++ \"{source_file}\" -std=c++23 -o \"{file_name}\" -DLOCAL",
+			"compile_cmd": "g++ \"{source_file}\" -std=c++23 -o \"{file_name}.exe\" -DLOCAL",
 			// 运行命令（编译产物在源代码目录下）
 			"run_cmd": "\"{source_file_dir}\\{file_name}.exe\" {args} -debug",
 			// 单个测试的时间限制(毫秒) / 内存限制(MB)，超限判 TLE / MLE

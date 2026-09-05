@@ -56,7 +56,10 @@ class ProcessManager(object):
 		if self.stderr_file is not None:
 			try:
 				self.stderr_file.seek(0)
-				return self.stderr_file.read()
+				data = self.stderr_file.read()
+				if isinstance(data, bytes):
+					return data.decode('utf-8', 'ignore')
+				return data
 			except Exception:
 				return ''
 		return ''
@@ -127,6 +130,8 @@ class ProcessManager(object):
 
 	def compile(self, wait_close=True):
 		cmd = self.get_compile_cmd()
+		if cmd == -1:
+			return (1, '[cph-by-chenkx] no compile command configured for this file extension')
 		if cmd is not None:
 			try:
 				PIPE = subprocess.PIPE
@@ -135,9 +140,15 @@ class ProcessManager(object):
 				if sublime.platform() == 'windows':
 					startupinfo = subprocess.STARTUPINFO()
 					startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-				p = subprocess.Popen(cmd, \
-					shell=True, stdin=PIPE, stdout=PIPE, stderr=subprocess.STDOUT, \
-						cwd=os.path.split(self.file)[0], startupinfo=startupinfo)
+				p = subprocess.Popen(
+					cmd,
+					shell=True,
+					stdin=None,
+					stdout=PIPE,
+					stderr=subprocess.STDOUT,
+					cwd=os.path.split(self.file)[0],
+					startupinfo=startupinfo
+				)
 				# Timeout so a hanging compiler doesn't freeze the plugin forever
 				try:
 					compile_result = p.communicate(timeout=30)[0].decode('utf-8', 'ignore')
@@ -152,7 +163,7 @@ class ProcessManager(object):
 				return (1, '[cph-by-chenkx] failed to run compile command: %s\n(cmd: %s)' % (e, cmd))
 
 	def run_file(self, args=[]):
-		if self.is_run and False:
+		if self.is_run:
 			raise AssertionError('cant run process because is already running')
 		cmd = self.get_run_cmd(' '.join(args))
 
@@ -172,7 +183,7 @@ class ProcessManager(object):
 			preexec_fn = os.setsid
 
 		if self.separate_stderr:
-			stderr_target = tempfile.TemporaryFile(mode='w+', encoding='utf-8', errors='ignore')
+			stderr_target = tempfile.TemporaryFile(mode='w+b')
 			self.stderr_file = stderr_target
 		else:
 			stderr_target = subprocess.STDOUT
