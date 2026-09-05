@@ -58,3 +58,44 @@ a {
 	background-color: color(var(--action-color) alpha(0.2));
 }
 
+.config-detail {
+	background-color: color(var(--purplish) alpha(0.3));
+}
+
+.test-compiling {
+	background-color: color(var(--bluish) alpha(0.3));
+}
+
+.verdict-badge {
+	display: inline-block;
+	padding: 0 3px;
+	margin-right: 3px;
+	border-radius: 2px;
+	font-size: 10px;
+	font-weight: bold;
+	font-family: monospace;
+	color: var(--foreground);
+}
+
+.verdict-AC { background-color: color(var(--greenish) alpha(0.4)); color: var(--greenish); }
+.verdict-WA { background-color: color(var(--redish) alpha(0.4)); color: var(--redish); }
+.verdict-TLE { background-color: color(var(--yellowish) alpha(0.4)); color: var(--yellowish); }
+.verdict-MLE { background-color: color(var(--purplish) alpha(0.3)); color: var(--purplish); }
+.verdict-OLE { background-color: color(var(--purplish) alpha(0.3)); color: var(--purplish); }
+.verdict-RE { background-color: color(var(--bluish) alpha(0.3)); color: var(--bluish); }
+.verdict-PE { background-color: color(var(--pinkish) alpha(0.3)); color: var(--pinkish); }
+.verdict-CE { background-color: color(var(--yellowish) alpha(0.5)); color: var(--yellowish); }
+.verdict-UKE { background-color: color(var(--foreground) alpha(0.2)); color: var(--foreground); }
+.verdict-WT { background-color: color(var(--bluish) alpha(0.25)); color: var(--bluish); }
+.verdict-CP { background-color: color(var(--bluish) alpha(0.25)); color: var(--bluish); }
+.verdict-JG { background-color: color(var(--purplish) alpha(0.25)); color: var(--purplish); }
+
+.runtime-info {
+	color: var(--bluish);
+	font-family: monospace;
+}
+
+.memory-info {
+	color: var(--purplish);
+	font-family: monospace;
+}
