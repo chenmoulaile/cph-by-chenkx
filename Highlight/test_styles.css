@@ -9,10 +9,14 @@ a {
 
 .panel {
 	background-color: color(var(--foreground) alpha(0.25));
-	padding: 0px;
+	padding: 2px;
 	margin: 0px;
-	overflow: hidden;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+	align-items: center;
 }
+
 
 .test {
 	vertical-align: middle;
