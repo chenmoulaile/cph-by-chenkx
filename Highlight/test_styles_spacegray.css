@@ -8,30 +8,24 @@ a {
 }
 
 .panel {
-	background-color: color(var(--foreground) alpha(0.25));
+	background-color: color(var(--foreground) alpha(0.25));	
 	padding: 0px;
 	margin: 0px;
 }
 
 .test {
-	vertical-align: middle;
-	color: color(var(--foreground));
+	color: color(var(--foreground));	
 	text-decoration: none;
 	background-color: color(var(--foreground) alpha(0.3));
 	padding: 1px;
-	margin-right: 4px;
 }
 
 .test-accept {
-	background-color: color(var(--greenish) alpha(0.35));
+	background-color: color(var(--greenish) alpha(0.2));
 }
 
 .test-decline {
-	background-color: color(var(--redish) alpha(0.35));
-}
-
-.test-compiling {
-	background-color: color(var(--bluish) alpha(0.3));
+	background-color: color(var(--redish) alpha(0.3));
 }
 
 .sep {
@@ -39,12 +33,10 @@ a {
 }
 
 .config {
-	vertical-align: middle;
-	color: color(var(--foreground));
+	color: color(var(--foreground));	
 	text-decoration: none;
 	background-color: color(var(--foreground) alpha(0.3));
 	padding: 1px;
-	margin-right: 2px;
 }
 
 .config-run {
@@ -59,194 +51,9 @@ a {
 	background-color: color(var(--redish) alpha(0.3));
 }
 
-.config-detail {
-	background-color: color(var(--purplish) alpha(0.3));
-}
-
 .config-next {
 	padding: 1px;
-	color: color(var(--foreground));
+	color: color(var(--foreground));	
 	text-decoration: none;
 	background-color: color(var(--foreground) alpha(0.5));
-}
-
-.verdict-badge {
-	display: inline-block;
-	padding: 1px 5px;
-	margin: 0px 4px 0px 0px;
-	border-radius: 2px;
-	font-size: 11px;
-	font-weight: bold;
-	font-family: monospace;
-	line-height: 14px;
-	vertical-align: baseline;
-	text-decoration: none;
-	color: var(--foreground);
-	min-width: 28px;
-	height: 14px;
-	text-align: center;
-}
-
-.verdict-AC { background-color: color(var(--greenish) alpha(0.4)); color: var(--greenish); }
-.verdict-WA { background-color: color(var(--redish) alpha(0.4)); color: var(--redish); }
-.verdict-TLE { background-color: color(var(--yellowish) alpha(0.4)); color: var(--yellowish); }
-.verdict-MLE { background-color: color(var(--purplish) alpha(0.3)); color: var(--purplish); }
-.verdict-OLE { background-color: color(var(--purplish) alpha(0.3)); color: var(--purplish); }
-.verdict-RE { background-color: color(var(--bluish) alpha(0.3)); color: var(--bluish); }
-.verdict-PE { background-color: color(var(--pinkish) alpha(0.3)); color: var(--pinkish); }
-.verdict-CE { background-color: color(var(--yellowish) alpha(0.5)); color: var(--yellowish); }
-.verdict-UKE { background-color: color(var(--foreground) alpha(0.2)); color: var(--foreground); }
-.verdict-SK { background-color: color(var(--foreground) alpha(0.2)); color: var(--foreground); }
-.verdict-WT { background-color: color(var(--bluish) alpha(0.25)); color: var(--bluish); }
-.verdict-CP { background-color: color(var(--bluish) alpha(0.25)); color: var(--bluish); }
-.verdict-JG { background-color: color(var(--purplish) alpha(0.25)); color: var(--purplish); }
-
-.test-accepted {
-	background-color: color(var(--greenish) alpha(0.35));
-}
-
-.test-wrong-answer {
-	background-color: color(var(--redish) alpha(0.25));
-}
-
-.test-time-limit-exceed {
-	background-color: color(var(--yellowish) alpha(0.3));
-}
-
-.test-memory-limit-exceed {
-	background-color: color(var(--purplish) alpha(0.3));
-}
-
-.test-output-limit-exceed {
-	background-color: color(var(--purplish) alpha(0.3));
-}
-
-.test-runtime-error {
-	background-color: color(var(--bluish) alpha(0.25));
-}
-
-.test-presentation-error {
-	background-color: color(var(--pinkish) alpha(0.3));
-}
-
-.test-compilation-error {
-	background-color: color(var(--yellowish) alpha(0.4));
-}
-
-.test-unknown-error {
-	background-color: color(var(--foreground) alpha(0.2));
-}
-
-.test-waiting {
-	background-color: color(var(--bluish) alpha(0.2));
-}
-
-.test-running {
-	background-color: color(var(--bluish) alpha(0.2));
-}
-
-.test-judging {
-	background-color: color(var(--purplish) alpha(0.2));
-}
-
-.testcase-panel {
-	margin: 4px 0;
-	padding: 8px;
-	background-color: color(var(--background) alpha(0.5));
-	border-radius: 4px;
-}
-
-.testcase-header {
-	display: flex;
-	align-items: center;
-	margin-bottom: 8px;
-	gap: 6px;
-}
-
-.testcase-content {
-	font-family: monospace;
-	font-size: 12px;
-	line-height: 1.5;
-	white-space: pre-wrap;
-	word-break: break-all;
-}
-
-.testcase-section {
-	margin-bottom: 8px;
-}
-
-.testcase-section-title {
-	font-weight: bold;
-	color: var(--bluish);
-	margin-bottom: 4px;
-}
-
-.testcase-io {
-	background-color: color(var(--background) alpha(0.7));
-	padding: 8px;
-	border-radius: 3px;
-	margin-bottom: 4px;
-	white-space: pre-wrap;
-	word-break: break-all;
-}
-
-.runtime-info {
-	color: var(--bluish);
-	font-family: monospace;
-}
-
-.memory-info {
-	color: var(--purplish);
-	font-family: monospace;
-}
-
-.compile-header {
-	display: flex;
-	align-items: center;
-	margin-bottom: 8px;
-}
-
-.compile-cmd {
-	font-family: monospace;
-	font-size: 12px;
-	line-height: 1.5;
-	white-space: pre-wrap;
-	word-break: break-all;
-	background-color: color(var(--background) alpha(0.7));
-	padding: 8px;
-	border-radius: 3px;
-	color: var(--redish);
-}
-
-.diff-line-add {
-	background-color: color(var(--greenish) alpha(0.35));
-	color: var(--greenish);
-}
-
-.diff-line-del {
-	background-color: color(var(--redish) alpha(0.2));
-	color: var(--redish);
-}
-
-.diff-line-info {
-	color: var(--bluish);
-	font-style: italic;
-}
-
-.correct-answer-display {
-	background-color: color(var(--background) alpha(0.7));
-	padding: 8px;
-	border-radius: 3px;
-	margin: 4px 0;
-	border-left: 3px solid var(--greenish);
-	white-space: pre-wrap;
-	word-break: break-all;
-	font-family: monospace;
-	font-size: 12px;
-}
-
-.correct-answer-label {
-	font-weight: bold;
-	color: var(--greenish);
-	margin-bottom: 4px;
 }
