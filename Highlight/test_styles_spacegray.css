@@ -43,6 +43,7 @@ a {
 	text-decoration: none;
 	background-color: color(var(--foreground) alpha(0.3));
 	padding: 3px;
+	margin-right: 4px;
 }
 
 .config-run {
