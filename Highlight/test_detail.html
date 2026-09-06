@@ -8,24 +8,14 @@
 	</div>
 
 	<div class="testcase-content">
-		<div class="testcase-section">
-			<div class="testcase-section-title">{input_label}:</div>
-			<div class="testcase-io">{stdin}</div>
-		</div>
-
-		<div class="testcase-section">
-			<div class="testcase-section-title">{expected_output_label}:</div>
+		<div class="testcase-section" style="display: {expected_display};">
+			<div class="testcase-section-title">{expected_label}:</div>
 			<div class="testcase-io">{expected}</div>
 		</div>
 
 		<div class="testcase-section">
 			<div class="testcase-section-title">{actual_output_label}:</div>
 			<div class="testcase-io">{stdout}</div>
-		</div>
-
-		<div class="correct-answer-display">
-			<div class="correct-answer-label">{correct_answer_label}:</div>
-			{expected_clean}
 		</div>
 
 		<div class="testcase-section-stderr" style="display: {stderr_display};">

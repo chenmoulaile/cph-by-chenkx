@@ -92,12 +92,38 @@ a {
 .verdict-JG { background-color: color(var(--purplish) alpha(0.25)); color: var(--purplish); }
 
 .runtime-info {
-	color: var(--bluish);
+	color: color(var(--foreground));
 	font-family: monospace;
 }
 
 .memory-info {
 	color: var(--purplish);
 	font-family: monospace;
+}
+
+.testcase-panel {
+	background-color: color(var(--foreground) alpha(0.15));
+	padding: 4px 6px;
+}
+
+.testcase-header {
+	margin-bottom: 2px;
+}
+
+.testcase-section, .testcase-section-stderr {
+	margin-top: 3px;
+}
+
+.testcase-section-title {
+	color: color(var(--foreground) alpha(0.7));
+	font-weight: bold;
+}
+
+.testcase-io {
+	white-space: pre-wrap;
+	word-break: break-all;
+	font-family: monospace;
+	background-color: color(var(--background) alpha(0.4));
+	padding: 2px 4px;
 }
 

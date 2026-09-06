@@ -276,15 +276,26 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 			def escape_html(s):
 				if not s:
 					return ''
+				s = s.replace('\r\n', '\n').replace('\r', '\n').rstrip('\n')
 				return (s.replace('&', '&amp;')
 						 .replace('<', '&lt;')
-						 .replace('>', '&gt;'))
+						 .replace('>', '&gt;')
+						 .replace('\n', '<br>'))
 
-			expected_clean = ''
+			# Show a single answer section: the accepted correct answer if any,
+			# otherwise the expected output; hidden when neither exists.
 			if self.correct_answers:
-				expected_clean = escape_html(next(iter(self.correct_answers)))
+				expected_label = t('correct_answer')
+				expected = escape_html(next(iter(self.correct_answers)))
+				expected_display = 'block'
 			elif self.expected_output:
-				expected_clean = escape_html(self.expected_output)
+				expected_label = t('expected_output')
+				expected = escape_html(self.expected_output)
+				expected_display = 'block'
+			else:
+				expected_label = t('expected_output')
+				expected = ''
+				expected_display = 'none'
 
 			content = content.format(
 				test_id=i + 1,
@@ -293,21 +304,18 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 				runtime=self.get_nice_runtime(),
 				memory_display=memory_display,
 				memory=memory_str,
-				stdin=escape_html(self.test_string),
-				expected=escape_html(self.expected_output) if self.expected_output else escape_html(next(iter(self.correct_answers)) if self.correct_answers else ''),
-				expected_clean=expected_clean,
+				expected=expected,
+				expected_label=expected_label,
+				expected_display=expected_display,
 				stdout=escape_html(self.stdout),
 				stderr=escape_html(self.stderr),
 				stderr_display=stderr_display,
 				message=escape_html(self.message),
 				message_display=message_display,
 				test_label=t('test_label'),
-				input_label=t('input'),
-				expected_output_label=t('expected_output'),
 				actual_output_label=t('actual_output'),
 				error_output_label=t('error_output'),
 				message_label=t('message'),
-				correct_answer_label=t('correct_answer'),
 				time_label=t('time'),
 				memory_label=t('memory'),
 			)
@@ -631,7 +639,11 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 		if event == 'test-click':
 			self.toggle_fold(i)
 		elif event == 'test-detail':
-			self.show_test_detail(i)
+			# odd clicks show the detail panel, even clicks retract it
+			if i in getattr(self, 'detail_open', set()):
+				self.close_test_detail(i)
+			else:
+				self.show_test_detail(i)
 		elif event == 'test-close-detail':
 			self.close_test_detail(i)
 		elif event == 'test-edit':
@@ -668,9 +680,13 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 		if test.verdict is None and test.runtime == '-':
 			return
 
+		if test.fold:
+			# unfold first so the detail panel shows below
+			# the expanded input/output of this test
+			self.toggle_fold(i)
+
 		pt = self.get_tie_pos(i)
-		if not test.fold:
-			pt += len(test.test_string) + len(tester.prog_out[i]) + 1
+		pt += len(test.test_string) + len(tester.prog_out[i]) + 1
 
 		detail = test.get_detail(i, pt, self.on_test_action, self.view)
 
