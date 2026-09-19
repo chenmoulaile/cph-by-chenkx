@@ -7,7 +7,7 @@ from os import path
 css = open(path.join(path.dirname(__file__), 'cpp_styles.css')).read()
 
 DEF_TYPE = re.compile('int|float|double|char')
-NUMBER = re.compile('\d+')
+NUMBER = re.compile(r'\d+')
 # STRING = re.compile('"\"')
 
 class Token(object):

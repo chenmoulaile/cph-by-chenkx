@@ -64,12 +64,22 @@
 							{
 								"caption": "Settings",
 								"command": "open_file",
-								"args": {"file": "${packages}/cph-by-chenkx/cph-by-chenkx (${platform}).sublime-settings"}
+								"args": {"file": "${packages}/cph-by-chenkx/cph-by-chenkx.sublime-settings"}
 							},
 							{
 								"caption": "README（使用说明）",
 								"command": "open_file",
 								"args": {"file": "${packages}/cph-by-chenkx/README.md"}
+							},
+							{
+								"caption": "Key Bindings",
+								"command": "open_file",
+								"args": {"file": "${packages}/cph-by-chenkx/Example.sublime-keymap"}
+							},
+							{
+								"caption": "Syntax-Specific Settings (TestSyntax)",
+								"command": "open_file",
+								"args": {"file": "${packages}/cph-by-chenkx/TestSyntax.sublime-settings"}
 							}
 						]
 					}

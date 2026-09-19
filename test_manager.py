@@ -16,10 +16,10 @@ from time import time
 import threading
 
 from .Modules.ProcessManager import ProcessManager
-from .cph_settings import base_name, get_settings, root_dir, get_tests_file_path, load_all_tests, save_tests
+from .core.cph_settings import base_name, get_settings, root_dir, get_tests_file_path, load_all_tests, save_tests
 from .Highlight.test_interface import get_test_styles
-from .cph_verdict import get_verdict, get_verdict_by_code, VERDICTS
-from .cph_i18n import t, set_lang, get_lang, LANG_ZH, LANG_EN
+from .core.cph_verdict import get_verdict, get_verdict_by_code, VERDICTS
+from .core.cph_i18n import t, set_lang, get_lang, LANG_ZH, LANG_EN
 
 
 class TestManagerCommand(sublime_plugin.TextCommand):
@@ -1335,6 +1335,14 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 			time_limit_ms=None, memory_limit_mb=None):
 
 		v = self.view
+
+		# Lazy initialization: ensure settings are loaded
+		try:
+			from .core.cph_settings import get_settings, try_load_settings
+			if not get_settings():
+				try_load_settings()
+		except Exception:
+			pass
 
 		v.set_read_only(False)
 

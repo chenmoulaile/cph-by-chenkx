@@ -14,7 +14,7 @@ import threading
 import platform
 from os import path
 
-from .cph_i18n import t
+from .core.cph_i18n import t
 
 
 def make_handler_class_from_filename(file_full_path, tests_relative_dir, tests_file_suffix, source_view_id):

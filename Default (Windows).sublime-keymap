@@ -92,24 +92,4 @@
 		]
 	},
 
-	{
-		"keys": ["ctrl+k", "ctrl+p"],
-		"command": "view_tester",
-		"args": {"action": "sync_opdebugs"}
-	},
-
-	{
-		"keys": ["ctrl+alt+s"],
-		"command": "cph_start_stress_test"
-	},
-
-	{
-		"keys": ["ctrl+alt+shift+s"],
-		"command": "cph_stop_stress_test"
-	},
-
-	{
-		"keys": ["ctrl+alt+i"],
-		"command": "cph_import_tests"
-	}
 ]

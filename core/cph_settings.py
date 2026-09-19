@@ -15,12 +15,11 @@ from os import path
 import os
 
 
-root_dir = path.split(__file__)[0]
-base_name = path.split(root_dir)[1]
+_package_root = path.dirname(path.dirname(__file__))
+root_dir = _package_root
+base_name = path.split(_package_root)[1]
 
-settings_file = 'cph-by-chenkx ({os}).sublime-settings'.format(
-	os={ 'windows': 'Windows', 'linux': 'Linux', 'osx': 'OSX' }[sublime.platform().lower()]
-)
+settings_file = 'cph-by-chenkx.sublime-settings'
 
 tests_file_suffix_default = '__tests'
 tests_relative_dir_default = ''
@@ -67,7 +66,7 @@ def is_lang_view(view, lang):
 def try_load_settings():
 	_settings = sublime.load_settings(settings_file)
 	if _settings is None:
-		sublime.set_timeout_async(load_settings, 200)
+		sublime.set_timeout_async(try_load_settings, 200)
 	else:
 		init_settings(_settings)
 		sublime.status_message('cph-by-chenkx: settings loaded')

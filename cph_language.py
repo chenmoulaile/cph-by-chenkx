@@ -6,7 +6,7 @@ cph-by-chenkx - 语言切换命令
 import sublime
 import sublime_plugin
 
-from .cph_i18n import set_lang, get_lang, t, LANG_ZH, LANG_EN
+from .core.cph_i18n import set_lang, get_lang, t, LANG_ZH, LANG_EN
 
 
 class CphLanguageSetLanguageCommand(sublime_plugin.TextCommand):

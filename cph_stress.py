@@ -10,8 +10,8 @@ import threading
 import time
 from os import path
 
-from .cph_settings import base_name, get_settings, root_dir
-from .cph_i18n import t
+from .core.cph_settings import base_name, get_settings, root_dir
+from .core.cph_i18n import t
 from .Highlight.test_interface import get_test_styles
 
 
@@ -168,11 +168,16 @@ def _compile_program(file, time_limit=30):
     else:
         return False, None
 
+    startupinfo = None
+    if sublime.platform() == 'windows':
+        startupinfo = subprocess.STARTUPINFO()
+        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
     try:
         result = subprocess.run(
             cmd, cwd=src_dir,
             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            timeout=time_limit, text=True
+            timeout=time_limit, text=True,
+            startupinfo=startupinfo
         )
         if result.returncode != 0:
             print('[cph-by-chenkx] Compile error in %s:\n%s' % (file, result.stderr))
@@ -192,6 +197,10 @@ def _run_program(exe_path, input_data, cwd=None, time_limit=2.0):
         argv = ['python', exe_path]
     else:
         argv = [exe_path]
+    startupinfo = None
+    if sublime.platform() == 'windows':
+        startupinfo = subprocess.STARTUPINFO()
+        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
     try:
         result = subprocess.run(
             argv,
@@ -200,7 +209,8 @@ def _run_program(exe_path, input_data, cwd=None, time_limit=2.0):
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             timeout=time_limit,
-            text=True
+            text=True,
+            startupinfo=startupinfo
         )
         return (result.returncode, result.stdout, result.stderr, False)
     except subprocess.TimeoutExpired:

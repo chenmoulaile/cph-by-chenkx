@@ -17,8 +17,8 @@ from time import time
 import threading
 
 from .Modules.ProcessManager import ProcessManager
-from .cph_settings import base_name, get_settings, root_dir
-from .cph_i18n import t as _i18n_t
+from .core.cph_settings import base_name, get_settings, root_dir
+from .core.cph_i18n import t as _i18n_t
 from .Highlight.test_interface import get_test_styles
 
 
