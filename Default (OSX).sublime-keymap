@@ -90,6 +90,5 @@
 		"context": [
 			{"operand": "source.TestSyntax", "operator": "equal", "match_all": true, "key": "selector"}
 		]
-	},
-
+	}
 ]

@@ -167,7 +167,7 @@ class ProcessManager(object):
 			raise AssertionError('cant run process because is already running')
 		cmd = self.get_run_cmd(' '.join(args))
 
-		self.is_run = False
+		self.is_run = True
 		self.close_stderr()
 		PIPE = subprocess.PIPE
 		preexec_fn = None
