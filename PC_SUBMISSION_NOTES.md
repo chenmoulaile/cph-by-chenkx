@@ -1,8 +1,24 @@
 # cph-by-chenkx — Package Control Submission Notes
 
-Package version: v1.1.0
+Package version: v1.2.0
 Repository: https://github.com/chenmoulaile/cph-by-chenkx
 Local push: confirmed by user (t2 completed)
+
+## v1.2.0 notes
+
+- Import commands (`cph_import_from_file`, `cph_import_from_folder`) moved from
+  `core/` subpackage back to root-level `cph_import.py` — Sublime does not
+  auto-load commands defined inside subpackages, which left menu items greyed out.
+- Imports now append/merge with existing tests (dedup by input+answer) instead
+  of overwriting the session.
+- Re-run kills a still-running process before starting a new one (wait loop up
+  to 2s, epoch-based stale callback drop); fixes "next test" hang.
+- New `detail_style` setting (`view` default / `phantom` legacy), custom
+  `DetailSyntax.sublime-syntax` highlighting, sample input section in detail,
+  lone `\r` cleanup.
+- Edit view top bar reordered (save/delete before hint) so buttons stay
+  clickable at default sidebar width; stale edit/answer views closed on re-run.
+- Verdict badge CSS: plain inline element so colored background hugs the text.
 
 ## v1.1.0 notes
 

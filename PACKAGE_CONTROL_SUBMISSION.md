@@ -25,7 +25,7 @@
 4. 提交并推送：
    ```bash
    git add repository/cph-by-chenkx.json
-   git commit -m "Add cph-by-chenkx v1.1.0"
+   git commit -m "Add cph-by-chenkx"
    git push origin master
    ```
 5. 在 GitHub 上创建 Pull Request（目标：`wbond/package_control_channel` 的 `master` 分支）
@@ -40,7 +40,7 @@ Add cph-by-chenkx - C++ competitive programming plugin for Sublime Text
 
 ```
 Package: cph-by-chenkx
-Version: v1.1.0 (tag-based release)
+Version: v1.2.0 (tag-based release)
 Repo: https://github.com/chenmoulaile/cph-by-chenkx
 
 This is a Sublime Text plugin for C++ competitive programming, based on FastOlympicCoding.

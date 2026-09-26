@@ -17,8 +17,8 @@ import os
 import re
 import glob
 
-from .cph_settings import save_tests, load_all_tests
-from .cph_i18n import t
+from .core.cph_settings import save_tests, load_all_tests
+from .core.cph_i18n import t
 
 
 class CphImportTestsCommand(sublime_plugin.TextCommand):
@@ -113,7 +113,7 @@ class CphImportTestsCommand(sublime_plugin.TextCommand):
             with open(input_path, 'r', encoding='utf-8') as f:
                 content = f.read()
             tests = [{'test': content, 'correct_answers': []}]
-            self._save_and_show(tests, input_path)
+            self._save_and_show(tests, input_path, append=True)
         except Exception as e:
             sublime.error_message(t('import_failed', error=str(e)))
 
@@ -168,11 +168,11 @@ class CphImportTestsCommand(sublime_plugin.TextCommand):
             if len(match) == 2:
                 inp, out = match[0].strip(), match[1].strip()
                 tests = [{'test': inp + '\n', 'correct_answers': [out] if out else []}]
-                self._save_and_show(tests, file_path)
+                self._save_and_show(tests, file_path, append=True)
                 return
 
         tests = [{'test': content, 'correct_answers': []}]
-        self._save_and_show(tests, file_path)
+        self._save_and_show(tests, file_path, append=True)
 
     # ---------- 3. cph-ng style ----------
 
@@ -354,8 +354,17 @@ class CphImportTestsFileCommand(sublime_plugin.TextCommand):
                 with open(candidates[0], 'r', encoding='utf-8') as f:
                     out = f.read().strip()
             tests = [{'test': inp, 'correct_answers': [out] if out else []}]
-            if save_tests(src_file, tests):
-                sublime.status_message(t('imported_tests', count=1,
+            # append/merge with existing tests instead of overwriting them
+            existing = load_all_tests(src_file)
+            seen = set()
+            merged = []
+            for item in existing + tests:
+                key = (item.get('test', ''), tuple(sorted(item.get('correct_answers', []))))
+                if key not in seen:
+                    seen.add(key)
+                    merged.append(item)
+            if save_tests(src_file, merged):
+                sublime.status_message(t('imported_tests', count=len(merged),
                                          source=os.path.basename(file_path)))
                 self.view.run_command('view_tester', {'action': 'make_opd'})
             else:

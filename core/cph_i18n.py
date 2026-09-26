@@ -87,12 +87,12 @@ STRINGS = {
         'en': 'Correct Answer',
     },
     'edit_answer_hint': {
-        'zh': '编辑标准答案 (预期输出)，留空表示未设置',
-        'en': 'Edit the expected answer; leave empty for none',
+        'zh': '标准答案',
+        'en': 'expected answer',
     },
     'edit_input_hint': {
-        'zh': '编辑测试输入，点击 save 同时保存输入与标准答案',
-        'en': 'Edit test input; save updates input and answer',
+        'zh': '保存输入和答案',
+        'en': 'saves input + answer',
     },
     'diff': {
         'zh': '差异',

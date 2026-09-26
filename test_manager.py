@@ -4,6 +4,7 @@ cph-by-chenkx - 主测试管理器
 
 import sublime, sublime_plugin
 import os
+import re
 from os.path import dirname
 import sys
 from subprocess import Popen, PIPE
@@ -273,6 +274,81 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 			phantom = Phantom(Region(pt), content, sublime.LAYOUT_BLOCK, onclick)
 			return phantom
 
+		def get_detail(self, i, pt, _cb_act, _view):
+			styles = get_test_styles(_view)
+			content = open(root_dir + '/Highlight/test_detail.html').read()
+
+			verdict_short = self.verdict['name'] if self.verdict else 'UKE'
+			verdict_class = self.get_verdict_class()
+
+			memory_display = 'inline' if self.memory != '-' and self.memory is not None else 'none'
+			memory_str = self.get_nice_memory() if memory_display == 'inline' else '-'
+
+			stderr_display = 'block' if self.stderr else 'none'
+			message_display = 'block' if self.message else 'none'
+
+			def escape_html(s):
+				if not s:
+					return ''
+				# lone \r would render as the mysterious '<0x0d>' in minihtml
+				s = s.replace('\r\n', '\n').replace('\r', '')
+				return (s.replace('&', '&amp;')
+						 .replace('<', '&lt;')
+						 .replace('>', '&gt;')
+						 .replace('\n', '<br>'))
+
+			# sample input section
+			input_text = escape_html(self.test_string)
+			input_display = 'block' if input_text.strip() else 'none'
+
+			# Show a single answer section: the accepted correct answer if any,
+			# otherwise the expected output; hidden when neither exists.
+			if self.correct_answers:
+				expected_label = t('correct_answer')
+				expected = escape_html(next(iter(self.correct_answers)))
+				expected_display = 'block'
+			elif self.expected_output:
+				expected_label = t('expected_output')
+				expected = escape_html(self.expected_output)
+				expected_display = 'block'
+			else:
+				expected_label = t('expected_output')
+				expected = ''
+				expected_display = 'none'
+
+			content = content.format(
+				test_id=i + 1,
+				verdict_short=verdict_short,
+				verdict_class=verdict_class,
+				runtime=self.get_nice_runtime(),
+				memory_display=memory_display,
+				memory=memory_str,
+				input=input_text,
+				input_display=input_display,
+				input_label=t('input'),
+				expected=expected,
+				expected_label=expected_label,
+				expected_display=expected_display,
+				stdout=escape_html(self.stdout),
+				stderr=escape_html(self.stderr),
+				stderr_display=stderr_display,
+				message=escape_html(self.message),
+				message_display=message_display,
+				test_label=t('test_label'),
+				actual_output_label=t('actual_output'),
+				error_output_label=t('error_output'),
+				message_label=t('message'),
+				time_label=t('time'),
+				memory_label=t('memory'),
+			)
+			content = '<style>' + styles + '</style>' + content
+
+			def onclick(event, cb=_cb_act, i=i):
+				_cb_act(i, event)
+
+			phantom = Phantom(Region(pt), content, sublime.LAYOUT_BLOCK, onclick)
+			return phantom
+
 		def memorize(self):
 			d = {'test': self.test_string}
 			if self.correct_answers:
@@ -299,7 +375,7 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 	class Tester(object):
 		def __init__(self, process_manager, \
 			on_insert, on_out, on_stop, on_status_change, \
-			sync_out=False, tests=[]):
+			sync_out=False, tests=[], epoch=None):
 			super(TestManagerCommand.Tester, self).__init__()
 			self.process_manager = process_manager
 			self.sync_out = sync_out
@@ -313,6 +389,11 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 			self.proc_run = False
 			self.prog_out = []
 			self.on_status_change = on_status_change
+			# Epoch of this tester within the owning TestManagerCommand.
+			# Stale listener threads of a killed process may still fire
+			# __on_stop after a new Tester replaced this one; on_stop uses
+			# the epoch to drop those outdated callbacks.
+			self.epoch = epoch
 			# Set by the TLE watchdog when it kills the process for
 			# exceeding the time limit, so on_stop can judge TLE
 			self.tle_killed = False
@@ -329,7 +410,7 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 			if type(self.process_manager) == ProcessManager:
 				self.on_status_change('STOPPED')
 
-			self.on_stop(rtcode, runtime, crash_line=crash_line)
+			self.on_stop(rtcode, runtime, crash_line=crash_line, epoch=self.epoch)
 
 		def __on_out(self, s):
 			n = self.running_test
@@ -573,6 +654,9 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 				tester.tests[j].tie_pos -= d
 
 			tester.tests[i].fold = True
+			# an inline phantom detail would float detached after folding
+			if self.get_detail_style() == 'phantom':
+				self.close_test_detail(i)
 		v.sel().clear()
 		v.sel().add(Region(v.size()))
 		self.update_configs()
@@ -673,6 +757,14 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 	def get_detail_view_name(self, i):
 		return path.split(self.dbg_file)[1] + ' - test %d detail' % (i + 1)
 
+	@staticmethod
+	def _clean_output(s):
+		"""Normalize a program output for display: kill lone \r characters
+		(rendered as the mysterious '<0x0d>' in Sublime) and unify CRLF."""
+		if not s:
+			return ''
+		return s.replace('\r\n', '\n').replace('\r', '')
+
 	def build_detail_content(self, i, test):
 		verdict_short = test.verdict['name'] if test.verdict else 'UKE'
 		runtime_str = test.get_nice_runtime().replace('&nbsp;', ' ').strip()
@@ -682,45 +774,48 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 			header += '  |  %s: %s' % (t('memory'), test.get_nice_memory())
 		lines = [header, '=' * max(len(header), 40), '']
 
+		# sample input
+		test_input = self._clean_output(test.test_string).rstrip('\n')
+		lines.append('[%s]' % t('input'))
+		lines.append(test_input if test_input.strip() else t('detail_empty'))
+		lines.append('')
+
 		expected = ''
 		if test.correct_answers:
 			expected = next(iter(test.correct_answers))
 		elif test.expected_output:
 			expected = test.expected_output
+		expected = self._clean_output(expected)
+		stdout = self._clean_output(test.stdout)
 
 		lines.append('[%s]' % t('expected_output'))
 		lines.append(expected.rstrip('\n') if expected.strip() else t('detail_empty'))
 		lines.append('')
 		lines.append('[%s]' % t('actual_output'))
-		lines.append(test.stdout.rstrip('\n') if test.stdout.strip() else t('detail_empty'))
+		lines.append(stdout.rstrip('\n') if stdout.strip() else t('detail_empty'))
 		lines.append('')
 
 		lines.append('[%s] (%s)' % (t('diff'), t('diff_ignore_trailing')))
 		if not expected.strip():
 			lines.append(t('diff_no_expected'))
 		else:
-			ops, total = build_line_diff(expected, test.stdout)
+			ops, total = build_line_diff(expected, stdout)
 			if ops is None:
 				lines.append(t('diff_all_match', n=total))
 			else:
 				lines.append(t('diff_lines_differ', n=len(ops), total=total))
 				lines.append('')
 				for kind, line_no, e, a in ops:
-					if kind == '!=':
-						lines.append('Line %d:' % line_no)
-						lines.append('  %s: %s' % (t('expected_short'), e if e else t('detail_empty')))
-						lines.append('  %s: %s' % (t('actual_short'), a if a else t('detail_empty')))
-					elif kind == '-':
-						lines.append('Line %d (%s):' % (line_no, t('expected_only')))
-						lines.append('  %s: %s' % (t('expected_short'), e))
-					elif kind == '+':
-						lines.append('Line %d (%s):' % (line_no, t('actual_only')))
-						lines.append('  %s: %s' % (t('actual_short'), a))
+					lines.append('  Line %d:' % line_no)
+					if kind != '+':
+						lines.append('- %s: %s' % (t('expected_short'), e if e else t('detail_empty')))
+					if kind != '-':
+						lines.append('+ %s: %s' % (t('actual_short'), a if a else t('detail_empty')))
 		lines.append('')
 
 		if test.stderr and test.stderr.strip():
 			lines.append('[%s]' % t('error_output'))
-			lines.append(test.stderr.rstrip('\n'))
+			lines.append(self._clean_output(test.stderr).rstrip('\n'))
 			lines.append('')
 
 		if test.message:
@@ -730,6 +825,11 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 
 		return '\n'.join(lines)
 
+	def get_detail_style(self):
+		"""'view' (default): open a real, selectable detail view with
+		highlighting. 'phantom': the original inline minihtml panel."""
+		return get_settings().get('detail_style', 'view')
+
 	def show_test_detail(self, i):
 		v = self.view
 		tester = self.tester
@@ -738,6 +838,10 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 		test = tester.tests[i]
 		if test.verdict is None and test.runtime == '-' and not test.stdout:
 			sublime.status_message(t('detail_no_result'))
+			return
+
+		if self.get_detail_style() == 'phantom':
+			self.show_test_detail_phantom(i)
 			return
 
 		window = v.window()
@@ -759,12 +863,43 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 			window.set_view_index(detail_view, 1, 1)
 			detail_view.set_name(name)
 			detail_view.set_scratch(True)
+			detail_view.set_syntax_file('Packages/%s/Highlight/DetailSyntax.sublime-syntax' % base_name)
 			detail_view.run_command('set_setting', {'setting': 'word_wrap', 'value': False})
 			detail_view.run_command('set_setting', {'setting': 'fold_buttons', 'value': False})
 		detail_view.run_command('test_detail_view', {'text': self.build_detail_content(i, test)})
 		window.focus_view(detail_view)
 
+	def show_test_detail_phantom(self, i):
+		"""Original inline minihtml detail panel (detail_style = 'phantom')."""
+		v = self.view
+		tester = self.tester
+		test = tester.tests[i]
+		if test.fold:
+			# unfold first so the detail panel shows below
+			# the expanded input/output of this test
+			self.toggle_fold(i)
+
+		pt = self.get_tie_pos(i)
+		pt += len(test.test_string) + len(tester.prog_out[i]) + 1
+
+		detail = test.get_detail(i, pt, self.on_test_action, self.view)
+
+		if not hasattr(self, 'detail_phantoms'):
+			self.detail_phantoms = [PhantomSet(v, 'test-detail-' + str(j)) for j in range(10)]
+			self.detail_open = set()
+		while len(self.detail_phantoms) <= i:
+			self.detail_phantoms.append(PhantomSet(v, 'test-detail-' + str(len(self.detail_phantoms))))
+
+		self.detail_phantoms[i].update([detail])
+		self.detail_open.add(i)
+
 	def close_test_detail(self, i):
+		# close the inline phantom detail if one is open
+		if hasattr(self, 'detail_open'):
+			self.detail_open.discard(i)
+		if hasattr(self, 'detail_phantoms') and i < len(self.detail_phantoms):
+			self.detail_phantoms[i].update([])
+		# close the detail view if one is open
 		v = self.view
 		window = v.window()
 		if window is None:
@@ -944,8 +1079,13 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 		if not self.out_region_set:
 			self.out_region_set = True
 
-	def on_stop(self, rtcode, runtime, crash_line=None):
+	def on_stop(self, rtcode, runtime, crash_line=None, epoch=None):
 		v = self.view
+		# Drop callbacks from a stale listener thread whose process was
+		# killed by a re-run: they would corrupt the new tester's state
+		if epoch is not None and epoch != getattr(self, 'tester_epoch', None):
+			print('[cph-by-chenkx] dropped stale on_stop from killed process')
+			return
 		tester = self.tester
 
 		test_id = self.tester.running_test
@@ -1043,21 +1183,51 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 		else:
 			sublime.set_timeout(self.update_configs, 100)
 
-		# Refresh the detail view of this test if it is open
+		# Refresh the open detail of this test (view mode and phantom mode)
 		window = v.window()
 		if window is not None and test_id < len(tester.tests):
-			name = self.get_detail_view_name(test_id)
-			for wv in window.views():
-				if wv.name() == name:
-					try:
-						content = self.build_detail_content(test_id, tester.tests[test_id])
-					except Exception:
+			if self.get_detail_style() == 'phantom':
+				if test_id in getattr(self, 'detail_open', set()):
+					if tester.tests[test_id].fold:
+						self.close_test_detail(test_id)
+					else:
+						pt = self.get_tie_pos(test_id)
+						pt += len(tester.tests[test_id].test_string) + len(tester.prog_out[test_id]) + 1
+						detail = tester.tests[test_id].get_detail(test_id, pt, self.on_test_action, self.view)
+						if test_id < len(self.detail_phantoms):
+							self.detail_phantoms[test_id].update([detail])
+			else:
+				name = self.get_detail_view_name(test_id)
+				for wv in window.views():
+					if wv.name() == name:
+						try:
+							content = self.build_detail_content(test_id, tester.tests[test_id])
+						except Exception:
+							break
+						wv.run_command('test_detail_view', {'text': content})
 						break
-					wv.run_command('test_detail_view', {'text': content})
-					break
 
 	def change_process_status(self, status):
 		self.view.set_status('process_status', status)
+
+	def close_edit_views(self):
+		"""Close leftover 'test N -edit' / 'test N -answer' edit views left
+		behind by a previous session (e.g. the user clicked edit, did not
+		save, then re-ran the program). Their save button would be dead
+		anyway since the run view they point to has been rebuilt."""
+		window = self.view.window()
+		if window is None:
+			return
+		stale = []
+		for wv in window.views():
+			name = wv.name() or ''
+			if re.match(r'^test \d+ -(edit|answer)$', name):
+				stale.append(wv)
+		for wv in stale:
+			try:
+				wv.close()
+			except Exception:
+				pass
 
 	def clear_all(self):
 		v = self.view
@@ -1114,12 +1284,28 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 		if compiling_since is not None and (time() - compiling_since) < 30:
 			sublime.status_message('[cph-by-chenkx] compiling in progress, wait or press again after 30s')
 			return
-		self.compiling_since = time()
-		print('[cph-by-chenkx] make_opd start: %s' % run_file)
 
-		if v.get_status('process_status') == 'RUNNING':
-			print('terminating')
-			self.tester.terminate()
+		if v.get_status('process_status') == 'RUNNING' or \
+				(self.tester is not None and self.tester.proc_run):
+			# Re-run: kill the still-running process and WAIT until it is
+			# really gone. Without the wait the new run inherited a
+			# half-dead process state and the whole view appeared frozen.
+			tester = self.tester
+			if tester is not None:
+				try:
+					tester.terminate()
+				except Exception:
+					pass
+				pm = tester.process_manager
+				try:
+					waited = 0
+					while pm.is_stopped() is None and waited < 2000:
+						sleep(0.02)
+						waited += 20
+				except Exception:
+					pass
+				tester.proc_run = False
+				self.change_process_status('STOPPED')
 
 			kwargs = {
 				'run_file': run_file,
@@ -1155,6 +1341,7 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 		v.run_command('set_setting', {'setting': 'line_numbers', 'value': False})
 		v.set_status('opd_info', 'opdebugger-file')
 		self.clear_all()
+		self.close_edit_views()
 		if load_session:
 			if self.session is None:
 				v.run_command('test_manager', {'action': 'insert_opd_out', 'text': t('cant_restore_session')})
@@ -1233,9 +1420,10 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 			self.change_process_status('COMPILED')
 			self.delta_input = 0
 			if cmp_data is None or cmp_data[0] == 0:
+				self.tester_epoch = getattr(self, 'tester_epoch', 0) + 1
 				self.tester = self.Tester(process_manager, \
 					self.on_insert, self.on_out, self.on_stop, self.change_process_status, \
-					tests=tests, sync_out=sync_out)
+					tests=tests, sync_out=sync_out, epoch=self.tester_epoch)
 				v.settings().set('edit_mode', False)
 				v.run_command('test_manager', {'action': 'new_test'})
 			else:
@@ -1243,6 +1431,9 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 				self.set_compile_bar(cmp_data[1])
 
 		self.set_compile_bar(t('compiling'))
+		# Mark compile start only now - the terminate/rerun path above
+		# must never be blocked by this guard on its re-entry
+		self.compiling_since = time()
 
 		sublime.set_timeout_async(compile, 10)
 

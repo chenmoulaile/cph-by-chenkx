@@ -68,14 +68,13 @@ a {
 }
 
 .verdict-badge {
-	display: inline-block;
-	padding: 0 3px;
+	/* plain inline element: the background hugs the text exactly, so the
+	   verdict text is always centered inside the colored background */
+	padding: 0px 3px;
 	margin-right: 3px;
-	border-radius: 2px;
 	font-size: 10px;
 	font-weight: bold;
 	font-family: monospace;
-	color: var(--foreground);
 }
 
 .verdict-AC { background-color: color(var(--greenish) alpha(0.4)); color: var(--greenish); }

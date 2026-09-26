@@ -1,0 +1,23 @@
+%YAML 1.2
+---
+name: DetailSyntax
+file_extensions: []
+scope: source.DetailSyntax
+
+contexts:
+  main:
+    # [section] headers
+    - match: '^\[.*\]\s*$'
+      scope: entity.name.section.detail
+    # ==== divider lines ====
+    - match: '^=+\s*$'
+      scope: comment.line.detail
+    # diff: expected-only line (red in default themes)
+    - match: '^- .+$'
+      scope: markup.deleted.diff
+    # diff: actual-only line (green in default themes)
+    - match: '^\+.+$'
+      scope: markup.inserted.diff
+    # diff line numbers
+    - match: '^\s*Line \d+:'
+      scope: constant.numeric.detail
