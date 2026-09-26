@@ -12,17 +12,23 @@ cph-by-chenkx 是基于 [FastOlympicCoding](https://github.com/Jatana/FastOlympi
 - **彩色 verdict 徽章**：`AC`（绿）、`WA`（红）、`TLE`（深蓝）、`MLE`（紫）、`RE`（蓝）、`PE`（粉）、`CE`（黄）等
 - **运行时间**：毫秒级显示，超过 5 秒自动转换为秒
 - **内存占用**：MB / GB 显示
+- **超时硬杀**：程序超过时间限制会被自动终止并判 `TLE`（cph-ng 行为），
+  不会再出现死循环杀不掉的问题；手动停止的测试显示 `SK`
 - **三个按钮**：`编辑`、`运行`、`详情`
 
-### 2. 详情面板（detail）
+### 2. 详情视图（detail）+ 逐行 diff
 
-点击每个测试点的 `详情` 按钮，可以展开一个详细面板（类似 cph-ng）显示：
-- **输入** (Input)
+点击每个测试点的 `详情` 按钮，会打开一个真实的编辑器标签页
+（`xxx - test N detail`），文字**可选中、可复制**，方便对比：
+
 - **预期输出** (Expected Output)
 - **实际输出** (Actual Output)
-- **正确答案** (Correct Answer) - 正确输出单独显示在下方
-- **错误输出** (Error Output)
-- **评判信息** (Verdict) + 运行时间 + 内存占用
+- **Diff**：预期输出与实际输出**逐行对比**（忽略行末空格与末尾换行），
+  不同的行会标出 `expected` / `actual`，只列出有差异的行
+- **错误输出** (Error Output / stderr)
+- 顶部显示 verdict + 运行时间 + 内存占用
+
+运行结束后再次点击 `详情` 会自动刷新内容。
 
 ### 3. 正确/错误答案快捷标记
 
@@ -37,9 +43,16 @@ cph-by-chenkx 是基于 [FastOlympicCoding](https://github.com/Jatana/FastOlympi
 1. 在 Sublime Text 中打开你要做题的代码文件
 2. 右键点击文件，选择 `cph-by-chenkx: Listen to Competitive Companion`
 3. 在浏览器中打开题目页面，点击 Competitive Companion 扩展的绿色 + 图标
-4. 题目样例和时间/内存限制会自动发送到 Sublime Text，保存到测试文件中
+4. 题目样例和时间/内存限制会自动发送到 Sublime Text，保存到测试文件中并自动运行
 
-**注意**：需要在 Competitive Companion 浏览器扩展的端口列表中添加 `12345`。
+监听器是**持久**的（cph-ng 风格）：
+- 启动一次后浏览器扩展可以**反复点击**发送不同题目，不会出现端口冲突
+  或 "Can't restore session" 之类的错误
+- 在另一个代码文件上再次执行该命令 = 把监听目标切换到那个文件
+- `Stop Competitive Companion listener` 可随时停止监听
+
+**注意**：需要在 Competitive Companion 浏览器扩展的端口列表中添加 `12345`
+（可用 `cph-by-chenkx.sublime-settings` 的 `companion_port` 修改）。
 
 ### 5. 国际化 (i18n)
 
@@ -62,7 +75,9 @@ cph-by-chenkx 是基于 [FastOlympicCoding](https://github.com/Jatana/FastOlympi
 2. 按 `Ctrl+Alt+B` (Mac: `Cmd+Alt+B`) 启动测评
 3. 右侧会打开一个测试运行窗口，可以输入/编辑测试数据
 4. 测评结束后，每个测试点会显示 verdict 徽章
-5. 点击 `详情` 展开详细结果
+5. 点击 `详情` 打开带逐行 diff 的详情标签页；点击 `编辑` 会打开
+   输入 (`test N -edit`) 与标准答案 (`test N -answer`) 两个标签页，
+   在答案页填入预期输出后 `save`，即可自动重新评判
 
 ## 快捷键
 

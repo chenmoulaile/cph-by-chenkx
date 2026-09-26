@@ -12,13 +12,13 @@ import shlex
 from sublime import Region, Phantom, PhantomSet
 from os import path
 from importlib import import_module
-from time import time
+from time import time, sleep
 import threading
 
 from .Modules.ProcessManager import ProcessManager
 from .core.cph_settings import base_name, get_settings, root_dir, get_tests_file_path, load_all_tests, save_tests
 from .Highlight.test_interface import get_test_styles
-from .core.cph_verdict import get_verdict, get_verdict_by_code, VERDICTS
+from .core.cph_verdict import get_verdict, get_verdict_by_code, get_verdict_by_name, build_line_diff, VERDICTS
 from .core.cph_i18n import t, set_lang, get_lang, LANG_ZH, LANG_EN
 
 
@@ -60,8 +60,8 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 				self.uncorrect_answers = set()
 			else:
 				self.test_string = prop['test']
-				self.correct_answers = set(prop.get('correct_answers', set()))
-				self.uncorrect_answers = set(prop.get('uncorrect_answers', set()))
+				self.correct_answers = set(prop.get('correct_answers', ()))
+				self.uncorrect_answers = set(prop.get('uncorrect_answers', ()))
 
 			self.start = start
 			self.fold = True
@@ -76,6 +76,19 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 			self.message = ''
 			self.time_limit_ms = None
 			self.memory_limit_mb = None
+
+			# Restore the last judge result so verdict badges and the
+			# detail view survive a Sublime restart / session reload
+			if type(prop) == dict:
+				self.runtime = prop.get('runtime', '-')
+				self.memory = prop.get('memory', '-')
+				self.stdout = prop.get('stdout', '')
+				self.stderr = prop.get('stderr', '')
+				self.expected_output = prop.get('expected_output', '')
+				restored = get_verdict_by_name(prop.get('verdict'))
+				if restored:
+					self.verdict = restored
+					self.verdict_name = restored['name']
 
 		def add_correct_answer(self, answer):
 			self.correct_answers.add(answer.lstrip().rstrip())
@@ -260,73 +273,6 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 			phantom = Phantom(Region(pt), content, sublime.LAYOUT_BLOCK, onclick)
 			return phantom
 
-		def get_detail(self, i, pt, _cb_act, _view):
-			styles = get_test_styles(_view)
-			content = open(root_dir + '/Highlight/test_detail.html').read()
-
-			verdict_short = self.verdict['name'] if self.verdict else 'UKE'
-			verdict_class = self.get_verdict_class()
-
-			memory_display = 'inline' if self.memory != '-' and self.memory is not None else 'none'
-			memory_str = self.get_nice_memory() if memory_display == 'inline' else '-'
-
-			stderr_display = 'block' if self.stderr else 'none'
-			message_display = 'block' if self.message else 'none'
-
-			def escape_html(s):
-				if not s:
-					return ''
-				s = s.replace('\r\n', '\n').replace('\r', '\n').rstrip('\n')
-				return (s.replace('&', '&amp;')
-						 .replace('<', '&lt;')
-						 .replace('>', '&gt;')
-						 .replace('\n', '<br>'))
-
-			# Show a single answer section: the accepted correct answer if any,
-			# otherwise the expected output; hidden when neither exists.
-			if self.correct_answers:
-				expected_label = t('correct_answer')
-				expected = escape_html(next(iter(self.correct_answers)))
-				expected_display = 'block'
-			elif self.expected_output:
-				expected_label = t('expected_output')
-				expected = escape_html(self.expected_output)
-				expected_display = 'block'
-			else:
-				expected_label = t('expected_output')
-				expected = ''
-				expected_display = 'none'
-
-			content = content.format(
-				test_id=i + 1,
-				verdict_short=verdict_short,
-				verdict_class=verdict_class,
-				runtime=self.get_nice_runtime(),
-				memory_display=memory_display,
-				memory=memory_str,
-				expected=expected,
-				expected_label=expected_label,
-				expected_display=expected_display,
-				stdout=escape_html(self.stdout),
-				stderr=escape_html(self.stderr),
-				stderr_display=stderr_display,
-				message=escape_html(self.message),
-				message_display=message_display,
-				test_label=t('test_label'),
-				actual_output_label=t('actual_output'),
-				error_output_label=t('error_output'),
-				message_label=t('message'),
-				time_label=t('time'),
-				memory_label=t('memory'),
-			)
-			content = '<style>' + styles + '</style>' + content
-
-			def onclick(event, cb=_cb_act, i=i):
-				_cb_act(i, event)
-
-			phantom = Phantom(Region(pt), content, sublime.LAYOUT_BLOCK, onclick)
-			return phantom
-
 		def memorize(self):
 			d = {'test': self.test_string}
 			if self.correct_answers:
@@ -341,6 +287,8 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 				d['memory'] = self.memory
 			if self.stdout:
 				d['stdout'] = self.stdout
+			if self.stderr:
+				d['stderr'] = self.stderr
 			if self.expected_output:
 				d['expected_output'] = self.expected_output
 			return d
@@ -365,6 +313,9 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 			self.proc_run = False
 			self.prog_out = []
 			self.on_status_change = on_status_change
+			# Set by the TLE watchdog when it kills the process for
+			# exceeding the time limit, so on_stop can judge TLE
+			self.tle_killed = False
 			if type(self.process_manager) != ProcessManager:
 				self.process_manager.set_calls(self.__on_out, self.__on_stop, on_status_change)
 
@@ -388,6 +339,21 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 		def __process_listener(self):
 			proc = self.process_manager
 			start_time = time()
+			# Hard TLE: kill the process once it exceeds the time limit
+			# (cph-ng style). The blocking stdout read below would never
+			# unblock for silent infinite loops, hence the watchdog thread.
+			limit_ms = None
+			try:
+				limit_ms = proc.get_time_limit_ms()
+			except Exception:
+				limit_ms = None
+			if limit_ms:
+				watchdog = threading.Thread(
+					target=self.__tle_watchdog,
+					args=(proc, start_time, limit_ms)
+				)
+				watchdog.daemon = True
+				watchdog.start()
 			while proc.is_stopped() is None:
 				if self.sync_out:
 					s = proc.read(bfsize=1)
@@ -401,6 +367,18 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 				pass
 			runtime = int((time() - start_time) * 1000)
 			self.__on_stop(proc.is_stopped(), runtime)
+
+		def __tle_watchdog(self, proc, start_time, limit_ms):
+			limit_s = float(limit_ms) / 1000.0
+			while proc.is_stopped() is None:
+				if time() - start_time >= limit_s:
+					self.tle_killed = True
+					try:
+						proc.terminate()
+					except Exception:
+						pass
+					return
+				sleep(0.05)
 
 		def insert(self, s, call_on_insert=False):
 			n = self.running_test
@@ -419,6 +397,7 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 				self.on_status_change('RUNNING')
 
 			self.proc_run = True
+			self.tle_killed = False
 			self.process_manager.run()
 			self.process_manager.write(tests[id].test_string)
 			self.on_insert(tests[id].test_string)
@@ -525,6 +504,8 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 
 	def insert_text(self, edit, text=None):
 		v = self.view
+		if not self.tester:
+			return None
 		expected = v.line(self.delta_input).end()
 		if len(v.sel()) > 1: return
 		if v.sel()[0].a != expected or v.sel()[0].b != expected: return
@@ -541,6 +522,8 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 
 	def insert_cb(self, edit):
 		v = self.view
+		if not self.tester:
+			return
 		s = sublime.get_clipboard()
 		lst = s.split('\n')
 		for i in range(len(lst) - 1):
@@ -590,28 +573,45 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 				tester.tests[j].tie_pos -= d
 
 			tester.tests[i].fold = True
-			self.close_test_detail(i)
 		v.sel().clear()
 		v.sel().add(Region(v.size()))
 		self.update_configs()
 
 	def open_test_edit(self, i):
 		v = self.view
+		window = v.window()
 		tester = self.tester
-		v.window().focus_group(1)
-		edit_view = v.window().new_file()
-		v.window().set_view_index(edit_view, 1, 1)
-		# 'data' carries the current correct answer for the answer section
+		test = tester.tests[i]
+		# 'data' carries the current correct answer for the answer view
 		correct_answer = ''
-		if tester.tests[i].correct_answers:
-			correct_answer = next(iter(tester.tests[i].correct_answers))
-		edit_view.run_command('test_edit', {
+		if test.correct_answers:
+			correct_answer = next(iter(test.correct_answers))
+		elif test.expected_output:
+			correct_answer = test.expected_output
+		# Two separate tabs: input and expected answer. A dedicated answer
+		# view replaces the old fragile "------ answer ------" separator
+		# line which was easy to delete by accident.
+		window.focus_group(1)
+		input_view = window.new_file()
+		window.set_view_index(input_view, 1, 1)
+		input_view.run_command('test_edit', {
 			'action': 'init',
+			'mode': 'input',
 			'test_id': i,
-			'test': tester.tests[i].test_string,
+			'test': test.test_string,
+			'source_view_id': v.id()
+		})
+		answer_view = window.new_file()
+		window.set_view_index(answer_view, 1, 1)
+		answer_view.run_command('test_edit', {
+			'action': 'init',
+			'mode': 'answer',
+			'test_id': i,
+			'test': '',
 			'data': correct_answer,
 			'source_view_id': v.id()
 		})
+		window.focus_view(input_view)
 
 	def get_tie_pos(self, i):
 		v = self.view
@@ -639,11 +639,8 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 		if event == 'test-click':
 			self.toggle_fold(i)
 		elif event == 'test-detail':
-			# odd clicks show the detail panel, even clicks retract it
-			if i in getattr(self, 'detail_open', set()):
-				self.close_test_detail(i)
-			else:
-				self.show_test_detail(i)
+			# opens/refreshes the detail view of this test
+			self.show_test_detail(i)
 		elif event == 'test-close-detail':
 			self.close_test_detail(i)
 		elif event == 'test-edit':
@@ -673,38 +670,110 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 			tester.run_test(i)
 			self.update_configs()
 
+	def get_detail_view_name(self, i):
+		return path.split(self.dbg_file)[1] + ' - test %d detail' % (i + 1)
+
+	def build_detail_content(self, i, test):
+		verdict_short = test.verdict['name'] if test.verdict else 'UKE'
+		runtime_str = test.get_nice_runtime().replace('&nbsp;', ' ').strip()
+		header = '%s %d  |  %s  |  %s: %s' % (t('test_label').capitalize(), i + 1,
+			verdict_short, t('time'), runtime_str)
+		if test.memory not in ('-', None):
+			header += '  |  %s: %s' % (t('memory'), test.get_nice_memory())
+		lines = [header, '=' * max(len(header), 40), '']
+
+		expected = ''
+		if test.correct_answers:
+			expected = next(iter(test.correct_answers))
+		elif test.expected_output:
+			expected = test.expected_output
+
+		lines.append('[%s]' % t('expected_output'))
+		lines.append(expected.rstrip('\n') if expected.strip() else t('detail_empty'))
+		lines.append('')
+		lines.append('[%s]' % t('actual_output'))
+		lines.append(test.stdout.rstrip('\n') if test.stdout.strip() else t('detail_empty'))
+		lines.append('')
+
+		lines.append('[%s] (%s)' % (t('diff'), t('diff_ignore_trailing')))
+		if not expected.strip():
+			lines.append(t('diff_no_expected'))
+		else:
+			ops, total = build_line_diff(expected, test.stdout)
+			if ops is None:
+				lines.append(t('diff_all_match', n=total))
+			else:
+				lines.append(t('diff_lines_differ', n=len(ops), total=total))
+				lines.append('')
+				for kind, line_no, e, a in ops:
+					if kind == '!=':
+						lines.append('Line %d:' % line_no)
+						lines.append('  %s: %s' % (t('expected_short'), e if e else t('detail_empty')))
+						lines.append('  %s: %s' % (t('actual_short'), a if a else t('detail_empty')))
+					elif kind == '-':
+						lines.append('Line %d (%s):' % (line_no, t('expected_only')))
+						lines.append('  %s: %s' % (t('expected_short'), e))
+					elif kind == '+':
+						lines.append('Line %d (%s):' % (line_no, t('actual_only')))
+						lines.append('  %s: %s' % (t('actual_short'), a))
+		lines.append('')
+
+		if test.stderr and test.stderr.strip():
+			lines.append('[%s]' % t('error_output'))
+			lines.append(test.stderr.rstrip('\n'))
+			lines.append('')
+
+		if test.message:
+			lines.append('[%s]' % t('message'))
+			lines.append(test.message)
+			lines.append('')
+
+		return '\n'.join(lines)
+
 	def show_test_detail(self, i):
 		v = self.view
 		tester = self.tester
+		if tester is None or i >= len(tester.tests):
+			return
 		test = tester.tests[i]
-		if test.verdict is None and test.runtime == '-':
+		if test.verdict is None and test.runtime == '-' and not test.stdout:
+			sublime.status_message(t('detail_no_result'))
 			return
 
-		if test.fold:
-			# unfold first so the detail panel shows below
-			# the expanded input/output of this test
+		window = v.window()
+		if window is None:
+			return
+
+		if test.fold and str(getattr(test, 'rtcode', '0')) != '0':
+			# unfold so the detail matches what is visible in the run view
 			self.toggle_fold(i)
 
-		pt = self.get_tie_pos(i)
-		pt += len(test.test_string) + len(tester.prog_out[i]) + 1
-
-		detail = test.get_detail(i, pt, self.on_test_action, self.view)
-
-		if not hasattr(self, 'detail_phantoms'):
-			self.detail_phantoms = [PhantomSet(v, 'test-detail-' + str(j)) for j in range(10)]
-			self.detail_open = set()
-		while len(self.detail_phantoms) <= i:
-			self.detail_phantoms.append(PhantomSet(v, 'test-detail-' + str(len(self.detail_phantoms))))
-
-		self.detail_phantoms[i].update([detail])
-		self.detail_open.add(i)
+		name = self.get_detail_view_name(i)
+		detail_view = None
+		for wv in window.views():
+			if wv.name() == name:
+				detail_view = wv
+				break
+		if detail_view is None:
+			detail_view = window.new_file()
+			window.set_view_index(detail_view, 1, 1)
+			detail_view.set_name(name)
+			detail_view.set_scratch(True)
+			detail_view.run_command('set_setting', {'setting': 'word_wrap', 'value': False})
+			detail_view.run_command('set_setting', {'setting': 'fold_buttons', 'value': False})
+		detail_view.run_command('test_detail_view', {'text': self.build_detail_content(i, test)})
+		window.focus_view(detail_view)
 
 	def close_test_detail(self, i):
-		if not hasattr(self, 'detail_open'):
-			self.detail_open = set()
-		self.detail_open.discard(i)
-		if hasattr(self, 'detail_phantoms') and i < len(self.detail_phantoms):
-			self.detail_phantoms[i].update([])
+		v = self.view
+		window = v.window()
+		if window is None:
+			return
+		name = self.get_detail_view_name(i)
+		for wv in window.views():
+			if wv.name() == name:
+				wv.close()
+				return
 
 	def on_accdec_action(self, i, event):
 		v = self.view
@@ -742,6 +811,7 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 		answer = data.strip()
 		if answer:
 			test.add_correct_answer(answer)
+		test.set_expected_output(answer)
 
 		# Re-judge with the new answer if this test already has output
 		if id < len(tester.prog_out):
@@ -760,7 +830,6 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 					regard_pe_as_ac=False
 				)
 				test.set_verdict(verdict)
-				test.set_expected_output(answer)
 
 		self.memorize_tests()
 		# Re-render to update the display
@@ -905,18 +974,27 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 		expected_output = ''
 		if self.tester.tests[test_id].correct_answers:
 			expected_output = next(iter(self.tester.tests[test_id].correct_answers))
+		elif self.tester.tests[test_id].expected_output:
+			expected_output = self.tester.tests[test_id].expected_output
 
-		verdict = get_verdict_by_code(
-			rtcode=int(rtcode) if rtcode is not None else 0,
-			runtime=runtime,
-			time_limit_ms=time_limit_ms,
-			memory_limit_mb=memory_limit_mb,
-			stderr=stderr,
-			stdout=_outp,
-			expected_output=expected_output,
-			ignore_error=True,
-			regard_pe_as_ac=False
-		)
+		if getattr(tester, 'tle_killed', False):
+			# watchdog killed the process at the time limit -> TLE
+			verdict = get_verdict('time_limit_exceed')
+		elif getattr(pm, 'terminated', False):
+			# stopped manually by the user -> not a real judge result
+			verdict = get_verdict('skipped')
+		else:
+			verdict = get_verdict_by_code(
+				rtcode=int(rtcode) if rtcode is not None else 0,
+				runtime=runtime,
+				time_limit_ms=time_limit_ms,
+				memory_limit_mb=memory_limit_mb,
+				stderr=stderr,
+				stdout=_outp,
+				expected_output=expected_output,
+				ignore_error=True,
+				regard_pe_as_ac=False
+			)
 
 		self.tester.tests[test_id].set_verdict(verdict)
 		self.tester.tests[test_id].set_stdout(_outp)
@@ -965,17 +1043,18 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 		else:
 			sublime.set_timeout(self.update_configs, 100)
 
-		if hasattr(self, 'detail_phantoms') and test_id < len(self.detail_phantoms):
-			if tester.tests[test_id].fold:
-				# test folded (e.g. answer accepted): the detail phantom
-				# must not stay behind floating alone
-				self.close_test_detail(test_id)
-			elif test_id in getattr(self, 'detail_open', set()):
-				pt = self.get_tie_pos(test_id)
-				if not tester.tests[test_id].fold:
-					pt += len(_inp) + len(_outp) + 1
-				detail = tester.tests[test_id].get_detail(test_id, pt, self.on_test_action, self.view)
-				self.detail_phantoms[test_id].update([detail])
+		# Refresh the detail view of this test if it is open
+		window = v.window()
+		if window is not None and test_id < len(tester.tests):
+			name = self.get_detail_view_name(test_id)
+			for wv in window.views():
+				if wv.name() == name:
+					try:
+						content = self.build_detail_content(test_id, tester.tests[test_id])
+					except Exception:
+						break
+					wv.run_command('test_detail_view', {'text': content})
+					break
 
 	def change_process_status(self, status):
 		self.view.set_status('process_status', status)
@@ -988,9 +1067,6 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 		self.phantoms.update([])
 		for phs in self.test_phantoms:
 			phs.update([])
-		if hasattr(self, 'detail_phantoms'):
-			for phs in self.detail_phantoms:
-				phs.update([])
 		if self.tester:
 			v.erase_regions('type')
 			for i in range(-1, self.tester.test_iter + 1):
@@ -1427,6 +1503,21 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 		pass
 
 
+class TestDetailViewCommand(sublime_plugin.TextCommand):
+	"""Fills the detail view with the (static) detail text of a test.
+	A real view is used instead of a phantom so the text is selectable,
+	comparable and copyable."""
+
+	def run(self, edit, text=''):
+		v = self.view
+		v.set_scratch(True)
+		v.set_read_only(False)
+		v.replace(edit, Region(0, v.size()), text)
+		v.set_read_only(True)
+		v.sel().clear()
+		v.sel().add(Region(0))
+
+
 class ModifiedListener(sublime_plugin.EventListener):
 	def on_selection_modified(self, view):
 		if view.get_status('opd_info') == 'opdebugger-file' and not view.settings().get('edit_mode'):
@@ -1493,7 +1584,7 @@ class ViewTesterCommand(sublime_plugin.TextCommand):
 		window.focus_view(v)
 		window.focus_view(dbg_view)
 
-		dbg_view.set_syntax_file('Packages/%s/TestSyntax.tmLanguage' % base_name)
+		dbg_view.set_syntax_file('Packages/%s/TestSyntax.sublime-syntax' % base_name)
 		dbg_view.set_name(os.path.split(v.file_name())[-1] + ' -run')
 		dbg_view.run_command('set_setting', {'setting': 'fold_buttons', 'value': False})
 		dbg_view.run_command('test_manager', {
@@ -1587,7 +1678,7 @@ class ViewTesterCommand(sublime_plugin.TextCommand):
 		if action == 'insert':
 			v.insert(edit, v.sel()[0].begin(), text)
 		elif action == 'make_opd':
-			if v.settings().get('syntax') == 'Packages/cph-by-chenkx/OPDebugger.tmLanguage':
+			if v.settings().get('syntax') == 'Packages/%s/TestSyntax.sublime-syntax' % base_name:
 				v.run_command('test_manager', {
 					'action': 'make_opd',
 					'load_session': True,

@@ -2,6 +2,8 @@
 cph-by-chenkx - 评判系统 (类似 cph-ng)
 """
 
+import difflib
+
 VERDICT_NAME = {
     'unknown_error': 'UKE',
     'accepted': 'AC',
@@ -24,7 +26,6 @@ VERDICT_NAME = {
     'skipped': 'SK',
     'rejected': 'RJ',
 }
-
 VERDICT_TYPE = {
     'running': 'RUNNING',
     'passed': 'PASSED',
@@ -107,11 +108,28 @@ VERDICTS = {
         'color': '#844fff',
         'type': VERDICT_TYPE['running'],
     },
+    'skipped': {
+        'name': VERDICT_NAME['skipped'],
+        'color': '#9e9e9e',
+        'type': VERDICT_TYPE['failed'],
+    },
 }
+
+
+VERDICTS_BY_NAME = {}
+for _v in VERDICTS.values():
+    VERDICTS_BY_NAME[_v['name']] = _v
 
 
 def get_verdict(name):
     return VERDICTS.get(name, VERDICTS['unknown_error'])
+
+
+def get_verdict_by_name(name):
+    """Return the verdict dict for a short name (e.g. 'WA'), or None."""
+    if not name:
+        return None
+    return VERDICTS_BY_NAME.get(name)
 
 
 def get_verdict_by_code(rtcode, runtime, time_limit_ms, memory_limit_mb,
@@ -163,3 +181,54 @@ def get_verdict_by_code(rtcode, runtime, time_limit_ms, memory_limit_mb,
         return get_verdict('presentation_error')
 
     return get_verdict('accepted')
+
+
+def normalize_lines(s):
+    """Split output into lines, stripping trailing whitespace per line
+    and trailing newlines at the end (contest answer comparison)."""
+    if not s:
+        return []
+    s = s.replace('\r\n', '\n').replace('\r', '\n')
+    s = s.rstrip('\n')
+    return [line.rstrip() for line in s.split('\n')]
+
+
+def build_line_diff(expected, actual):
+    """Line-by-line diff between expected and actual output.
+
+    Trailing whitespace of each line is ignored; trailing empty lines
+    are ignored as well.
+
+    Returns (ops, total_lines):
+      ops is None when both outputs match;
+      otherwise a list of (kind, line_no, expected_line, actual_line):
+        kind '!=': both sides have the line but contents differ
+        kind '-' : line only exists in the expected output
+        kind '+' : line only exists in the actual output
+      total_lines is the number of lines of the longer side.
+    """
+    exp = normalize_lines(expected)
+    act = normalize_lines(actual)
+    total = max(len(exp), len(act))
+
+    if exp == act:
+        return None, total
+
+    ops = []
+    sm = difflib.SequenceMatcher(a=exp, b=act, autojunk=False)
+    for tag, i1, i2, j1, j2 in sm.get_opcodes():
+        if tag == 'equal':
+            continue
+        if tag == 'replace':
+            span = max(i2 - i1, j2 - j1)
+            for off in range(span):
+                e = exp[i1 + off] if i1 + off < i2 else ''
+                a = act[j1 + off] if j1 + off < j2 else ''
+                ops.append(('!=', i1 + off + 1, e, a))
+        elif tag == 'delete':
+            for k in range(i1, i2):
+                ops.append(('-', k + 1, exp[k], ''))
+        elif tag == 'insert':
+            for k in range(j1, j2):
+                ops.append(('+', k + 1, '', act[k]))
+    return ops, total

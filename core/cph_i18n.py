@@ -87,8 +87,12 @@ STRINGS = {
         'en': 'Correct Answer',
     },
     'edit_answer_hint': {
-        'zh': '在 "------ answer ------" 行下方填写正确答案',
-        'en': 'Write the correct answer below the "------ answer ------" line',
+        'zh': '编辑标准答案 (预期输出)，留空表示未设置',
+        'en': 'Edit the expected answer; leave empty for none',
+    },
+    'edit_input_hint': {
+        'zh': '编辑测试输入，点击 save 同时保存输入与标准答案',
+        'en': 'Edit test input; save updates input and answer',
     },
     'diff': {
         'zh': '差异',
@@ -349,6 +353,97 @@ STRINGS = {
     'stress_files_needed': {
         'zh': '需要 std 文件和 generator 文件',
         'en': 'Need both std file and generator file',
+    },
+    # ---- Competitive Companion persistent listener ----
+    'listener_started': {
+        'zh': 'Competitive Companion 监听已启动 (端口 {port}，目标: {file})，浏览器扩展可反复点击发送',
+        'en': 'Competitive Companion listener started (port {port}, target: {file})',
+    },
+    'listener_retarget': {
+        'zh': '监听运行中，目标已切换为: {file}',
+        'en': 'Listener running, target switched to: {file}',
+    },
+    'listener_stopped': {
+        'zh': 'Competitive Companion 监听已停止',
+        'en': 'Competitive Companion listener stopped',
+    },
+    'listener_not_running': {
+        'zh': '监听未在运行',
+        'en': 'Listener is not running',
+    },
+    'listener_need_save': {
+        'zh': '请先保存当前文件再开启监听',
+        'en': 'Save the current file before listening',
+    },
+    'listener_no_target': {
+        'zh': '监听目标文件不存在或未保存',
+        'en': 'Listener target missing or unsaved',
+    },
+    'listener_port_error': {
+        'zh': '监听启动失败 (端口 {port}): {error}',
+        'en': 'Failed to start listener on port {port}: {error}',
+    },
+    'tests_received': {
+        'zh': '已接收题目 "{name}": {count} 个样例 (时间限制 {time}ms, 内存限制 {memory}MB)',
+        'en': 'Received "{name}": {count} test(s) (TL {time}ms, ML {memory}MB)',
+    },
+    # ---- detail view ----
+    'detail_no_result': {
+        'zh': '请先运行测试再查看详情',
+        'en': 'Run the test first to see details',
+    },
+    'detail_empty': {
+        'zh': '(空)',
+        'en': '(empty)',
+    },
+    'diff_ignore_trailing': {
+        'zh': '逐行对比，忽略行末空格与末尾换行',
+        'en': 'line-by-line, ignoring trailing spaces',
+    },
+    'diff_all_match': {
+        'zh': '全部 {n} 行一致',
+        'en': 'all {n} lines match',
+    },
+    'diff_lines_differ': {
+        'zh': '{n} 处不同 (共 {total} 行)',
+        'en': '{n} difference(s) over {total} lines',
+    },
+    'diff_no_expected': {
+        'zh': '未设置标准答案，无法对比。可在 "test N -answer" 标签页设置后再运行',
+        'en': 'No expected answer set. Fill it in the "test N -answer" tab and re-run',
+    },
+    'expected_short': {
+        'zh': '预期',
+        'en': 'expected',
+    },
+    'actual_short': {
+        'zh': '实际',
+        'en': 'actual',
+    },
+    'expected_only': {
+        'zh': '仅预期输出有',
+        'en': 'expected only',
+    },
+    'actual_only': {
+        'zh': '仅实际输出有',
+        'en': 'actual only',
+    },
+    # ---- import ----
+    'import_from_folder': {
+        'zh': '从文件夹批量导入 (.in/.out 文件对)',
+        'en': 'Batch import from folder (.in/.out pairs)',
+    },
+    'import_from_folder_desc': {
+        'zh': '输入一个文件夹路径, 导入其中所有 .in/.out 文件对',
+        'en': 'Enter a folder path to import all .in/.out pairs inside',
+    },
+    'import_folder_path': {
+        'zh': '文件夹路径 (包含 .in/.out 文件对)',
+        'en': 'Folder path containing .in/.out pairs',
+    },
+    'choose_other_file': {
+        'zh': '选择其他文件...',
+        'en': 'Choose another file...',
     },
 }
 

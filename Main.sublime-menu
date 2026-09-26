@@ -25,6 +25,10 @@
 						"command": "cph_companion_listener"
 					},
 					{
+						"caption": "Stop Competitive Companion listener",
+						"command": "cph_companion_stop_listener"
+					},
+					{
 						"caption": "Import tests from file...",
 						"command": "cph_import_tests"
 					},

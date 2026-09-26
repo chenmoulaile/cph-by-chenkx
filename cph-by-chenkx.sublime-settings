@@ -28,14 +28,14 @@
 			"name": "C++",
 			"extensions": ["cpp"],
 			// 编译命令；不需要 -DLOCAL 调试宏的话直接删掉即可
-			"compile_cmd": "g++ \"{source_file}\" -std=c++11 -o \"{file_name}.exe\" -DLOCAL",
+			"compile_cmd": "g++ \"{source_file}\" -std=c++23 -o \"{file_name}.exe\" -DLOCAL",
 			// 运行命令（编译产物在源代码目录下）
 			"run_cmd": "\"{source_file_dir}\\{file_name}.exe\" {args} -debug",
 			// 单个测试的时间限制(毫秒) / 内存限制(MB)，超限判 TLE / MLE
 			"time_limit_ms": 2000,
 			"memory_limit_mb": 256,
 			// lint 用的静态检查编译命令（不生成可执行文件）
-			"lint_compile_cmd": "g++ -std=c++11 \"{source_file}\" -I \"{source_file_dir}\" -DLOCAL"
+			"lint_compile_cmd": "g++ -std=c++23 \"{source_file}\" -I \"{source_file_dir}\" -DLOCAL"
 		},
 		{
 			"name": "Python",
@@ -70,6 +70,12 @@
 	// true: stderr 单独捕获，不参与答案比较（推荐，调试输出不再导致 WA）；
 	// false: stderr 混入 stdout 一起比较（旧行为）。
 	"ignore_stderr": true,
+
+	// ================= Competitive Companion 监听 =================
+	// "Listen to Competitive Companion" 监听的端口。
+	// 启动一次后持续监听（浏览器扩展可反复点击发送）；再次执行该命令
+	// 只会切换目标文件；用 "Stop Competitive Companion listener" 停止。
+	"companion_port": 12345,
 
 	// ================= 测试数据存储 =================
 	// 传统模式: 测试数据存在 "foo.cpp__tests"（同目录）

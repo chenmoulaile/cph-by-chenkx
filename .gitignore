@@ -4,3 +4,6 @@ __pycache__/
 Thumbs.db
 .omo/
 .omo
+*.sublime-package
+.agent-teams/
+.codegraph/

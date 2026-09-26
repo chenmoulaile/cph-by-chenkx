@@ -28,6 +28,11 @@ class ProcessManager(object):
 		self.separate_stderr = False
 		self.stderr_file = None
 
+		# Set to True when the process was killed by the plugin (manual stop
+		# or TLE watchdog) so the verdict logic can tell it apart from a
+		# genuine non-zero exit of the program itself
+		self.terminated = False
+
 		# Extract time/memory limits from run_settings
 		self.time_limit_ms = None
 		self.memory_limit_mb = None
@@ -168,6 +173,7 @@ class ProcessManager(object):
 		cmd = self.get_run_cmd(' '.join(args))
 
 		self.is_run = True
+		self.terminated = False
 		self.close_stderr()
 		PIPE = subprocess.PIPE
 		preexec_fn = None
@@ -225,6 +231,7 @@ class ProcessManager(object):
 			self.insert(input_data)
 
 	def terminate(self):
+		self.terminated = True
 		if sublime.platform() == 'linux':
 			os.killpg(os.getpgid(self.process.pid), signal.SIGTERM)
 		else:

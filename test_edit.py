@@ -1,314 +1,178 @@
 """
 cph-by-chenkx - 测试编辑窗口
-支持编辑测试输入和设置正确答案
+两个独立标签页:
+  - "test N -edit"   编辑测试输入
+  - "test N -answer" 编辑标准答案 (预期输出)
+save 按钮同时保存两者; 相比旧的 "------ answer ------" 分隔行,
+标准答案不再可能被误删。
 """
 import sublime, sublime_plugin
-import os
-from os.path import dirname
-import sys
-import re
-from subprocess import Popen, PIPE
-import subprocess
-import shlex
 from sublime import Region, Phantom, PhantomSet
-from os import path
-from importlib import import_module
-from time import time
-import threading
 
-from .Modules.ProcessManager import ProcessManager
-from .core.cph_settings import base_name, get_settings, root_dir
+from .core.cph_settings import base_name, root_dir
 from .core.cph_i18n import t as _i18n_t
 from .Highlight.test_interface import get_test_styles
 
 
-# Separator line between the test input section and the correct answer
-# section in the edit view
-_ANSWER_SEPARATOR = '------ answer ------'
-_ANSWER_LINE_RE = re.compile(r'^\s*-{2,}\s*answer\s*-{2,}\s*$')
-
-
 class TestEditCommand(sublime_plugin.TextCommand):
-	BEGIN_TEST_STRING = 'Test %d {'
-	OUT_TEST_STRING = ''
-	END_TEST_STRING = '} rtcode %s'
-	REGION_BEGIN_KEY = 'test_begin_%d'
-	REGION_OUT_KEY = 'test_out_%d'
-	REGION_END_KEY = 'test_end_%d'
-	REGION_POS_PROP = ['', '', sublime.HIDDEN]
-	REGION_ACCEPT_PROP = ['string', 'dot', sublime.HIDDEN]
-	REGION_DECLINE_PROP = ['variable.c++', 'dot', sublime.HIDDEN]
-	REGION_UNKNOWN_PROP = ['text.plain', 'dot', sublime.HIDDEN]
-	REGION_OUT_PROP = ['entity.name.function.opd', 'bookmark', sublime.HIDDEN]
-	REGION_BEGIN_PROP = ['string', 'Packages/cph-by-chenkx/icons/arrow_right.png', \
-				sublime.DRAW_NO_FILL | sublime.DRAW_STIPPLED_UNDERLINE | \
-					sublime.DRAW_NO_OUTLINE | sublime.DRAW_EMPTY_AS_OVERWRITE]
-	REGION_END_PROP = ['variable.c++', 'Packages/cph-by-chenkx/icons/arrow_left.png', sublime.HIDDEN]
-	REGION_LINE_PROP = ['string', 'dot', \
-				sublime.DRAW_NO_FILL | sublime.DRAW_STIPPLED_UNDERLINE | \
-					sublime.DRAW_NO_OUTLINE | sublime.DRAW_EMPTY_AS_OVERWRITE]
 
 	def __init__(self, view):
 		self.view = view
-		self.use_debugger = False
-		self.delta_input = 0
-		self.tester = None
-		self.session = None
-		self.phantoms = PhantomSet(view, 'test-phantoms')
+		self.mode = 'input'
+		self.test_id = None
+		self.source_view_id = None
+		self.phantoms = PhantomSet(view, 'test-edit-phantoms')
 
-	def insert_text(self, edit, text=None):
-		v = self.view
-		if text is None:
-			if not self.tester.proc_run:
-				return None
-			to_shove = v.substr(Region(self.delta_input, v.sel()[0].b))
-			v.insert(edit, v.sel()[0].b, '\n')
-		else:
-			to_shove = text
-			v.insert(edit, v.sel()[0].b, to_shove + '\n')
-		self.delta_input = v.sel()[0].b
-		self.tester.insert(to_shove + '\n')
+	# ---------- sibling view helpers ----------
 
-	def insert_cb(self, edit):
-		v = self.view
-		s = sublime.get_clipboard()
-		lst = s.split('\n')
-		for i in range(len(lst) - 1):
-			self.tester.insert(lst[i] + '\n', call_on_insert=True)
-		self.tester.insert(lst[-1], call_on_insert=True)
+	def _sibling_name(self):
+		if self.mode == 'input':
+			return 'test ' + str(self.test_id) + ' -answer'
+		return 'test ' + str(self.test_id) + ' -edit'
 
-	def open_test_edit(self, i):
-		v = self.view
-		edit_view = v.window().new_file()
-		v.window().set_view_index(edit_view, 1, 1)
+	def _find_sibling(self):
+		window = self.view.window()
+		if window is None:
+			return None
+		name = self._sibling_name()
+		for wv in window.views():
+			if wv.name() == name:
+				return wv
+		return None
 
-	def on_test_action(self, i, event):
-		v = self.view
-		tester = self.tester
-		if event == 'test-click':
-			self.toggle_fold(i)
-		elif event == 'test-edit':
-			self.open_test_edit(i)
+	def _find_source_view(self):
+		window = self.view.window()
+		if window is None or self.source_view_id is None:
+			return None
+		for wv in window.views():
+			if wv.id() == self.source_view_id:
+				return wv
+		return None
 
-	def on_accdec_action(self, i, event):
-		v = self.view
-		tester = self.tester
-		if event == 'click-acc':
-			tester.accept_out(i)
-		elif event == 'click-dec':
-			tester.decline_out(i)
-		self.update_configs()
-		self.memorize_tests()
-
-	def _parse_edit_content(self, content):
-		"""Split the edit view content into (test_input, correct_answer)."""
-		lines = content.split('\n')
-		for idx, line in enumerate(lines):
-			if _ANSWER_LINE_RE.match(line):
-				test_input = '\n'.join(lines[:idx])
-				correct_answer = '\n'.join(lines[idx + 1:])
-				if test_input.strip():
-					test_input = test_input.rstrip('\n') + '\n'
-				return test_input, correct_answer
-		return content, ''
+	# ---------- phantom actions ----------
 
 	def cb_action(self, event):
 		v = self.view
 		if event == 'test-save':
-			test_input, correct_answer = self._parse_edit_content(v.substr(Region(1, v.size())))
-			for sub in v.window().views():
-				if sub.id() == self.source_view_id:
-					sub.run_command('test_manager', {
-						'action': 'set_test_input',
-						'data': test_input,
-						'id': self.test_id
-					})
-					sub.run_command('test_manager', {
-						'action': 'set_correct_answer',
-						'data': correct_answer,
-						'id': self.test_id
-					})
-					v.close()
-					break
+			source = self._find_source_view()
+			if source is None:
+				sublime.status_message('[cph-by-chenkx] source run view is gone')
+				return
+
+			content = v.substr(Region(1, v.size()))
+			test_input, answer = None, None
+			if self.mode == 'input':
+				test_input = content
+			else:
+				answer = content
+
+			sibling = self._find_sibling()
+			if sibling is not None:
+				sibling_content = sibling.substr(Region(1, sibling.size()))
+				if self.mode == 'input':
+					answer = sibling_content
+				else:
+					test_input = sibling_content
+
+			if test_input is None:
+				test_input = ''
+			if test_input.strip():
+				test_input = test_input.rstrip('\n') + '\n'
+			if answer is None:
+				answer = ''
+
+			source.run_command('test_manager', {
+				'action': 'set_test_input',
+				'data': test_input,
+				'id': self.test_id
+			})
+			source.run_command('test_manager', {
+				'action': 'set_correct_answer',
+				'data': answer,
+				'id': self.test_id
+			})
+
+			# close both edit views
+			if sibling is not None:
+				sibling.close()
+			v.close()
 
 		elif event == 'test-delete':
-			for sub in v.window().views():
-				if sub.id() == self.source_view_id:
-					sub.run_command('test_manager', {
-						'action': 'delete_test',
-						'id': self.test_id
-					})
-					v.close()
-					break
+			source = self._find_source_view()
+			sibling = self._find_sibling()
+			if source is not None:
+				source.run_command('test_manager', {
+					'action': 'delete_test',
+					'id': self.test_id
+				})
+			if sibling is not None:
+				sibling.close()
+			v.close()
 
 	def update_config(self):
 		v = self.view
 		styles = get_test_styles(v)
 		content = open(root_dir + '/Highlight/test_edit.html').read()
 
+		hint = _i18n_t('edit_input_hint') if self.mode == 'input' \
+			else _i18n_t('edit_answer_hint')
 		content = content.format(
 			test_id=self.test_id,
 			save_label=_i18n_t('save'),
 			delete_label=_i18n_t('delete'),
-			hint=_i18n_t('edit_answer_hint'),
+			hint=hint,
 		)
 		content = '<style>' + styles + '</style>' + content
 		phantom = Phantom(Region(0), content, sublime.LAYOUT_BLOCK, self.cb_action)
 		self.phantoms.update([phantom])
 
-	def memorize_tests(self):
-		f = open(self.dbg_file + ':tests', 'w')
-		f.write(sublime.encode_value([x.memorize() for x in (self.tester.get_tests())], True))
-		f.close()
+	# ---------- init ----------
 
-	def add_region(self, line, region_prop):
+	def init(self, edit, mode='input', test='', test_id=None,
+			 source_view_id=None, correct_answer=''):
 		v = self.view
-		pos = v.line(line)
-		from random import randint
-		v.add_regions(str(randint(0, 1e9)), [Region(pos.a, pos.a + 1)], *region_prop)
-
-	def toggle_side_bar(self):
-		self.view.window().run_command('toggle_side_bar')
-
-	def change_process_status(self, status):
-		self.view.set_status('process_status', status)
-
-	def clear_all(self):
-		v = self.view
-		v.run_command('test_manager', {'action': 'erase_all'})
-		if self.tester:
-			v.erase_regions('type')
-			for i in range(-1, self.tester.test_iter + 1):
-				v.erase_regions(self.REGION_BEGIN_KEY % i)
-				v.erase_regions(self.REGION_END_KEY % i)
-				v.erase_regions('line_%d' % i)
-				v.erase_regions('test_error_%d' % i)
-
-	def init(self, edit, run_file=None, build_sys=None, clr_tests=False, \
-		test='', source_view_id=None, test_id=None, load_session=False, \
-		correct_answer=''):
-		v = self.view
-
-		self.delta_input = 0
+		self.mode = mode if mode in ('input', 'answer') else 'input'
 		self.test_id = test_id
 		self.source_view_id = source_view_id
 
 		v.set_scratch(True)
-		v.set_name('test ' + str(test_id) + ' -edit')
+		suffix = ' -edit' if self.mode == 'input' else ' -answer'
+		v.set_name('test ' + str(test_id) + suffix)
 		v.run_command('toggle_setting', {'setting': 'line_numbers'})
 		v.run_command('set_setting', {'setting': 'fold_buttons', 'value': False})
 		v.settings().set('edit_mode', True)
-		v.set_syntax_file('Packages/%s/TestSyntax.tmLanguage' % base_name)
-		# Two sections: test input, then the correct answer below the
-		# separator line
-		initial_content = '\n' + test.rstrip('\n') + '\n' + _ANSWER_SEPARATOR + '\n'
-		if correct_answer and correct_answer.strip():
-			initial_content += correct_answer
+		v.set_syntax_file('Packages/%s/TestSyntax.sublime-syntax' % base_name)
+		if self.mode == 'input':
+			initial_content = '\n' + test.rstrip('\n') + '\n'
+		else:
+			initial_content = '\n' + (correct_answer or '')
 		v.insert(edit, 0, initial_content)
 		self.update_config()
-
-	def get_style_test_status(self, nth):
-		check = self.tester.check_test(nth)
-		if check:
-			return self.REGION_ACCEPT_PROP
-		elif check is False:
-			return self.REGION_DECLINE_PROP
-		return self.REGION_UNKNOWN_PROP
 
 	def sync_read_only(self):
 		view = self.view
 		if view.settings().get('edit_mode'):
 			view.set_read_only(False)
-			return
 
-	def get_begin_region(self, id):
+	def run(self, edit, action=None, mode='input', test='', test_id=None,
+			source_view_id=None, data=None, region=None, text=None):
 		v = self.view
-		return v.get_regions(self.REGION_BEGIN_KEY % id)
-
-	def run(self, edit, action=None, run_file=None, build_sys=None, text=None, clr_tests=False, \
-			test='', source_view_id=None, var_name=None, test_id=None, pos=None, \
-			load_session=False, region=None, frame_id=None, data=None):
-		v = self.view
-		pt = v.sel()[0].begin()
-		scope_name = (v.scope_name(pt).rstrip())
-
 		v.set_read_only(False)
 
-		if action == 'insert_line':
-			self.insert_text(edit)
-
-		elif action == 'insert_cb':
-			self.insert_cb(edit)
-
-		elif action == 'insert_opd_input':
-			v.insert(edit, self.delta_input, text)
-			self.delta_input += len(text)
-
-		elif action == 'insert_opd_out':
-			self.delta_input += len(text)
-			v.insert(edit, self.view.size(), text)
+		if action == 'init':
+			correct_answer = data if data else ''
+			self.init(edit, mode=mode, test=test, test_id=test_id,
+					  source_view_id=source_view_id, correct_answer=correct_answer)
 
 		elif action == 'replace':
-			v.replace(edit, Region(region[0], region[1]), text)
-
-		elif action == 'erase':
-			v.erase(edit, Region(region[0], region[1]))
-
-		elif action == 'apply_edit_changes':
-			self.apply_edit_changes()
-
-		elif action == 'init':
-			# 'data' carries the current correct answer of the test
-			correct_answer = data if data else ''
-			self.init(edit, run_file=run_file, build_sys=build_sys, clr_tests=clr_tests, \
-				test=test, source_view_id=source_view_id, test_id=test_id, \
-				load_session=load_session, correct_answer=correct_answer)
-
-		elif action == 'redirect_var_value':
-			self.redirect_var_value(var_name, pos=pos)
-
-		elif action == 'close':
-			try:
-				self.process_manager.terminate()
-			except:
-				print('[cph-by-chenkx] process terminating error')
-
-		elif action == 'new_test':
-			self.new_test(edit)
-
-		elif action == 'delete_tests':
-			self.delete_tests(edit)
-
-		elif action == 'accept_test':
-			self.set_tests_status()
-
-		elif action == 'decline_test':
-			self.set_tests_status(accept=False)
-
-		elif action == 'erase_all':
-			v.replace(edit, Region(0, v.size()), '\n')
-
-		elif action == 'kill_proc':
-			self.tester.terminate()
+			v.replace(edit, Region(region[0], region[1]), text or '')
 
 		elif action == 'sync_read_only':
 			self.sync_read_only()
 
-		elif action == 'toggle_using_debugger':
-			self.use_debugger = not self.use_debugger
-			if (self.use_debugger):
-				sublime.status_message('debugger enabled')
-			else:
-				sublime.status_message('debugger disabled')
-
 		elif action == 'set_cursor_to_end':
 			v.sel().clear()
 			v.sel().add(Region(v.size(), v.size()))
-
-		self.sync_read_only()
-
-	def isEnabled(view, args):
-		pass
 
 
 class EditModifyListener(sublime_plugin.EventListener):

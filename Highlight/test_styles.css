@@ -87,6 +87,7 @@ a {
 .verdict-PE { background-color: color(var(--pinkish) alpha(0.3)); color: var(--pinkish); }
 .verdict-CE { background-color: color(var(--yellowish) alpha(0.5)); color: var(--yellowish); }
 .verdict-UKE { background-color: color(var(--foreground) alpha(0.2)); color: var(--foreground); }
+.verdict-SK { background-color: color(var(--foreground) alpha(0.2)); color: color(var(--foreground) alpha(0.8)); }
 .verdict-WT { background-color: color(var(--bluish) alpha(0.25)); color: var(--bluish); }
 .verdict-CP { background-color: color(var(--bluish) alpha(0.25)); color: var(--bluish); }
 .verdict-JG { background-color: color(var(--purplish) alpha(0.25)); color: var(--purplish); }
@@ -125,5 +126,10 @@ a {
 	font-family: monospace;
 	background-color: color(var(--background) alpha(0.4));
 	padding: 2px 4px;
+}
+
+.edit-hint {
+	color: color(var(--foreground) alpha(0.6));
+	padding: 1px 2px;
 }
 
