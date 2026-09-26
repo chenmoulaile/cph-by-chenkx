@@ -23,6 +23,70 @@ from .core.cph_verdict import get_verdict, get_verdict_by_code, get_verdict_by_n
 from .core.cph_i18n import t, set_lang, get_lang, LANG_ZH, LANG_EN
 
 
+def _count_text_units(s):
+	"""Count ASCII vs wide (CJK / fullwidth) characters of a string."""
+	ascii_n = 0
+	wide_n = 0
+	for ch in s:
+		if ord(ch) > 0x2E7F:
+			wide_n += 1
+		else:
+			ascii_n += 1
+	return ascii_n, wide_n
+
+
+def estimate_card_width_px(view, with_memory=False):
+	"""
+	Rough estimate of the rendered width (device px) of the widest row of a
+	test config card, so the run panel can be widened until cards fit on a
+	single line. minihtml phantoms inherit the view font, so the view's
+	em_width is the base unit; the monospace assumption overestimates a
+	little for proportional fonts, which is the safe direction here.
+	"""
+	try:
+		em = view.em_width()
+	except Exception:
+		em = 0
+	if not em or em <= 0:
+		return 0
+	try:
+		scale = sublime.scale_factor()
+	except Exception:
+		scale = 1.0
+	font_pt = view.settings().get('font_size')
+	if not font_pt:
+		font_pt = sublime.load_settings('Preferences.sublime-settings').get('font_size', 10)
+	font_px = font_pt * 4.0 / 3.0
+
+	# Visible text of each segment of the widest card row, worst case:
+	# 2-digit test id, 6-digit runtime, optional memory segment. Localized
+	# labels are counted as-is so zh/en both work.
+	segments = (
+		' ' + t('test_label') + ' 88 ',
+		' ' + t('edit') + ' ',
+		' ' + t('run') + ' ',
+		' ' + t('detail') + ' ',
+		' ' + t('time') + ': 9999ms ',
+	)
+	if with_memory:
+		segments += (' ' + t('memory') + ': 888.88 MB ',)
+
+	ascii_n = 0
+	wide_n = 0
+	for seg in segments:
+		a, w = _count_text_units(seg)
+		ascii_n += a
+		wide_n += w
+	ascii_n += 6  # single space between the inline <a> buttons
+
+	width = ascii_n * em + wide_n * font_px * 1.05 * scale
+	# verdict badge: 10px monospace bold, up to 3 chars + padding + margin
+	width += (3 * 10 * 0.65 + 3 + 2) * scale
+	# 1px padding around each of the ~6 buttons + block spacing (CSS px)
+	width += (6 * 2 + 8) * scale
+	return width * 1.08
+
+
 class TestManagerCommand(sublime_plugin.TextCommand):
 	BEGIN_TEST_STRING = 'Test %d {'
 	OUT_TEST_STRING = ''
@@ -1067,6 +1131,77 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 
 			for i in range(len(configs), len(self.test_phantoms)):
 				self.test_phantoms[i].update([])
+
+		if not hide_phantoms:
+			# Delayed so the layout/viewport settles before measuring
+			sublime.set_timeout(self.auto_fit_panel_width, 150)
+
+	def auto_fit_panel_width(self):
+		"""
+		Widen the run panel group until the widest test card fits on a
+		single line (buttons no longer stack / wrap), capped at
+		'max_panel_width_ratio' of the window layout (default: 1/2).
+		Only ever widens the panel, never shrinks it, and only touches the
+		standard two-group layout.
+		"""
+		v = self.view
+		w = v.window()
+		if w is None or v.settings().get('hide_phantoms'):
+			return
+		settings = get_settings()
+		if not settings.get('auto_fit_panel_width', True):
+			return
+		try:
+			max_ratio = float(settings.get('max_panel_width_ratio', 0.5))
+		except (TypeError, ValueError):
+			max_ratio = 0.5
+		max_ratio = min(max(max_ratio, 0.2), 0.9)
+
+		with_memory = False
+		tester = self.tester
+		if tester is not None and getattr(tester, 'tests', None):
+			with_memory = any(
+				x.memory != '-' and x.memory is not None for x in tester.tests)
+
+		needed = estimate_card_width_px(v, with_memory)
+		if needed <= 0:
+			return
+
+		layout = w.get_layout()
+		cols = layout.get('cols') or []
+		cells = layout.get('cells')
+		if len(cols) != 3 or not cells:
+			return  # only adjust the standard two-group layout
+		panel_frac = 1.0 - cols[1]
+		if panel_frac >= max_ratio - 1e-4:
+			return  # panel already at the configured maximum
+		try:
+			viewport_px = v.viewport_extent()[0]
+		except Exception:
+			return
+		if viewport_px <= 0:
+			return
+		try:
+			em = v.em_width()
+		except Exception:
+			em = 0
+		# Allowance for gutter + phantom margins so we err on the wide side
+		if viewport_px - 4 * em >= needed:
+			return  # cards already fit on one line
+
+		layout_px = viewport_px / max(panel_frac, 0.05)
+		target_frac = min(max_ratio, needed / layout_px)
+		target_col1 = 1.0 - target_frac
+		if target_col1 >= cols[1] - 1e-3:
+			return  # change too small or would only narrow - never shrink
+		try:
+			w.set_layout({
+				'cols': [cols[0], target_col1, cols[2]],
+				'rows': layout.get('rows', [0, 1]),
+				'cells': cells,
+			})
+		except Exception:
+			pass
 
 
 	def new_test(self, edit):

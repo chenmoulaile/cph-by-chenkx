@@ -63,6 +63,25 @@ cph-by-chenkx 是基于 [FastOlympicCoding](https://github.com/Jatana/FastOlympi
 - **右键菜单**：`Switch language (中/EN)`
 - **快捷方式**：在 `cph-by-chenkx.sublime-settings` 中设置 `"language": "en"` 或 `"language": "zh"`
 
+### 6. 测试面板自适应宽度
+
+右侧运行面板默认只占窗口的 32%，窗口较窄或字体较大时，测试卡片的按钮
+（`edit` / `run` / `detail` / `time` ...）会因宽度不够而换行堆叠。
+
+插件会在每次刷新测试卡片后自动加宽右侧面板，直到最宽的卡片能在一行内
+放下为止，并且：
+
+- **只在需要时加宽**：卡片放得下就保持原样，从不自动收窄
+- **上限为半个窗口**：最多加宽到窗口布局的 50%（可配置）
+- 可通过 `cph-by-chenkx.sublime-settings` 关闭或调整上限：
+
+```json
+{
+	"auto_fit_panel_width": true,
+	"max_panel_width_ratio": 0.5
+}
+```
+
 ## 安装
 
 1. 克隆或下载本仓库

@@ -66,6 +66,13 @@
 	// 打开测评面板时是否自动隐藏侧边栏
 	"close_sidebar": true,
 
+	// ================= 测试卡片面板自适应宽度 =================
+	// 自动加宽右侧运行面板, 直到测试卡片 (AC test 1 / edit / run / detail /
+	// time ...) 不会因面板太窄而换行堆叠; 只在需要时加宽, 从不自动收窄。
+	"auto_fit_panel_width": true,
+	// 面板最大宽度占窗口布局的比例, 0.5 表示最多加宽到半个窗口
+	"max_panel_width_ratio": 0.5,
+
 	// 是否在答案比较时忽略标准错误 (cerr / debug 输出)。
 	// true: stderr 单独捕获，不参与答案比较（推荐，调试输出不再导致 WA）；
 	// false: stderr 混入 stdout 一起比较（旧行为）。
