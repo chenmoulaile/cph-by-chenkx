@@ -169,7 +169,15 @@ class ProcessManager(object):
 
 	def run_file(self, args=[]):
 		if self.is_run:
-			raise AssertionError('cant run process because is already running')
+			# Recover from a stale flag instead of crashing: if the old
+			# process already exited (finished, killed or TLE-terminated)
+			# the 'is_run' marker is meaningless and must not block the
+			# next run. Only a genuinely live process refuses to run.
+			proc = getattr(self, 'process', None)
+			if proc is not None and proc.poll() is not None:
+				self.is_run = False
+			else:
+				raise AssertionError('cant run process because is already running')
 		cmd = self.get_run_cmd(' '.join(args))
 
 		self.is_run = True
@@ -236,3 +244,7 @@ class ProcessManager(object):
 			os.killpg(os.getpgid(self.process.pid), signal.SIGTERM)
 		else:
 			self.process.kill()
+		# The process is being killed: clear the running marker right here
+		# so a follow-up run_file() never trips over the stale flag even
+		# if the listener thread's __on_stop has not fired yet.
+		self.is_run = False

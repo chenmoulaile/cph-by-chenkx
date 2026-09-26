@@ -404,6 +404,14 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 			self.prog_out[self.running_test] = self.prog_out[self.running_test].rstrip()
 			self.proc_run = False
 
+			# CRITICAL: clear the ProcessManager's running marker. Without
+			# this the next insert_test()/run() raises AssertionError
+			# ('cant run process because is already running') and both the
+			# manual 'next test' button and the automatic multi-sample
+			# advance chain die after the first test.
+			if type(self.process_manager) == ProcessManager:
+				self.process_manager.is_run = False
+
 			if self.running_new:
 				self.test_iter += 1
 
@@ -489,8 +497,18 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 			prog_out = self.prog_out
 
 			if self.proc_run:
-				sublime.status_message(t('process_already_running'))
-				return
+				# Recover from a stale proc_run whose listener thread died
+				# without calling __on_stop: if the process has really
+				# exited, proceed instead of blocking 'next test' forever.
+				pm = self.process_manager
+				stale = (type(pm) == ProcessManager and pm.is_stopped() is not None)
+				if stale:
+					self.proc_run = False
+					if type(pm) == ProcessManager:
+						pm.is_run = False
+				else:
+					sublime.status_message(t('process_already_running'))
+					return
 
 			if n >= len(tests):
 				tests.append(TestManagerCommand.Test(''))
@@ -863,9 +881,17 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 			window.set_view_index(detail_view, 1, 1)
 			detail_view.set_name(name)
 			detail_view.set_scratch(True)
-			detail_view.set_syntax_file('Packages/%s/Highlight/DetailSyntax.sublime-syntax' % base_name)
 			detail_view.run_command('set_setting', {'setting': 'word_wrap', 'value': False})
 			detail_view.run_command('set_setting', {'setting': 'fold_buttons', 'value': False})
+		# Apply the syntax on EVERY show, not only at view creation: views
+		# created by an older plugin version (or whose set_syntax_file
+		# silently failed once) would otherwise stay un-highlighted forever.
+		detail_syntax = 'Packages/%s/Highlight/DetailSyntax.sublime-syntax' % base_name
+		detail_view.set_syntax_file(detail_syntax)
+		if detail_view.settings().get('syntax') != detail_syntax:
+			print('[cph-by-chenkx] WARNING: detail syntax %r was not applied '
+				  '(is the file present under Packages/%s/Highlight/?)'
+				  % (detail_syntax, base_name))
 		detail_view.run_command('test_detail_view', {'text': self.build_detail_content(i, test)})
 		window.focus_view(detail_view)
 
@@ -1292,6 +1318,11 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 			# half-dead process state and the whole view appeared frozen.
 			tester = self.tester
 			if tester is not None:
+				# Invalidate the old tester's callbacks BEFORE killing so
+				# the stale __on_stop fired by the dying process is dropped
+				# (it would otherwise re-render regions / schedule a
+				# spurious new_test between here and the rerun).
+				self.tester_epoch = getattr(self, 'tester_epoch', 0) + 1
 				try:
 					tester.terminate()
 				except Exception:
@@ -1302,6 +1333,13 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 					while pm.is_stopped() is None and waited < 2000:
 						sleep(0.02)
 						waited += 20
+				except Exception:
+					pass
+				# Make absolutely sure the next run_file() cannot trip over
+				# the stale running marker of the killed process
+				try:
+					if hasattr(pm, 'is_run'):
+						pm.is_run = False
 				except Exception:
 					pass
 				tester.proc_run = False
@@ -1643,8 +1681,12 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 				memory_limit_mb=memory_limit_mb)
 
 		elif action == 'close':
+			# TestManagerCommand has no .process_manager attribute; the
+			# process lives on the tester. The old code raised AttributeError
+			# here so closing the run view silently left the process alive.
 			try:
-				self.process_manager.terminate()
+				if self.tester is not None:
+					self.tester.terminate()
 			except:
 				print('[cph-by-chenkx] process terminating error')
 
