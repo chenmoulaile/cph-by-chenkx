@@ -883,15 +883,9 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 			detail_view.set_scratch(True)
 			detail_view.run_command('set_setting', {'setting': 'word_wrap', 'value': False})
 			detail_view.run_command('set_setting', {'setting': 'fold_buttons', 'value': False})
-		# Apply the syntax on EVERY show, not only at view creation: views
-		# created by an older plugin version (or whose set_syntax_file
-		# silently failed once) would otherwise stay un-highlighted forever.
-		detail_syntax = 'Packages/%s/Highlight/DetailSyntax.sublime-syntax' % base_name
-		detail_view.set_syntax_file(detail_syntax)
-		if detail_view.settings().get('syntax') != detail_syntax:
-			print('[cph-by-chenkx] WARNING: detail syntax %r was not applied '
-				  '(is the file present under Packages/%s/Highlight/?)'
-				  % (detail_syntax, base_name))
+		# Deliberately NO custom syntax here: the detail stays plain text
+		# (default syntax). Per user feedback the syntax-based coloring was
+		# removed; the content format/layout is unchanged.
 		detail_view.run_command('test_detail_view', {'text': self.build_detail_content(i, test)})
 		window.focus_view(detail_view)
 

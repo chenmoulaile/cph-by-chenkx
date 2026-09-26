@@ -13,9 +13,8 @@ Local push: confirmed by user (t2 completed)
   of overwriting the session.
 - Re-run kills a still-running process before starting a new one (wait loop up
   to 2s, epoch-based stale callback drop); fixes "next test" hang.
-- New `detail_style` setting (`view` default / `phantom` legacy), custom
-  `DetailSyntax.sublime-syntax` highlighting, sample input section in detail,
-  lone `\r` cleanup.
+- New `detail_style` setting (`view` default / `phantom` legacy), sample input
+  section in detail, lone `\r` cleanup.
 - Edit view top bar reordered (save/delete before hint) so buttons stay
   clickable at default sidebar width; stale edit/answer views closed on re-run.
 - Verdict badge CSS: plain inline element so colored background hugs the text.
