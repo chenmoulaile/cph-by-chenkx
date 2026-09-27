@@ -67,8 +67,11 @@
 						"children": [
 							{
 								"caption": "Settings",
-								"command": "open_file",
-								"args": {"file": "${packages}/cph-by-chenkx/cph-by-chenkx.sublime-settings"}
+								"command": "edit_settings",
+								"args": {
+									"base_file": "${packages}/cph-by-chenkx/cph-by-chenkx.sublime-settings",
+									"default": "{\n\t$0\n}\n"
+								}
 							},
 							{
 								"caption": "README（使用说明）",
@@ -82,8 +85,11 @@
 							},
 							{
 								"caption": "Syntax-Specific Settings (TestSyntax)",
-								"command": "open_file",
-								"args": {"file": "${packages}/cph-by-chenkx/TestSyntax.sublime-settings"}
+								"command": "edit_settings",
+								"args": {
+									"base_file": "${packages}/cph-by-chenkx/TestSyntax.sublime-settings",
+									"default": "{\n\t$0\n}\n"
+								}
 							}
 						]
 					}
