@@ -104,9 +104,9 @@ cph-by-chenkx 是基于 [FastOlympicCoding](https://github.com/Jatana/FastOlympi
 | --- | --- |
 | `Ctrl+Alt+B` (Mac: `Cmd+Alt+B`) | 运行测试 |
 | `Ctrl+Alt+I` (Mac: `Cmd+Alt+I`) | 从文件导入测试 |
-| `Ctrl+Alt+S` (Mac: `Cmd+Alt+S`) | 开始对拍 |
-| `Ctrl+Alt+Shift+S` (Mac: `Cmd+Alt+Shift+S`) | 停止对拍 |
-| `Ctrl+K, Ctrl+P` (Mac: `Cmd+K, Cmd+P`) | 同步 OPdebug |
+| `Ctrl+Alt+S` / `Ctrl+Alt+Shift+S` (Mac: `Cmd+Alt+S` / `Cmd+Alt+Shift+S`) | 开始 / 停止对拍 |
+| `Ctrl+Alt+L` / `Ctrl+Alt+Shift+L` (Mac: `Cmd+Alt+L` / `Cmd+Alt+Shift+L`) | 开启 / 停止 Competitive Companion 监听 |
+| `Ctrl+Alt+P` 或 `Ctrl+K, Ctrl+P` (Mac: `Cmd+Alt+P` 或 `Cmd+K, Cmd+P`) | 收缩 / 恢复右侧测试面板 |
 | `Tab` (在 C++ 源码中) | 插入模板 |
 | `Enter` (在 TestSyntax 中) | 插入行 |
 | `Ctrl+Enter` (在 TestSyntax 中) | 新建测试 |

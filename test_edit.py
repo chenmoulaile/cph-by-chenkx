@@ -59,7 +59,7 @@ class TestEditCommand(sublime_plugin.TextCommand):
 				sublime.status_message('[cph-by-chenkx] source run view is gone')
 				return
 
-			content = v.substr(Region(1, v.size()))
+			content = v.substr(Region(0, v.size()))
 			test_input, answer = None, None
 			if self.mode == 'input':
 				test_input = content
@@ -68,7 +68,7 @@ class TestEditCommand(sublime_plugin.TextCommand):
 
 			sibling = self._find_sibling()
 			if sibling is not None:
-				sibling_content = sibling.substr(Region(1, sibling.size()))
+				sibling_content = sibling.substr(Region(0, sibling.size()))
 				if self.mode == 'input':
 					answer = sibling_content
 				else:
@@ -122,8 +122,17 @@ class TestEditCommand(sublime_plugin.TextCommand):
 			delete_label=_i18n_t('delete'),
 			hint=hint,
 		)
-		content = '<style>' + styles + '</style>' + content
-		phantom = Phantom(Region(0), content, sublime.LAYOUT_BLOCK, self.cb_action)
+		self._phantom_html = '<style>' + styles + '</style>' + content
+		self.update_phantom()
+
+	def update_phantom(self):
+		"""Re-anchor the button phantom at position 0. Called after buffer
+		modifications: an insertion exactly at point 0 (typing at the very
+		start of the input) can push the phantom anchor below the first
+		line, so we re-pin it to keep the buttons on top."""
+		if not getattr(self, '_phantom_html', None):
+			return
+		phantom = Phantom(Region(0), self._phantom_html, sublime.LAYOUT_BLOCK, self.cb_action)
 		self.phantoms.update([phantom])
 
 	# ---------- init ----------
@@ -140,12 +149,19 @@ class TestEditCommand(sublime_plugin.TextCommand):
 		v.set_name('test ' + str(test_id) + suffix)
 		v.run_command('toggle_setting', {'setting': 'line_numbers'})
 		v.run_command('set_setting', {'setting': 'fold_buttons', 'value': False})
+		# 'cph_edit_view' marks this tab as a test-edit view (the run view
+		# also uses 'edit_mode' for its own inline-edit phase, so listeners
+		# must be able to tell the two apart).
+		v.settings().set('cph_edit_view', True)
 		v.settings().set('edit_mode', True)
 		v.set_syntax_file('Packages/%s/TestSyntax.sublime-syntax' % base_name)
+		# No leading sentinel '\n' any more: content starts at position 0
+		# so there is no empty first line. Anchor drift of the phantom is
+		# handled by re-pinning it on every buffer modification.
 		if self.mode == 'input':
-			initial_content = '\n' + test.rstrip('\n') + '\n'
+			initial_content = test.rstrip('\n') + '\n'
 		else:
-			initial_content = '\n' + (correct_answer or '')
+			initial_content = (correct_answer or '')
 		v.insert(edit, 0, initial_content)
 		self.update_config()
 
@@ -170,6 +186,9 @@ class TestEditCommand(sublime_plugin.TextCommand):
 		elif action == 'sync_read_only':
 			self.sync_read_only()
 
+		elif action == 'update_phantom':
+			self.update_phantom()
+
 		elif action == 'set_cursor_to_end':
 			v.sel().clear()
 			v.sel().add(Region(v.size(), v.size()))
@@ -177,6 +196,10 @@ class TestEditCommand(sublime_plugin.TextCommand):
 
 class EditModifyListener(sublime_plugin.EventListener):
 	def on_selection_modified(self, view):
+		if view.settings().get('cph_edit_view'):
+			# 'test N -edit' / '-answer' tabs have no position-0 sentinel
+			# any more, so the cursor is allowed everywhere.
+			return
 		if view.settings().get('edit_mode'):
 			if view.size() == 0:
 				view.run_command('test_edit', {
@@ -195,3 +218,9 @@ class EditModifyListener(sublime_plugin.EventListener):
 			if change:
 				view.sel().clear()
 				view.sel().add_all(mod)
+
+	def on_modified(self, view):
+		# Keep the save/delete buttons pinned to the top of the edit tabs:
+		# an insertion at point 0 can push the phantom anchor into the text.
+		if view.settings().get('cph_edit_view'):
+			view.run_command('test_edit', {'action': 'update_phantom'})

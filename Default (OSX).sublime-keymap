@@ -90,5 +90,51 @@
 		"context": [
 			{"operand": "source.TestSyntax", "operator": "equal", "match_all": true, "key": "selector"}
 		]
+	},
+
+	{
+		"keys": ["super+alt+p"],
+		"command": "view_tester",
+		"args": {"action": "sync_opdebugs"}
+	},
+
+	{
+		"keys": ["super+k", "super+p"],
+		"command": "view_tester",
+		"args": {"action": "sync_opdebugs"}
+	},
+
+	{
+		"keys": ["super+alt+i"],
+		"command": "cph_import_tests",
+		"context": [
+			{"operand": "source.TestSyntax", "operator": "not_equal", "match_all": true, "key": "selector"}
+		]
+	},
+
+	{
+		"keys": ["super+alt+s"],
+		"command": "cph_start_stress_test",
+		"context": [
+			{"operand": "source.TestSyntax", "operator": "not_equal", "match_all": true, "key": "selector"}
+		]
+	},
+
+	{
+		"keys": ["super+alt+shift+s"],
+		"command": "cph_stop_stress_test"
+	},
+
+	{
+		"keys": ["super+alt+l"],
+		"command": "cph_companion_listener",
+		"context": [
+			{"operand": "source.TestSyntax", "operator": "not_equal", "match_all": true, "key": "selector"}
+		]
+	},
+
+	{
+		"keys": ["super+alt+shift+l"],
+		"command": "cph_companion_stop_listener"
 	}
 ]
