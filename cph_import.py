@@ -7,7 +7,7 @@ cph-by-chenkx - 从文件导入测试数据
 3. cph-ng 风格 (同目录 in.txt / input.txt + 对应输出)
 4. 文件夹批量导入 (所有 .in/.out 文件对)
 
-注意: 所有命令通过 view_tester 走正常 Run 流程刷新测评视图,
+注意: 所有命令通过 cph_view_tester 走正常 Run 流程刷新测评视图,
 绝不直接对源代码视图调用 make_opd(load_session=True)。
 """
 
@@ -282,7 +282,7 @@ class CphImportTestsCommand(sublime_plugin.TextCommand):
             sublime.status_message(t('imported_tests', count=len(tests),
                                      source=os.path.basename(source_path)))
             # 正常 Run 流程: 复用/创建 -run 视图并从磁盘重新加载样例
-            self.view.run_command('view_tester', {'action': 'make_opd'})
+            self.view.run_command('cph_view_tester', {'action': 'make_opd'})
         else:
             sublime.error_message(t('import_save_failed'))
 
@@ -366,7 +366,7 @@ class CphImportTestsFileCommand(sublime_plugin.TextCommand):
             if save_tests(src_file, merged):
                 sublime.status_message(t('imported_tests', count=len(merged),
                                          source=os.path.basename(file_path)))
-                self.view.run_command('view_tester', {'action': 'make_opd'})
+                self.view.run_command('cph_view_tester', {'action': 'make_opd'})
             else:
                 sublime.error_message(t('import_save_failed'))
         except Exception as e:

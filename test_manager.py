@@ -87,7 +87,7 @@ def estimate_card_width_px(view, with_memory=False):
 	return width * 1.08
 
 
-class TestManagerCommand(sublime_plugin.TextCommand):
+class CphTestManagerCommand(sublime_plugin.TextCommand):
 	BEGIN_TEST_STRING = 'Test %d {'
 	OUT_TEST_STRING = ''
 	END_TEST_STRING = '} rtcode %s'
@@ -118,7 +118,7 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 
 	class Test(object):
 		def __init__(self, prop, start=None, end=None):
-			super(TestManagerCommand.Test, self).__init__()
+			super(CphTestManagerCommand.Test, self).__init__()
 			if type(prop) == str:
 				self.test_string = prop
 				self.correct_answers = set()
@@ -440,7 +440,7 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 		def __init__(self, process_manager, \
 			on_insert, on_out, on_stop, on_status_change, \
 			sync_out=False, tests=[], epoch=None):
-			super(TestManagerCommand.Tester, self).__init__()
+			super(CphTestManagerCommand.Tester, self).__init__()
 			self.process_manager = process_manager
 			self.sync_out = sync_out
 			self.tests = tests
@@ -453,7 +453,7 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 			self.proc_run = False
 			self.prog_out = []
 			self.on_status_change = on_status_change
-			# Epoch of this tester within the owning TestManagerCommand.
+			# Epoch of this tester within the owning CphTestManagerCommand.
 			# Stale listener threads of a killed process may still fire
 			# __on_stop after a new Tester replaced this one; on_stop uses
 			# the epoch to drop those outdated callbacks.
@@ -575,7 +575,7 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 					return
 
 			if n >= len(tests):
-				tests.append(TestManagerCommand.Test(''))
+				tests.append(CphTestManagerCommand.Test(''))
 			if n >= len(prog_out):
 				prog_out.append('')
 			tests[n].set_tie_pos(tie_pos)
@@ -626,7 +626,7 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 		def set_tests(self, tests):
 			self.tests.clear()
 			for test in tests:
-				self.tests.append(TestManagerCommand.Test(test))
+				self.tests.append(CphTestManagerCommand.Test(test))
 
 		def del_tests(self, to_del):
 			dont_add = set(to_del)
@@ -703,7 +703,7 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 		tie_pos = self.get_tie_pos(i)
 
 		if tester.tests[i].fold:
-			v.run_command('test_manager', {
+			v.run_command('cph_test_manager', {
 				'action': 'replace',
 				'region': (tie_pos + 1, tie_pos + 1),
 				'text': text
@@ -722,7 +722,7 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 
 			tester.tests[i].fold = False
 		else:
-			v.run_command('test_manager', {
+			v.run_command('cph_test_manager', {
 				'action': 'replace',
 				'region': (tie_pos + 1, tie_pos + 1 + len(text)),
 				'text': ''
@@ -760,7 +760,7 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 		window.focus_group(1)
 		input_view = window.new_file()
 		window.set_view_index(input_view, 1, 1)
-		input_view.run_command('test_edit', {
+		input_view.run_command('cph_test_edit', {
 			'action': 'init',
 			'mode': 'input',
 			'test_id': i,
@@ -769,7 +769,7 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 		})
 		answer_view = window.new_file()
 		window.set_view_index(answer_view, 1, 1)
-		answer_view.run_command('test_edit', {
+		answer_view.run_command('cph_test_edit', {
 			'action': 'init',
 			'mode': 'answer',
 			'test_id': i,
@@ -817,7 +817,7 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 			if not tester.tests[i].fold:
 				self.toggle_fold(i)
 			tie_pos = self.get_tie_pos(i)
-			v.run_command('test_manager', {
+			v.run_command('cph_test_manager', {
 				'action': 'replace',
 				'region': (tie_pos, tie_pos),
 				'text': '\n\n'
@@ -950,7 +950,7 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 		# Deliberately NO custom syntax here: the detail stays plain text
 		# (default syntax). Per user feedback the syntax-based coloring was
 		# removed; the content format/layout is unchanged.
-		detail_view.run_command('test_detail_view', {'text': self.build_detail_content(i, test)})
+		detail_view.run_command('cph_test_detail_view', {'text': self.build_detail_content(i, test)})
 		window.focus_view(detail_view)
 
 	def show_test_detail_phantom(self, i):
@@ -1062,7 +1062,7 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 		content = '<style>' + styles + '</style>' + content
 
 		def onclick(event, v=v):
-			v.run_command('test_manager', {
+			v.run_command('cph_test_manager', {
 				'action': 'new_test'
 			})
 
@@ -1226,11 +1226,11 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 			save_tests(self.dbg_file, tests_data)
 
 	def on_insert(self, s):
-		self.view.run_command('test_manager', {'action': 'insert_opd_input', 'text': s})
+		self.view.run_command('cph_test_manager', {'action': 'insert_opd_input', 'text': s})
 
 	def on_out(self, s):
 		v = self.view
-		self.view.run_command('test_manager', {'action': 'insert_opd_out', 'text': s})
+		self.view.run_command('cph_test_manager', {'action': 'insert_opd_out', 'text': s})
 		if not self.out_region_set:
 			self.out_region_set = True
 
@@ -1302,13 +1302,13 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 		input_end = v.line(Region(self.delta_input)).end()
 
 		if tester.running_new and self.tester.tests[test_id].is_correct_answer(self.tester.prog_out[test_id]):
-			v.run_command('test_manager', {
+			v.run_command('cph_test_manager', {
 				'action': 'replace',
 				'region': (self.input_start, input_end),
 				'text': ''
 			})
 		else:
-			v.run_command('test_manager', {
+			v.run_command('cph_test_manager', {
 				'action': 'replace',
 				'region': (self.input_start, input_end),
 				'text': _inp + '\n' + _outp
@@ -1325,14 +1325,14 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 			[Region(self.input_start + len(_inp) + 1, self.input_start + len(_inp) + 1)], \
 				*self.REGION_END_PROP)
 
-		v.run_command('test_manager', {'action': 'set_cursor_to_end'})
+		v.run_command('cph_test_manager', {'action': 'set_cursor_to_end'})
 
 		tester = self.tester
 		self.memorize_tests()
 		if str(rtcode) == '0':
 			if tester.running_new and tester.have_pretests():
 				self.update_configs(update_last=True)
-				sublime.set_timeout(lambda: v.run_command('test_manager', {'action': 'new_test'}), 10)
+				sublime.set_timeout(lambda: v.run_command('cph_test_manager', {'action': 'new_test'}), 10)
 			else:
 				sublime.set_timeout(self.update_configs, 100)
 		else:
@@ -1359,7 +1359,7 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 							content = self.build_detail_content(test_id, tester.tests[test_id])
 						except Exception:
 							break
-						wv.run_command('test_detail_view', {'text': content})
+						wv.run_command('cph_test_detail_view', {'text': content})
 						break
 
 	def change_process_status(self, status):
@@ -1386,7 +1386,7 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 
 	def clear_all(self):
 		v = self.view
-		v.run_command('test_manager', {'action': 'erase_all'})
+		v.run_command('cph_test_manager', {'action': 'erase_all'})
 		v.sel().clear()
 		v.sel().add(Region(v.size(), v.size()))
 		self.phantoms.update([])
@@ -1489,7 +1489,7 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 
 			def rerun(kwargs=kwargs):
 				v.run_command(
-					'test_manager',
+					'cph_test_manager',
 					kwargs
 				)
 
@@ -1511,7 +1511,7 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 		self.close_edit_views()
 		if load_session:
 			if self.session is None:
-				v.run_command('test_manager', {'action': 'insert_opd_out', 'text': t('cant_restore_session')})
+				v.run_command('cph_test_manager', {'action': 'insert_opd_out', 'text': t('cant_restore_session')})
 			else:
 				run_file = self.session['run_file']
 				build_sys = self.session['build_sys']
@@ -1592,9 +1592,9 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 					self.on_insert, self.on_out, self.on_stop, self.change_process_status, \
 					tests=tests, sync_out=sync_out, epoch=self.tester_epoch)
 				v.settings().set('edit_mode', False)
-				v.run_command('test_manager', {'action': 'new_test'})
+				v.run_command('cph_test_manager', {'action': 'new_test'})
 			else:
-				v.run_command('test_manager', {'action': 'insert_opd_out', 'text': '\n' + cmp_data[1]})
+				v.run_command('cph_test_manager', {'action': 'insert_opd_out', 'text': '\n' + cmp_data[1]})
 				self.set_compile_bar(cmp_data[1])
 
 		self.set_compile_bar(t('compiling'))
@@ -1810,7 +1810,7 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 				memory_limit_mb=memory_limit_mb)
 
 		elif action == 'close':
-			# TestManagerCommand has no .process_manager attribute; the
+			# CphTestManagerCommand has no .process_manager attribute; the
 			# process lives on the tester. The old code raised AttributeError
 			# here so closing the run view silently left the process alive.
 			try:
@@ -1865,7 +1865,7 @@ class TestManagerCommand(sublime_plugin.TextCommand):
 		pass
 
 
-class TestDetailViewCommand(sublime_plugin.TextCommand):
+class CphTestDetailViewCommand(sublime_plugin.TextCommand):
 	"""Fills the detail view with the (static) detail text of a test.
 	A real view is used instead of a phantom so the text is selectable,
 	comparable and copyable."""
@@ -1883,16 +1883,16 @@ class TestDetailViewCommand(sublime_plugin.TextCommand):
 class ModifiedListener(sublime_plugin.EventListener):
 	def on_selection_modified(self, view):
 		if view.get_status('opd_info') == 'opdebugger-file' and not view.settings().get('edit_mode'):
-			view.run_command('test_manager', { 'action': 'sync_read_only' })
+			view.run_command('cph_test_manager', { 'action': 'sync_read_only' })
 
 
 class CloseListener(sublime_plugin.EventListener):
 	def on_pre_close(self, view):
 		if view.get_status('opd_info') == 'opdebugger-file':
-			view.run_command('test_manager', {'action': 'close'})
+			view.run_command('cph_test_manager', {'action': 'close'})
 
 
-class ViewTesterCommand(sublime_plugin.TextCommand):
+class CphViewTesterCommand(sublime_plugin.TextCommand):
 	ROOT = dirname(__file__)
 	ruler_opd_panel = 0.68
 	have_tied_dbg = False
@@ -1949,7 +1949,7 @@ class ViewTesterCommand(sublime_plugin.TextCommand):
 		dbg_view.set_syntax_file('Packages/%s/TestSyntax.sublime-syntax' % base_name)
 		dbg_view.set_name(os.path.split(v.file_name())[-1] + ' -run')
 		dbg_view.run_command('set_setting', {'setting': 'fold_buttons', 'value': False})
-		dbg_view.run_command('test_manager', {
+		dbg_view.run_command('cph_test_manager', {
 			'action': 'make_opd',
 			'build_sys': file_syntax,
 			'run_file': v.file_name(),
@@ -1980,7 +1980,7 @@ class ViewTesterCommand(sublime_plugin.TextCommand):
 		dbg_view = self.tied_dbg
 
 		if not frames:
-			dbg_view.run_command('test_manager', {
+			dbg_view.run_command('cph_test_manager', {
 				'action': 'redirect_frames'
 			})
 			return
@@ -2007,7 +2007,7 @@ class ViewTesterCommand(sublime_plugin.TextCommand):
 			v.sel().clear()
 			v.sel().add(v.line(pt))
 
-			dbg_view.run_command('test_manager', {
+			dbg_view.run_command('cph_test_manager', {
 				'action': 'select_frame',
 				'frame_id': id
 			})
@@ -2041,7 +2041,7 @@ class ViewTesterCommand(sublime_plugin.TextCommand):
 			v.insert(edit, v.sel()[0].begin(), text)
 		elif action == 'make_opd':
 			if v.settings().get('syntax') == 'Packages/%s/TestSyntax.sublime-syntax' % base_name:
-				v.run_command('test_manager', {
+				v.run_command('cph_test_manager', {
 					'action': 'make_opd',
 					'load_session': True,
 					'use_debugger': use_debugger

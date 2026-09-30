@@ -10,7 +10,7 @@
 
 	{
 		"keys": ["enter"],
-		"command": "test_manager",
+		"command": "cph_test_manager",
 		"args": {"action": "insert_line"},
 		"context": [
 			{"operand": "source.TestSyntax", "operator": "equal", "match_all": true, "key": "selector"},
@@ -20,7 +20,7 @@
 
 	{
 		"keys": ["ctrl+enter"],
-		"command": "test_manager",
+		"command": "cph_test_manager",
 		"args": {"action": "new_test"},
 		"context": [
 			{"operand": "source.TestSyntax", "operator": "equal", "match_all": true, "key": "selector"},
@@ -30,7 +30,7 @@
 
 	{
 		"keys": ["super+v"],
-		"command": "test_manager",
+		"command": "cph_test_manager",
 		"args": {"action": "insert_cb"},
 		"context": [
 			{"operand": "source.TestSyntax", "operator": "equal", "match_all": true, "key": "selector"},
@@ -40,7 +40,7 @@
 
 	{
 		"keys": ["super+x"],
-		"command": "test_manager",
+		"command": "cph_test_manager",
 		"args": {"action": "kill_proc"},
 		"context": [
 			{"operand": "source.TestSyntax", "operator": "equal", "match_all": true, "key": "selector"}
@@ -49,7 +49,7 @@
 
 	{
 		"keys": ["super+d"],
-		"command": "test_manager",
+		"command": "cph_test_manager",
 		"args": {"action": "delete_tests"},
 		"context": [
 			{"operand": "source.TestSyntax", "operator": "equal", "match_all": true, "key": "selector"}
@@ -58,7 +58,7 @@
 
 	{
 		"keys": ["super+shift+up"],
-		"command": "test_manager",
+		"command": "cph_test_manager",
 		"args": {"action": "swap_tests", "dir": -1},
 		"context": [
 			{"operand": "source.TestSyntax", "operator": "equal", "match_all": true, "key": "selector"}
@@ -67,7 +67,7 @@
 
 	{
 		"keys": ["super+shift+down"],
-		"command": "test_manager",
+		"command": "cph_test_manager",
 		"args": {"action": "swap_tests", "dir": 1},
 		"context": [
 			{"operand": "source.TestSyntax", "operator": "equal", "match_all": true, "key": "selector"}
@@ -76,7 +76,7 @@
 
 	{
 		"keys": ["super+alt+b"],
-		"command": "view_tester",
+		"command": "cph_view_tester",
 		"args": {"action": "make_opd"},
 		"context": [
 			{"operand": "source.TestSyntax", "operator": "not_equal", "match_all": true, "key": "selector"}
@@ -85,7 +85,7 @@
 
 	{
 		"keys": ["super+alt+b"],
-		"command": "test_manager",
+		"command": "cph_test_manager",
 		"args": {"action": "make_opd", "load_session": true},
 		"context": [
 			{"operand": "source.TestSyntax", "operator": "equal", "match_all": true, "key": "selector"}
@@ -94,13 +94,13 @@
 
 	{
 		"keys": ["super+alt+p"],
-		"command": "view_tester",
+		"command": "cph_view_tester",
 		"args": {"action": "sync_opdebugs"}
 	},
 
 	{
 		"keys": ["super+k", "super+p"],
-		"command": "view_tester",
+		"command": "cph_view_tester",
 		"args": {"action": "sync_opdebugs"}
 	},
 

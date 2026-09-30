@@ -27,7 +27,7 @@ Local push: confirmed by user (t2 completed)
 - All root-level plugins import only from subpackages (`.core.*`, `.Modules.*`,
   `.Highlight.*`); root `__init__.py` stays comment-only.
 - New commands: `cph_companion_listener` (idempotent, persistent), 
-  `cph_companion_stop_listener`, `test_detail_view`; all shipped key bindings
+  `cph_companion_stop_listener`, `cph_test_detail_view`; all shipped key bindings
   carry `context` arrays.
 - No `package-metadata.json`, no `.no-sublime-package` in the repository.
 

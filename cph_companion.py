@@ -7,7 +7,7 @@ cph-by-chenkx - Competitive Companion 持久监听器
 与旧版 (FastOlympicCodingHook 一次性会话) 的区别:
 - 一次启动后持续监听 (cph-ng 风格), 浏览器扩展可反复点击发送样例
 - 再次执行本命令只会切换目标文件, 不会重复起服务器/产生端口冲突
-- 收到样例后通过 view_tester 正常走 Run 流程, 不会向源代码文件插入任何文字
+- 收到样例后通过 cph_view_tester 正常走 Run 流程, 不会向源代码文件插入任何文字
 """
 
 import sublime
@@ -90,7 +90,7 @@ class _CompanionHandler(BaseHTTPRequestHandler):
                 if target is None:
                     return
                 # 正常 Run 流程: 复用/创建 -run 视图并从磁盘读取刚保存的样例
-                target.run_command('view_tester', {
+                target.run_command('cph_view_tester', {
                     'action': 'make_opd',
                     'time_limit_ms': time_limit_ms,
                     'memory_limit_mb': memory_limit_mb,

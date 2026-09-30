@@ -14,7 +14,7 @@ from .core.cph_i18n import t as _i18n_t
 from .Highlight.test_interface import get_test_styles
 
 
-class TestEditCommand(sublime_plugin.TextCommand):
+class CphTestEditCommand(sublime_plugin.TextCommand):
 
 	def __init__(self, view):
 		self.view = view
@@ -81,12 +81,12 @@ class TestEditCommand(sublime_plugin.TextCommand):
 			if answer is None:
 				answer = ''
 
-			source.run_command('test_manager', {
+			source.run_command('cph_test_manager', {
 				'action': 'set_test_input',
 				'data': test_input,
 				'id': self.test_id
 			})
-			source.run_command('test_manager', {
+			source.run_command('cph_test_manager', {
 				'action': 'set_correct_answer',
 				'data': answer,
 				'id': self.test_id
@@ -101,7 +101,7 @@ class TestEditCommand(sublime_plugin.TextCommand):
 			source = self._find_source_view()
 			sibling = self._find_sibling()
 			if source is not None:
-				source.run_command('test_manager', {
+				source.run_command('cph_test_manager', {
 					'action': 'delete_test',
 					'id': self.test_id
 				})
@@ -202,7 +202,7 @@ class EditModifyListener(sublime_plugin.EventListener):
 			return
 		if view.settings().get('edit_mode'):
 			if view.size() == 0:
-				view.run_command('test_edit', {
+				view.run_command('cph_test_edit', {
 					'action': 'replace',
 					'region': [0, view.size()],
 					'text': '\n'
@@ -223,4 +223,4 @@ class EditModifyListener(sublime_plugin.EventListener):
 		# Keep the save/delete buttons pinned to the top of the edit tabs:
 		# an insertion at point 0 can push the phantom anchor into the text.
 		if view.settings().get('cph_edit_view'):
-			view.run_command('test_edit', {'action': 'update_phantom'})
+			view.run_command('cph_test_edit', {'action': 'update_phantom'})
