@@ -302,6 +302,48 @@ def main():
           pm_mod._decode_output('中文'.encode('utf-8')) == '中文')
     check('garbage bytes do not raise',
           isinstance(pm_mod._decode_output(b'\xff\xfe\x00abc'), str))
+    check('decoded output drops CR',
+          pm_mod._decode_output(b'1\r\n2\r\n') == '1\n2\n',
+          repr(pm_mod._decode_output(b'1\r\n2\r\n')))
+
+    # Windows programs emit CRLF; a raw CR renders as '<0x0d>' in the panel
+    pm_obj = pm_mod.ProcessManager.__new__(pm_mod.ProcessManager)
+    pm_obj._pending_cr = False
+    norm = pm_obj._normalize_newlines
+    check('CRLF becomes LF', norm('a\r\nb') == 'a\nb', repr(norm('a\r\nb')))
+    check('lone CR becomes LF', norm('a\rb') == 'a\nb', repr(norm('a\rb')))
+    check('plain LF untouched', norm('a\nb') == 'a\nb', repr(norm('a\nb')))
+
+    pm_obj._pending_cr = False
+    split = norm('a\r') + norm('\nb')
+    check('CRLF split across two chunks keeps exactly one newline',
+          split == 'a\nb', repr(split))
+
+    pm_obj._pending_cr = False
+    split2 = norm('a\r') + norm('b')
+    check('lone CR split across chunks becomes one newline',
+          split2 == 'a\nb', repr(split2))
+
+    pm_obj._pending_cr = False
+    at_eof = norm('x\r') + norm('', final=True)
+    check('trailing CR at EOF is flushed', at_eof == 'x\n', repr(at_eof))
+
+    # byte-at-a-time (sync) mode must behave the same
+    pm_obj._pending_cr = False
+    pm_obj._out_decoder = None
+    bytewise = ''
+    for ch in 'a\r\nb\r\n':
+        bytewise += norm(ch)
+    check('byte-at-a-time CRLF handling', bytewise == 'a\nb\n', repr(bytewise))
+
+    print('== stored test data: no stray CR ==')
+    crlf_test = tm.CphTestManagerCommand.Test(
+        {'test': '1\r\n2\r\n', 'correct_answers': ['3\r\n4\r\n']})
+    check('test input CR normalized',
+          crlf_test.test_string == '1\n2\n', repr(crlf_test.test_string))
+    check('stored answer CR normalized',
+          list(crlf_test.correct_answers) == ['3\n4\n'],
+          repr(crlf_test.correct_answers))
 
     # the exact regression: Popen must not receive 3.6+ only keywords
     import inspect

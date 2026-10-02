@@ -13,7 +13,7 @@ import codecs
 import locale
 import shlex
 
-from .memprobe import MemorySampler, bytes_to_mb
+from .memprobe import MemorySampler, bytes_to_mb, sample_memory_bytes
 
 
 def _hidden_startupinfo():
@@ -49,18 +49,24 @@ def _decode_output(data, errors='replace'):
 	"""Decode subprocess text: UTF-8 first, then the locale encoding.
 
 	Chinese Windows reports cp936, so g++'s localized diagnostics used to
-	come out as garbage when only UTF-8 was attempted.
+	come out as garbage when only UTF-8 was attempted. Newlines are also
+	normalized: a raw CR renders as '<0x0d>' inside the test panel.
 	"""
 	if data is None:
 		return ''
-	if isinstance(data, str):
-		return data
-	for enc in ('utf-8', locale.getpreferredencoding(False)):
-		try:
-			return data.decode(enc)
-		except (UnicodeDecodeError, LookupError, TypeError):
-			continue
-	return data.decode('utf-8', errors)
+	if not isinstance(data, str):
+		text = None
+		for enc in ('utf-8', locale.getpreferredencoding(False)):
+			try:
+				text = data.decode(enc)
+				break
+			except (UnicodeDecodeError, LookupError, TypeError):
+				continue
+		if text is None:
+			text = data.decode('utf-8', errors)
+	else:
+		text = data
+	return text.replace('\r\n', '\n').replace('\r', '\n')
 
 
 class ProcessManager(object):
@@ -108,6 +114,9 @@ class ProcessManager(object):
 		# Incremental UTF-8 decoder for the binary stdout pipe (recreated on
 		# every run in run_file()).
 		self._out_decoder = codecs.getincrementaldecoder('utf-8')('replace')
+		# Set while a CR is waiting for the next chunk, so a CRLF split
+		# across two reads is still translated into a single newline.
+		self._pending_cr = False
 
 	def set_time_limit(self, time_ms):
 		self.time_limit_override = time_ms
@@ -124,9 +133,7 @@ class ProcessManager(object):
 			try:
 				self.stderr_file.seek(0)
 				data = self.stderr_file.read()
-				if isinstance(data, bytes):
-					return data.decode('utf-8', 'ignore')
-				return data
+				return _decode_output(data)
 			except Exception:
 				return ''
 		return ''
@@ -336,6 +343,7 @@ class ProcessManager(object):
 		# encoding (cp936 on Chinese Windows), which corrupted non-ASCII test
 		# data and program output.
 		self._out_decoder = codecs.getincrementaldecoder('utf-8')('replace')
+		self._pending_cr = False
 
 		self.process = subprocess.Popen(
 			cmd,
@@ -350,12 +358,17 @@ class ProcessManager(object):
 			creationflags=creationflags
 		)
 
-		# Start sampling peak memory while the process is alive: /proc/<pid>
-		# and the Windows handle both disappear once it exits.
+		# Sample peak memory while the process is alive: /proc/<pid> and the
+		# Windows handle both disappear once it exits. One synchronous sample
+		# first, because a program that finishes in a few milliseconds could
+		# otherwise exit before the polling thread ever looks at it.
 		self.peak_memory_mb = None
 		try:
 			self.pid = self.process.pid
+			first = sample_memory_bytes(self.pid)
 			self._mem_sampler = MemorySampler(self.pid)
+			if first:
+				self._mem_sampler.peak = max(self._mem_sampler.peak, first)
 			self._mem_sampler.start()
 		except Exception:
 			self._mem_sampler = None
@@ -397,8 +410,28 @@ class ProcessManager(object):
 			return 0
 		return proc.poll()
 
+	def _normalize_newlines(self, text, final=False):
+		"""Translate CRLF / lone CR into LF, like universal_newlines did.
+
+		The binary pipe kept the program's CR, and Sublime renders a raw CR
+		as '<0x0d>' on every line of the test panel.
+
+		A trailing CR is emitted as a newline immediately and remembered, so
+		a CRLF split across two reads still produces exactly one newline.
+		"""
+		if self._pending_cr:
+			self._pending_cr = False
+			if text.startswith('\n'):
+				# the LF half of a CRLF pair that spanned two chunks; the
+				# newline itself was already emitted with the CR
+				text = text[1:]
+		if not final and text.endswith('\r'):
+			self._pending_cr = True
+			text = text[:-1] + '\n'
+		return text.replace('\r\n', '\n').replace('\r', '\n')
+
 	def read(self, bfsize=None):
-		"""Read raw bytes and decode incrementally.
+		"""Read raw bytes, decode incrementally and normalize newlines.
 
 		The incremental decoder matters for the byte-at-a-time sync mode:
 		a multi-byte UTF-8 character split across two reads would otherwise
@@ -414,10 +447,11 @@ class ProcessManager(object):
 		if not data:
 			# EOF: flush whatever a partial sequence left in the decoder
 			try:
-				return self._out_decoder.decode(b'', final=True)
+				tail = self._out_decoder.decode(b'', final=True)
 			except Exception:
-				return ''
-		return self._out_decoder.decode(data)
+				tail = ''
+			return self._normalize_newlines(tail, final=True)
+		return self._normalize_newlines(self._out_decoder.decode(data))
 
 	def terminate(self):
 		self.terminated = True

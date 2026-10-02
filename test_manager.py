@@ -102,6 +102,17 @@ def remember_compile(process_manager):
 	}
 
 
+def _clean_newlines(s):
+	"""Normalize CRLF / lone CR in stored test data.
+
+	Test files written on Windows (or pasted from a Windows editor) carried
+	\r inside their strings, which renders as '<0x0d>' in the panel.
+	"""
+	if not isinstance(s, str):
+		return s
+	return s.replace('\r\n', '\n').replace('\r', '\n')
+
+
 def _count_text_units(s):
 	"""Count ASCII vs wide (CJK / fullwidth) characters of a string."""
 	ascii_n = 0
@@ -194,13 +205,15 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 		def __init__(self, prop, start=None, end=None):
 			super(CphTestManagerCommand.Test, self).__init__()
 			if type(prop) == str:
-				self.test_string = prop
+				self.test_string = _clean_newlines(prop)
 				self.correct_answers = set()
 				self.uncorrect_answers = set()
 			else:
-				self.test_string = prop['test']
-				self.correct_answers = set(prop.get('correct_answers', ()))
-				self.uncorrect_answers = set(prop.get('uncorrect_answers', ()))
+				self.test_string = _clean_newlines(prop['test'])
+				self.correct_answers = set(_clean_newlines(x)
+										   for x in prop.get('correct_answers', ()))
+				self.uncorrect_answers = set(_clean_newlines(x)
+											 for x in prop.get('uncorrect_answers', ()))
 
 			self.start = start
 			self.fold = True
@@ -221,9 +234,9 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 			if type(prop) == dict:
 				self.runtime = prop.get('runtime', '-')
 				self.memory = prop.get('memory', '-')
-				self.stdout = prop.get('stdout', '')
-				self.stderr = prop.get('stderr', '')
-				self.expected_output = prop.get('expected_output', '')
+				self.stdout = _clean_newlines(prop.get('stdout', ''))
+				self.stderr = _clean_newlines(prop.get('stderr', ''))
+				self.expected_output = _clean_newlines(prop.get('expected_output', ''))
 				restored = get_verdict_by_name(prop.get('verdict'))
 				if restored:
 					self.verdict = restored

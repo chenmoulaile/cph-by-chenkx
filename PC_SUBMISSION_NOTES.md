@@ -1,8 +1,19 @@
 # cph-by-chenkx — Package Control Submission Notes
 
-Package version: v1.4.2
+Package version: v1.4.4
 Repository: https://github.com/chenmoulaile/cph-by-chenkx
 Channel entry file: `repository/c/cph-by-chenkx.json` (see snippet at the bottom)
+
+## v1.4.4 notes
+
+- Newlines are normalized (CRLF and lone CR to LF) on every text path: program
+  stdout, stderr, compiler diagnostics and stored test data. The binary pipe
+  introduced for Python 3.3 compatibility had dropped universal-newline
+  translation, so Windows CRs were rendered as `<0x0d>` in the run panel.
+  A CRLF split across two reads still yields exactly one newline.
+- Peak memory is sampled synchronously right after `Popen` as well as by the
+  polling thread, so very short runs (tens of milliseconds) still report it.
+- `tests/run_tests.py` grew to 36 checks (newline handling included).
 
 ## v1.4.2 notes
 
