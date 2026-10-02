@@ -17,7 +17,7 @@ from time import time, sleep
 import threading
 
 from .Modules.ProcessManager import ProcessManager
-from .core.cph_settings import base_name, get_settings, root_dir, get_tests_file_path, get_tests_paths, load_all_tests, save_tests, is_run_supported_ext
+from .core.cph_settings import base_name, get_settings, root_dir, get_tests_file_path, get_tests_paths, load_all_tests, save_tests, is_run_supported_ext, get_problem_limits
 from .core.cph_resources import read_resource
 from .Highlight.test_interface import get_test_styles
 from .core.cph_verdict import get_verdict, get_verdict_by_code, get_verdict_by_name, build_line_diff, outputs_equal, VERDICTS
@@ -2153,9 +2153,7 @@ class CphViewTesterCommand(sublime_plugin.TextCommand):
 		# problem so a later manual run does not lose them.
 		if time_limit_ms is None and memory_limit_mb is None:
 			try:
-				limits = sublime.load_settings('cph-by-chenkx.sublime-settings') \
-					.get('companion_limits') or {}
-				entry = limits.get(v.file_name()) or {}
+				entry = get_problem_limits(v.file_name())
 				time_limit_ms = entry.get('time_limit_ms')
 				memory_limit_mb = entry.get('memory_limit_mb')
 			except Exception:

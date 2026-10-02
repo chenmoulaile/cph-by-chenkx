@@ -1,3 +1,37 @@
+# v1.4.1 更新内容（中文）—— 紧急修复
+
+## 修复：Sublime 插件宿主是 Python 3.3，上一版用到了 3.6+ 的参数
+
+- **症状**：编译成功后程序无法启动，控制台抛
+  `TypeError: __init__() got an unexpected keyword argument 'errors'`，
+  并且之后**一直卡在编译**（无法恢复，必须重启 Sublime）
+- **原因**：v1.4.0 为了修正编码问题给 `subprocess.Popen` 加了
+  `encoding='utf-8', errors='replace'`，而这两个参数是 Python 3.6/3.7 才有的；
+  Sublime 的插件宿主是 Python 3.3（日志里的 `reloading python 3.3 plugin`）。
+  更糟的是 `Popen` 抛异常时 `is_run` 已被置为 True，导致后续所有运行都被判为
+  "进程已在运行"而被拒绝
+- **修复**：改为**二进制管道 + 增量 UTF-8 解码**
+  （`codecs.getincrementaldecoder('utf-8')('replace')`）。既能正确处理
+  Windows 默认 cp936 带来的中文乱码，又完全不依赖 3.6+ 参数；
+  逐字节同步读取模式下多字节字符被拆包也不会乱码
+- **顺带修复**：`cph_stress.py` 用了 `subprocess.run(..., text=True)`
+  （3.5+/3.7+ API），意味着**对拍功能在 Python 3.3 下一直是坏的**，
+  现改为 `Popen` + `communicate`
+- **自愈加固**：`Popen` 失败或从未启动时，`is_run`、`proc_run`、`is_stopped()`、
+  `terminate()`、`insert()` 都不再抛异常或永久阻塞，异常后可以直接重试，
+  不需要重启编辑器
+
+## 开发验证
+
+- 新增 `.workbuddy/harness_process.py`：不依赖 Sublime 即可对进程管理做回归
+  验证（UTF-8 往返、逐字节解码、二次运行、未运行实例的安全性、内存采样）
+- 新增 Python 3.3 兼容性 AST 扫描：确认代码中没有 f-string、`subprocess.run`、
+  `Popen(text=/encoding=/errors=)`、walrus、3.5+ 标准库 API 等
+- 实测结果：Windows 上峰值内存采样成功（示例进程 41.09 MB），中文输出正确，
+  连续两次运行正常
+
+---
+
 # v1.4.0 更新内容（中文）
 
 本轮针对一份第三方代码审查报告（P0-P5）逐条核实并修复，同时补齐此前规划的功能。

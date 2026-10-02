@@ -72,6 +72,25 @@ def try_load_settings():
 		sublime.status_message('cph-by-chenkx: settings loaded')
 
 
+# Per-problem limits received from Competitive Companion, kept in memory
+# only. They used to be written into the user's settings file from a
+# background HTTP callback, which is not something a plugin should do.
+_problem_limits = {}
+
+
+def set_problem_limits(file_name, time_limit_ms, memory_limit_mb):
+	if not file_name:
+		return
+	_problem_limits[file_name] = {
+		'time_limit_ms': time_limit_ms,
+		'memory_limit_mb': memory_limit_mb,
+	}
+
+
+def get_problem_limits(file_name):
+	return _problem_limits.get(file_name) or {}
+
+
 def get_tests_file_suffix():
 	return get_settings().get('tests_file_suffix', tests_file_suffix_default)
 

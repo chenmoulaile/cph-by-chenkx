@@ -19,7 +19,7 @@ import json
 import threading
 
 from .core.cph_i18n import t
-from .core.cph_settings import load_all_tests, save_tests
+from .core.cph_settings import load_all_tests, save_tests, set_problem_limits
 
 
 # Competitive Companion 官方字段单位: timeLimit = ms, memoryLimit = MB
@@ -67,26 +67,14 @@ def merge_tests(file_name, incoming):
 
 
 def remember_limits(file_name, time_limit_ms, memory_limit_mb):
-    """Persist the problem limits per source file.
+    """Remember the problem limits for this session.
 
     Without this the TL/ML received from the browser only applied to the
-    run it triggered, and a later manual Ctrl+Alt+B lost them again.
+    run it triggered and a later manual Ctrl+Alt+B lost them again.
+    Kept in memory on purpose: writing the user's settings file from a
+    background HTTP callback is not acceptable behaviour for a plugin.
     """
-    if not file_name or (time_limit_ms is None and memory_limit_mb is None):
-        return
-    try:
-        settings = sublime.load_settings('cph-by-chenkx.sublime-settings')
-        limits = settings.get('companion_limits') or {}
-        if not isinstance(limits, dict):
-            limits = {}
-        limits[file_name] = {
-            'time_limit_ms': time_limit_ms,
-            'memory_limit_mb': memory_limit_mb,
-        }
-        settings.set('companion_limits', limits)
-        sublime.save_settings('cph-by-chenkx.sublime-settings')
-    except Exception as e:
-        print('[cph-by-chenkx] failed to persist companion limits: %s' % e)
+    set_problem_limits(file_name, time_limit_ms, memory_limit_mb)
 
 
 class _CompanionHandler(BaseHTTPRequestHandler):

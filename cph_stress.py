@@ -222,19 +222,45 @@ def _compile_program(file, time_limit=30):
             src_dir, base + ('.exe' if sublime.platform() == 'windows' else ''))
 
     try:
-        result = subprocess.run(
-            cmd, cwd=src_dir, shell=True,
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            timeout=time_limit, text=True,
-            startupinfo=_hidden_startupinfo()
-        )
-        if result.returncode != 0:
-            print('[cph-by-chenkx] Compile error in %s:\n%s' % (file, result.stderr))
+        rc, out, err = _popen_capture(cmd, src_dir, shell=True, timeout=time_limit)
+        if rc != 0:
+            print('[cph-by-chenkx] Compile error in %s:\n%s' % (file, err))
             return False, None
         return True, exe_path
     except Exception as e:
         print('[cph-by-chenkx] Compile error: %s' % str(e))
         return False, None
+
+
+def _popen_capture(cmd, cwd, input_text=None, shell=False, timeout=30):
+    """Run a command and capture its output as text.
+
+    Uses Popen instead of subprocess.run: Sublime's plugin host is Python
+    3.3, which has no subprocess.run (3.5+) and no text/encoding arguments
+    (3.6/3.7+). Raises subprocess.TimeoutExpired on timeout.
+    """
+    proc = subprocess.Popen(
+        cmd,
+        cwd=cwd,
+        shell=shell,
+        stdin=subprocess.PIPE if input_text is not None else None,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        startupinfo=_hidden_startupinfo()
+    )
+    data = input_text.encode('utf-8', 'replace') if isinstance(input_text, str) else input_text
+    try:
+        out, err = proc.communicate(input=data, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        try:
+            proc.kill()
+            proc.communicate()
+        except Exception:
+            pass
+        raise
+    return (proc.returncode,
+            (out or b'').decode('utf-8', 'replace'),
+            (err or b'').decode('utf-8', 'replace'))
 
 
 def _program_argv(file):
@@ -246,10 +272,21 @@ def _program_argv(file):
     if not run_cmd:
         return None
     cmd = _format_cmd(run_cmd, file)
+    windows = (sublime.platform() == 'windows')
     try:
-        return shlex.split(cmd, posix=(sublime.platform() != 'windows'))
+        parts = shlex.split(cmd, posix=not windows)
     except Exception:
         return [cmd]
+    if windows:
+        # posix=False keeps the surrounding quotes: strip them, otherwise
+        # the path would be passed to CreateProcess with literal quotes.
+        cleaned = []
+        for p in parts:
+            if len(p) > 1 and p[0] == '"' and p[-1] == '"':
+                p = p[1:-1]
+            cleaned.append(p)
+        parts = cleaned
+    return parts
 
 
 def _run_program(program, input_data, cwd=None, time_limit=2.0):
@@ -260,19 +297,9 @@ def _run_program(program, input_data, cwd=None, time_limit=2.0):
     if cwd is None:
         cwd = os.path.dirname(program if isinstance(program, str) else argv[0])
     try:
-        result = subprocess.run(
-            argv,
-            input=input_data,
-            cwd=cwd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            timeout=time_limit,
-            text=True,
-            encoding='utf-8',
-            errors='replace',
-            startupinfo=_hidden_startupinfo()
-        )
-        return (result.returncode, result.stdout, result.stderr, False)
+        rc, out, err = _popen_capture(argv, cwd, input_text=input_data,
+                                     timeout=time_limit)
+        return (rc, out, err, False)
     except subprocess.TimeoutExpired:
         return (-1, '', '', True)
     except Exception as e:

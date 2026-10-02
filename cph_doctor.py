@@ -14,7 +14,6 @@ cph-by-chenkx - 环境自检 (doctor)
 import os
 import shutil
 import socket
-import subprocess
 
 import sublime
 import sublime_plugin

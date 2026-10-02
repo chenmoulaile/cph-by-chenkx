@@ -9,6 +9,7 @@ import signal
 import sublime
 import tempfile
 import time
+import codecs
 
 from .memprobe import MemorySampler, bytes_to_mb
 
@@ -63,6 +64,10 @@ class ProcessManager(object):
 		self.pid = None
 		self._mem_sampler = None
 		self.peak_memory_mb = None
+
+		# Incremental UTF-8 decoder for the binary stdout pipe (recreated on
+		# every run in run_file()).
+		self._out_decoder = codecs.getincrementaldecoder('utf-8')('replace')
 
 	def set_time_limit(self, time_ms):
 		self.time_limit_override = time_ms
@@ -256,9 +261,10 @@ class ProcessManager(object):
 			# Recover from a stale flag instead of crashing: if the old
 			# process already exited (finished, killed or TLE-terminated)
 			# the 'is_run' marker is meaningless and must not block the
-			# next run. Only a genuinely live process refuses to run.
+			# next run. Same when Popen never even started (e.g. it raised),
+			# which used to poison the plugin until Sublime was restarted.
 			proc = getattr(self, 'process', None)
-			if proc is not None and proc.poll() is not None:
+			if proc is None or proc.poll() is not None:
 				self.is_run = False
 			else:
 				raise AssertionError('cant run process because is already running')
@@ -289,6 +295,13 @@ class ProcessManager(object):
 		else:
 			stderr_target = subprocess.STDOUT
 
+		# Binary pipes + explicit UTF-8 codec below. Sublime's plugin host is
+		# Python 3.3, where Popen has no encoding/errors/text arguments (those
+		# arrived in 3.6/3.7), and the default text mode uses the locale
+		# encoding (cp936 on Chinese Windows), which corrupted non-ASCII test
+		# data and program output.
+		self._out_decoder = codecs.getincrementaldecoder('utf-8')('replace')
+
 		self.process = subprocess.Popen(
 			cmd,
 			shell=use_shell,
@@ -299,11 +312,7 @@ class ProcessManager(object):
 			cwd=os.path.split(self.file)[0],
 			startupinfo=startupinfo,
 			preexec_fn=preexec_fn,
-			creationflags=creationflags,
-			# Explicit UTF-8: the default (locale, e.g. cp936 on Simplified
-			# Chinese Windows) corrupted any non-ASCII test data / output.
-			encoding='utf-8',
-			errors='replace'
+			creationflags=creationflags
 		)
 
 		# Start sampling peak memory while the process is alive: /proc/<pid>
@@ -333,21 +342,58 @@ class ProcessManager(object):
 		return self.peak_memory_mb
 
 	def insert(self, s):
-		if self.process.poll() is None:
-			self.process.stdin.write(s)
-			self.process.stdin.flush()
+		proc = getattr(self, 'process', None)
+		if proc is None or proc.poll() is not None:
+			return
+		if isinstance(s, str):
+			s = s.encode('utf-8', 'replace')
+		proc.stdin.write(s)
+		proc.stdin.flush()
 
 	def communicate(self, s, timeout=None):
-		return self.process.communicate(input=s, timeout=timeout)
+		if isinstance(s, str):
+			s = s.encode('utf-8', 'replace')
+		out, err = self.process.communicate(input=s, timeout=timeout)
+		text = (out or b'').decode('utf-8', 'replace')
+		try:
+			text += self._out_decoder.decode(b'', final=True)
+		except Exception:
+			pass
+		return (text, err)
 
 	def is_stopped(self):
-		return self.process.poll()
+		"""Exit code, or None while still running.
+
+		Returns 0 when no process was ever started: callers treat anything
+		that is not None as 'not running', so a failed Popen cannot leave
+		them waiting forever.
+		"""
+		proc = getattr(self, 'process', None)
+		if proc is None:
+			return 0
+		return proc.poll()
 
 	def read(self, bfsize=None):
-		if bfsize is None:
-			return self.process.stdout.read()
-		else:
-			return self.process.stdout.read(bfsize)
+		"""Read raw bytes and decode incrementally.
+
+		The incremental decoder matters for the byte-at-a-time sync mode:
+		a multi-byte UTF-8 character split across two reads would otherwise
+		come out as mojibake.
+		"""
+		try:
+			if bfsize is None:
+				data = self.process.stdout.read()
+			else:
+				data = self.process.stdout.read(bfsize)
+		except Exception:
+			return ''
+		if not data:
+			# EOF: flush whatever a partial sequence left in the decoder
+			try:
+				return self._out_decoder.decode(b'', final=True)
+			except Exception:
+				return ''
+		return self._out_decoder.decode(data)
 
 	def new_test(self, input_data=None):
 		self.test_counter += 1
@@ -357,7 +403,8 @@ class ProcessManager(object):
 
 	def terminate(self):
 		self.terminated = True
-		pid = getattr(self.process, 'pid', None)
+		proc = getattr(self, 'process', None)
+		pid = getattr(proc, 'pid', None)
 		if pid is None:
 			self.is_run = False
 			return
