@@ -14,6 +14,7 @@ cph-by-chenkx - 环境自检 (doctor)
 import os
 import shutil
 import socket
+import sys
 
 import sublime
 import sublime_plugin
@@ -27,6 +28,22 @@ try:
 except ImportError:  # pragma: no cover
 	def is_run_supported_ext(ext):
 		return False
+
+
+KNOWN_PLACEHOLDERS = {'file', 'source_file', 'source_file_dir', 'file_name',
+                      'args', 'extra_sources', 'include_dirs'}
+
+
+def _unknown_placeholders(cmd):
+    """Placeholder names in a command that this plugin does not provide.
+
+    A typo such as {file_nmae} is silently substituted with '' at run time,
+    which used to leave the user staring at a weird compiler command.
+    """
+    if not cmd:
+        return []
+    names = set(re.findall(r'\{([A-Za-z_][A-Za-z0-9_]*)\}', cmd))
+    return sorted(n for n in names if n not in KNOWN_PLACEHOLDERS)
 
 
 def _first_token(cmd):
@@ -124,6 +141,10 @@ class CphDoctorCommand(sublime_plugin.TextCommand):
 				lines.append('    %s %s: %s' % ('ok  ' if ok else 'FAIL', label, detail))
 				if not ok:
 					lines.append('         -> ' + t('doctor_fix_path', name=_first_token(cmd)))
+				unknown = _unknown_placeholders(cmd)
+				if unknown:
+					lines.append('         -> ' + t('doctor_placeholder_unknown',
+													names=', '.join(unknown)))
 			lines.append('')
 
 		port = settings.get('companion_port', 12345) or 12345
@@ -161,6 +182,32 @@ class CphDoctorCommand(sublime_plugin.TextCommand):
 											  t('doctor_settings')))
 		lines.append('')
 		lines.append(t('doctor_footer'))
+
+		# Copy-pasteable Markdown block: the fastest path from "it is broken"
+		# to a report someone else can act on.
+		lines.append('')
+		lines.append(t('doctor_markdown_hint'))
+		lines.append('')
+		lines.append('```markdown')
+		lines.append('### cph-by-chenkx doctor report')
+		lines.append('')
+		lines.append('- Sublime Text: build %s' % sublime.version())
+		lines.append('- Platform: %s (%s)' % (sublime.platform(), sys.platform))
+		lines.append('- Python: %s' % sys.version.split()[0])
+		lines.append('- companion_port: %s' % port)
+		for entry in run_settings:
+			lines.append('')
+			lines.append('**%s** (`%s`)' % (entry.get('name', '?'),
+											 ', '.join(entry.get('extensions') or [])))
+			for key in ('compile_cmd', 'run_cmd'):
+				cmd = entry.get(key)
+				if cmd:
+					lines.append('- %s: `%s`' % (key, cmd))
+			for key in ('time_limit_ms', 'memory_limit_mb'):
+				if entry.get(key):
+					lines.append('- %s: %s' % (key, entry.get(key)))
+		lines.append('')
+		lines.append('```')
 
 		report = '\n'.join(lines)
 		window = self.view.window()

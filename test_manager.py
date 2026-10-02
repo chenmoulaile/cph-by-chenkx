@@ -102,6 +102,35 @@ def remember_compile(process_manager):
 	}
 
 
+def run_view_status_label(run_file, time_limit_ms, memory_limit_mb):
+	"""Status-bar label for the run panel (language + limits).
+
+	Module level on purpose: it is needed by CphTestManagerCommand (which
+	draws the run view), and as a CphViewTesterCommand method it raised
+	AttributeError right after the view was created - leaving an empty -run
+	tab behind (v1.4.5 regression).
+	"""
+	try:
+		ext = path.splitext(run_file or '')[1][1:]
+		entry = None
+		for x in (get_settings().get('run_settings') or []):
+			if ext in (x.get('extensions') or []):
+				entry = x
+				break
+		if not entry:
+			return ''
+		parts = [entry.get('name', 'run')]
+		tl = time_limit_ms or entry.get('time_limit_ms')
+		ml = memory_limit_mb or entry.get('memory_limit_mb')
+		if tl:
+			parts.append('TL %dms' % int(tl))
+		if ml:
+			parts.append('ML %dMB' % int(ml))
+		return ' · '.join(parts)
+	except Exception:
+		return ''
+
+
 def _clean_newlines(s):
 	"""Normalize CRLF / lone CR in stored test data.
 
@@ -1208,6 +1237,57 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 		highlighting. 'phantom': the original inline minihtml panel."""
 		return get_settings().get('detail_style', 'view')
 
+	def show_test_menu(self):
+		"""Keyboard-only access to the test cards (competitive programmers
+		rarely touch the mouse): pick a test, then pick an action."""
+		tester = self.tester
+		if tester is None or not tester.tests:
+			sublime.status_message(t('no_tests'))
+			return
+		window = self.view.window()
+		if window is None:
+			return
+		items = []
+		for i in range(len(tester.tests)):
+			test = tester.tests[i]
+			name = test.verdict['name'] if test.verdict else '--'
+			items.append(['%s %d   [%s]' % (t('test_label'), i + 1, name)])
+		self._menu_tests = list(range(len(tester.tests)))
+
+		def on_pick(idx):
+			if idx < 0 or idx >= len(tester.tests):
+				return
+			self.show_test_action_menu(idx)
+
+		window.show_quick_panel(items, on_pick)
+
+	def show_test_action_menu(self, i):
+		"""Action list for one test, mirroring its card buttons."""
+		window = self.view.window()
+		if window is None:
+			return
+		tester = self.tester
+		if tester is None or i >= len(tester.tests):
+			return
+		options = [[t('run')], [t('detail')], [t('edit')],
+				   [t('accept')], [t('decline')], [t('delete')]]
+
+		def act(idx):
+			if idx < 0:
+				return
+			event = {0: 'test-run', 1: 'test-detail', 2: 'test-edit'}.get(idx)
+			if event:
+				self.on_test_action(i, event)
+			elif idx == 3:
+				self.on_accdec_action(i, 'click-accept')
+			elif idx == 4:
+				self.on_accdec_action(i, 'click-decline')
+			elif idx == 5:
+				self.view.run_command('cph_test_manager',
+									  {'action': 'delete_test', 'id': i})
+
+		window.show_quick_panel(options, act)
+
 	def show_test_detail(self, i):
 		v = self.view
 		tester = self.tester
@@ -1355,7 +1435,7 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 					stdout=out,
 					expected_output=answer,
 					ignore_error=True,
-					regard_pe_as_ac=False
+					regard_pe_as_ac=bool(get_settings().get('regard_pe_as_ac', False))
 				)
 				test.set_verdict(verdict)
 
@@ -1617,7 +1697,8 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 				stdout=_outp,
 				expected_output=expected_output,
 				ignore_error=True,
-				regard_pe_as_ac=False,
+				# Many OJ treat PE as AC; user selectable (default: strict)
+				regard_pe_as_ac=bool(get_settings().get('regard_pe_as_ac', False)),
 				memory_used_mb=memory_used_mb,
 				float_tolerance=float_tolerance
 			)
@@ -1860,8 +1941,11 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 		# status key still exists but now carries something useful
 		# (language and limits) instead of the FOC-era 'opdebugger-file'.
 		v.settings().set('cph_run_view', True)
-		v.set_status('opd_info', self._run_view_status_label(run_file,
-			time_limit_ms, memory_limit_mb))
+		try:
+			v.set_status('opd_info', run_view_status_label(
+				run_file, time_limit_ms, memory_limit_mb))
+		except Exception as e:
+			print('[cph-by-chenkx] status label failed: %s' % e)
 		self.clear_all()
 		self.close_edit_views()
 		if load_session:
@@ -2235,6 +2319,9 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 		elif action == 'sync_read_only':
 			self.sync_read_only()
 
+		elif action == 'show_test_menu':
+			self.show_test_menu()
+
 		elif action == 'copy_test_part':
 			self.copy_test_part(part=part)
 
@@ -2373,28 +2460,6 @@ class CphViewTesterCommand(sublime_plugin.TextCommand):
 			'run_failed': run_failed,
 			'force_compile': force_compile,
 		})
-
-	def _run_view_status_label(self, run_file, time_limit_ms, memory_limit_mb):
-		"""Short status-bar label for the run panel (language + limits)."""
-		try:
-			ext = path.splitext(run_file or '')[1][1:]
-			entry = None
-			for x in (get_settings().get('run_settings') or []):
-				if ext in (x.get('extensions') or []):
-					entry = x
-					break
-			if not entry:
-				return ''
-			parts = [entry.get('name', 'run')]
-			tl = time_limit_ms or entry.get('time_limit_ms')
-			ml = memory_limit_mb or entry.get('memory_limit_mb')
-			if tl:
-				parts.append('TL %dms' % int(tl))
-			if ml:
-				parts.append('ML %dMB' % int(ml))
-			return ' · '.join(parts)
-		except Exception:
-			return ''
 
 	def is_enabled(self, action=None, **kwargs):
 		"""Run only makes sense on a saved file with a configured language.

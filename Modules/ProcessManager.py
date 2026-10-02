@@ -127,6 +127,10 @@ class ProcessManager(object):
 		self._mem_sampler = None
 		self.peak_memory_mb = None
 
+		self.pgid = None
+		self.stdin_closed = False
+		self.unknown_placeholders = set()
+
 		# Incremental UTF-8 decoder for the binary stdout pipe (recreated on
 		# every run in run_file()).
 		self._out_decoder = codecs.getincrementaldecoder('utf-8')('replace')
@@ -184,7 +188,12 @@ class ProcessManager(object):
 		out = cmd.format_map(values)
 		if values.unknown:
 			# Never abort a run because of a placeholder typo or a command
-			# written for a newer version: substitute '' and say so.
+			# written for a newer version: substitute '' and say so. The set
+			# is kept so doctor and the compile panel can report it too.
+			unknown = getattr(self, 'unknown_placeholders', None)
+			if unknown is None:
+				unknown = self.unknown_placeholders = set()
+			unknown.update(values.unknown)
 			print('[cph-by-chenkx] unknown placeholder(s) in command: %s'
 				  % ', '.join(sorted(values.unknown)))
 		return out
@@ -315,6 +324,11 @@ class ProcessManager(object):
 					except Exception:
 						pass
 					return (1, '[cph-by-chenkx] compile timed out after 30s\n(cmd: %s)' % cmd)
+				unknown = sorted(getattr(self, 'unknown_placeholders', ()) or ())
+				if unknown:
+					# A typo like {file_nmae} silently becomes '' and the user just
+					# sees a weird command; say which name was ignored.
+					compile_result = ('[cph-by-chenkx] ignored unknown placeholder(s): %s\n' % ', '.join(unknown)) + compile_result
 				return (p.returncode, compile_result)
 			except Exception as e:
 				return (1, '[cph-by-chenkx] failed to run compile command: %s\n(cmd: %s)' % (e, cmd))
@@ -374,6 +388,7 @@ class ProcessManager(object):
 		# data and program output.
 		self._out_decoder = codecs.getincrementaldecoder('utf-8')('replace')
 		self._pending_cr = False
+		self.stdin_closed = False
 
 		self.process = subprocess.Popen(
 			cmd,
@@ -430,6 +445,10 @@ class ProcessManager(object):
 	def insert(self, s):
 		proc = getattr(self, 'process', None)
 		if proc is None or proc.poll() is not None:
+			return
+		if getattr(self, 'stdin_closed', False):
+			# The pipe broke earlier in this run; stop retrying (and stop
+			# printing the same status message for every pasted line).
 			return
 		if isinstance(s, str):
 			s = s.encode('utf-8', 'replace')

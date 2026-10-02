@@ -56,3 +56,20 @@ class CphRunForceRecompileCommand(_RunModeMixin, sublime_plugin.TextCommand):
 	"""Run ignoring the compile cache (force a fresh compile)."""
 
 	flags = {'force_compile': True}
+
+
+class CphTestMenuCommand(sublime_plugin.TextCommand):
+	"""Pick a test and run / inspect / edit it without the mouse."""
+
+	def run(self, edit):
+		view = self.view
+		if _is_run_view(view):
+			view.run_command('cph_test_manager', {'action': 'show_test_menu'})
+			return
+		if not view.file_name():
+			sublime.status_message('[cph-by-chenkx] save the file first')
+			return
+		view.run_command('cph_view_tester', {'action': 'make_opd'})
+
+	def is_enabled(self):
+		return _is_run_view(self.view) or bool(self.view.file_name())

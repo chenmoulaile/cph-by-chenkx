@@ -128,8 +128,8 @@ cph-by-chenkx 是基于 [FastOlympicCoding](https://github.com/Jatana/FastOlympi
   它已经不会再用 `RUSAGE_CHILDREN` 那种「所有子进程累计峰值」的错误口径。
 - **`sync_output`（逐字符同步输出）默认关闭**：开启后输出会一个字符一次刷新视图，
   只适合交互式程序；普通题目保持关闭，输出量大时才不会卡。
-- **`PE`（Presentation Error）判定为严格口径**：只有「token 完全相同但空白/换行不同」
-  才算 PE，且默认与 WA 分别显示（没有把 PE 当成 AC）。
+- **`PE`（Presentation Error）判定**：只有「token 完全相同但空白/换行不同」才算 PE。
+  默认与 WA 分别显示；若你的 OJ 把 PE 也算通过，把 `regard_pe_as_ac` 设为 `true` 即可。
 - 判定使用首个测试点的答案文件时，若程序输出超过 `max_output_bytes`（默认 8MB），
   超出部分会被丢弃，输出里会插入一行截断提示。
 
@@ -150,6 +150,7 @@ cph-by-chenkx 是基于 [FastOlympicCoding](https://github.com/Jatana/FastOlympi
 | `Ctrl+Alt+Shift+B` | 跑完全部测试点（不因失败中断） |
 | `Ctrl+Alt+Shift+R` | 强制重新编译后运行（忽略编译缓存） |
 | `Ctrl+Alt+D` (Mac: `Cmd+Alt+D`) | 环境自检（编译器 / 端口 / 路径 / 资源） |
+| `Ctrl+Alt+M` (Mac: `Cmd+Alt+M`) | 键盘选择测试点并运行 / 详情 / 编辑（不用鼠标） |
 | `Enter` (在 TestSyntax 中) | 插入行 |
 | `Ctrl+Enter` (在 TestSyntax 中) | 新建测试 |
 | `Ctrl+V` / `Cmd+V` (在 TestSyntax 中) | 粘贴 |

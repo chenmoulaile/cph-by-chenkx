@@ -13,6 +13,7 @@ import time
 from os import path
 
 from .core.cph_settings import base_name, get_settings, root_dir, load_all_tests, save_tests
+from .core.cph_tests_merge import merge_tests
 from .core.cph_i18n import t
 from .core.cph_verdict import normalize_lines
 from .Highlight.test_interface import get_test_styles
@@ -448,19 +449,10 @@ def _on_stress_failed(round_count, inp, user_out, std_out):
         if get_settings().get('stress_save_counterexample', True):
             user_file = _stress_state.get('user_file')
             if user_file:
-                existing = load_all_tests(user_file) or []
                 answer = std_out.strip()
-                merged = []
-                seen = set()
-                for item in list(existing) + [{
-                        'test': inp,
-                        'correct_answers': [answer] if answer else []}]:
-                    key = (item.get('test', ''),
-                           tuple(sorted(item.get('correct_answers', []))))
-                    if key in seen:
-                        continue
-                    seen.add(key)
-                    merged.append(item)
+                merged, _conflicts = merge_tests(load_all_tests(user_file), [{
+                    'test': inp,
+                    'correct_answers': [answer] if answer else []}])
                 if save_tests(user_file, merged):
                     text += '\n[cph-by-chenkx] ' + \
                         t('stress_counterexample_added', total=len(merged)) + '\n'

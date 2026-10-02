@@ -15,6 +15,7 @@ import sublime_plugin
 
 from .core.cph_i18n import t
 from .core.cph_settings import load_all_tests, save_tests
+from .core.cph_tests_merge import merge_into_file
 
 
 SEPARATOR = re.compile(r'^[ \t]*[-=]{3,}[ \t]*$', re.M)
@@ -41,7 +42,10 @@ def _is_run_view(view):
 
 def _refresh_panel(view):
 	"""Re-run make_opd on the paired -run view so the cards pick up the change."""
-	if view.get_status('opd_info') == 'opdebugger-file':
+	# Must use the view marker: the old 'opd_info' status value now carries
+	# the language/limits label, so comparing it silently disabled the
+	# refresh when the command was run from the panel itself.
+	if _is_run_view(view):
 		view.run_command('cph_test_manager', {'action': 'make_opd', 'load_session': True})
 		return
 	window = view.window()
@@ -55,17 +59,11 @@ def _refresh_panel(view):
 
 
 def _merge_into_tests(file_name, new_tests):
-	existing = load_all_tests(file_name) or []
-	merged = []
-	seen = set()
-	for item in list(existing) + list(new_tests):
-		key = (item.get('test', ''),
-			   tuple(sorted(item.get('correct_answers', []))))
-		if key in seen:
-			continue
-		seen.add(key)
-		merged.append(item)
-	return save_tests(file_name, merged), len(merged)
+	"""Merge into the stored tests using the shared policy."""
+	saved, total, conflicts = merge_into_file(file_name, new_tests)
+	if conflicts:
+		sublime.status_message(t('answer_conflict_kept'))
+	return saved, total
 
 
 class CphAddTestFromClipboardCommand(sublime_plugin.TextCommand):

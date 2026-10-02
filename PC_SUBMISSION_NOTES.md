@@ -1,8 +1,39 @@
 # cph-by-chenkx — Package Control Submission Notes
 
-Package version: v1.4.4
+Package version: v1.4.6
 Repository: https://github.com/chenmoulaile/cph-by-chenkx
 Channel entry file: `repository/c/cph-by-chenkx.json` (see snippet at the bottom)
+
+## v1.4.6 notes
+
+- Fixed a stale run-view check in `cph_tests_io._refresh_panel`: the panel marker
+  became a view setting in v1.4.5, so the refresh silently did nothing when the
+  command ran from the panel itself.
+- One shared merge policy (`core/cph_tests_merge.py`) for tests from files, the
+  clipboard, the Companion listener and stress counterexamples: keyed by input,
+  answers are only filled in - a re-sent sample can no longer overwrite an answer
+  the user accepted by hand.
+- `insert()` stops retrying a closed stdin pipe; unknown command placeholders are
+  surfaced in the compile panel and checked by doctor.
+- New `regard_pe_as_ac` setting, a copy-pasteable doctor Markdown report, and
+  `cph_test_menu` (Ctrl+Alt+M) for mouse-free test operations.
+- New static regression checks in `tests/run_tests.py`: every `self.x()` call must
+  be defined in its class, and the retired `opd_info` marker must not be compared
+  anywhere. Both are the kind of defect that unit tests alone cannot reach.
+
+## v1.4.5 notes
+
+- Fixed the shipped default C++ `compile_cmd` raising `KeyError: 'extra_sources'`
+  on every fresh install: `${extra_sources}` / `{include_dirs}` are expanded
+  before formatting now, and unknown placeholders only warn (`_LenientFormat`).
+- macOS memory now comes from `libproc.proc_pid_rusage(pid, RUSAGE_INFO_V2)` for
+  the measured process instead of the cumulative `RUSAGE_CHILDREN` peak.
+- `Test.rtcode` is initialized, doctor recognises template commands, cards refresh
+  after a swap, shifted detail tabs are closed, a broken stdin pipe is survivable,
+  edit tabs are reused, truncation is visible, the process group is cached for the
+  SIGKILL escalation, Companion samples dedupe by input, clipboard pastes are
+  inserted in one go.
+- CI now runs on Windows and macOS as well as Linux; 47 regression checks.
 
 ## v1.4.4 notes
 

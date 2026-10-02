@@ -99,6 +99,10 @@
 					{
 						"caption": "Check environment (doctor)",
 						"command": "cph_doctor"
+					},
+					{
+						"caption": "Test actions (run / detail / edit a test)",
+						"command": "cph_test_menu"
 					}
 				]
 			}

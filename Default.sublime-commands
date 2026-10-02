@@ -118,5 +118,9 @@
 	{
 		"caption": "cph-by-chenkx: Insert template snippet",
 		"command": "cph_insert_template"
+	},
+	{
+		"caption": "cph-by-chenkx: Test actions (run / detail / edit a test)",
+		"command": "cph_test_menu"
 	}
 ]

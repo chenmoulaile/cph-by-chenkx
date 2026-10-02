@@ -60,6 +60,9 @@
 	// 浮点题容差：0 = 关闭（逐 token 精确比较）。大于 0 时数字型 token 允许
 	// 误差 |a-b| <= tol * max(1, |a|, |b|)，例如 1e-6。
 	"float_tolerance": 0,
+	// PE（格式错误）是否按 AC 处理。false = 严格（PE 单独显示，默认）；
+	// true = 许多 OJ 的口径，token 相同但空白不同也算通过。
+	"regard_pe_as_ac": false,
 	// 单次运行保留的输出上限（字节），超出部分丢弃并在控制台提示，
 	// 防止程序在时间限制内疯狂输出把编辑器卡死。默认 8MB。
 	"max_output_bytes": 8388608,

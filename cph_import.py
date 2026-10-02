@@ -18,6 +18,7 @@ import re
 import glob
 
 from .core.cph_settings import save_tests, load_all_tests
+from .core.cph_tests_merge import merge_tests
 from .core.cph_i18n import t
 
 
@@ -302,15 +303,13 @@ class CphImportTestsCommand(sublime_plugin.TextCommand):
             return
 
         if append:
-            existing_tests = load_all_tests(src_file)
-            seen = set()
-            merged = []
-            for item in existing_tests + tests:
-                key = (item.get('test', ''), tuple(sorted(item.get('correct_answers', []))))
-                if key not in seen:
-                    seen.add(key)
-                    merged.append(item)
+            # Shared policy (input key, answers are only filled in, never
+            # overwritten) - previously imports used a different key than
+            # the Companion path, so the same input could end up twice.
+            merged, conflicts = merge_tests(load_all_tests(src_file), tests)
             tests = merged
+            if conflicts:
+                sublime.status_message(t('answer_conflict_kept'))
 
         if save_tests(src_file, tests):
             sublime.status_message(t('imported_tests', count=len(tests),

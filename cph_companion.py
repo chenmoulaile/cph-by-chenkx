@@ -20,6 +20,7 @@ import threading
 
 from .core.cph_i18n import t
 from .core.cph_settings import load_all_tests, save_tests, set_problem_limits
+from .core.cph_tests_merge import merge_tests as merge_stored_with
 
 
 # Competitive Companion 官方字段单位: timeLimit = ms, memoryLimit = MB
@@ -54,22 +55,14 @@ def _as_int(value):
 def merge_tests(file_name, incoming):
     """Merge freshly received samples with the stored ones.
 
-    Deduplicated by INPUT only. The browser regularly resends the same
-    sample - first without an answer, later with it - and keying on
-    (input, answers) used to create two cards for the same test.
+    Uses the shared policy (see core/cph_tests_merge.py): deduplicated by
+    INPUT, and an answer is only filled in when none is stored yet - a
+    re-sent sample must never overwrite an answer the user accepted by
+    hand. Conflicting answers are reported through the status bar.
     """
-    merged = []
-    index = {}
-    for item in list(load_all_tests(file_name) or []) + list(incoming):
-        key = item.get('test', '')
-        if key in index:
-            kept = merged[index[key]]
-            answers = item.get('correct_answers') or []
-            if answers and answers != (kept.get('correct_answers') or []):
-                kept['correct_answers'] = answers
-            continue
-        index[key] = len(merged)
-        merged.append(dict(item))
+    merged, conflicts = merge_stored_with(load_all_tests(file_name), incoming)
+    if conflicts:
+        sublime.status_message(t('answer_conflict_kept'))
     return merged
 
 

@@ -566,6 +566,10 @@ STRINGS = {
         'zh': '设置文件可解析',
         'en': 'settings file readable',
     },
+    'answer_conflict_kept': {
+        'zh': '答案冲突：已保留原有的答案',
+        'en': 'answer conflict: the existing answer was kept',
+    },
     'process_already_exited': {
         'zh': '程序已退出，输入被丢弃',
         'en': 'the program exited, input dropped',
@@ -573,6 +577,14 @@ STRINGS = {
     'stress_already_running': {
         'zh': '对拍已经在运行中',
         'en': 'a stress test is already running',
+    },
+    'doctor_placeholder_unknown': {
+        'zh': '命令里有不认识的占位符（会被当成空字符串）：{names}',
+        'en': 'unknown placeholder(s) in the command (substituted with ""): {names}',
+    },
+    'doctor_markdown_hint': {
+        'zh': '把下面这段贴到 issue 里（已包含环境与命令）：',
+        'en': 'paste this block into an issue (environment and commands included):',
     },
     'doctor_footer': {
         'zh': '提示：把结果贴到 issue 里可以更快定位问题。',

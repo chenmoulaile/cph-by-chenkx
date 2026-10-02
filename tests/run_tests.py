@@ -12,6 +12,7 @@ Python 3.3 subprocess arguments and the float comparison.
 Exit code 0 = all good, 1 = failures (used by .github/workflows/tests.yml).
 """
 
+import ast
 import importlib
 import importlib.util
 import io
@@ -169,6 +170,94 @@ def _load_package():
     spec.loader.exec_module(module)
     return name
 
+
+
+# --------------------------------------------------- static analysis helpers
+SKIP_DIRS = {'.git', '__pycache__', '.workbuddy', 'tests'}
+ST_PROVIDED = {'view', 'window', 'run', 'is_enabled', 'is_visible', 'is_checked',
+               'description', 'want_event', 'settings', 'on_navigate',
+               'send_response', 'send_header', 'end_headers', 'log_message',
+               'handle_one_request', 'wfile', 'rfile', 'headers',
+               'protocol_version'}
+
+
+def _plugin_py_files():
+    out = []
+    for base, dirs, files in os.walk(ROOT):
+        dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
+        for f in files:
+            if f.endswith('.py'):
+                out.append(os.path.relpath(os.path.join(base, f), ROOT).replace(os.sep, '/'))
+    return sorted(out)
+
+
+def _self_calls_without_definition(rel_path):
+    """[(class, line, method)] where self.method() is not defined in the class.
+
+    Nested classes are handled: their methods belong to them, not to the
+    enclosing class, and a class may use methods of our own mixins.
+    """
+    tree = ast.parse(open(os.path.join(ROOT, rel_path), encoding='utf-8').read())
+    own = {}
+
+    def collect(node):
+        for item in ast.iter_child_nodes(node):
+            if isinstance(item, ast.ClassDef):
+                names = set()
+                for sub in item.body:
+                    if isinstance(sub, (ast.FunctionDef, ast.ClassDef)):
+                        names.add(sub.name)
+                own[item.name] = names
+                collect(item)
+    collect(tree)
+
+    found = []
+
+    def check_class(node):
+        defined = set()
+        assigned = set()
+        inherited = set()
+        for base in node.bases:
+            bname = getattr(base, 'id', getattr(base, 'attr', ''))
+            inherited |= own.get(bname, set())
+        calls = []
+
+        def scan_method(fn):
+            for sub in ast.walk(fn):
+                if isinstance(sub, ast.Assign):
+                    for t in sub.targets:
+                        if (isinstance(t, ast.Attribute)
+                                and getattr(t.value, 'id', '') == 'self'):
+                            assigned.add(t.attr)
+                if isinstance(sub, ast.Call):
+                    fn2 = sub.func
+                    if (isinstance(fn2, ast.Attribute)
+                            and isinstance(fn2.value, ast.Name)
+                            and fn2.value.id == 'self'):
+                        calls.append((sub.lineno, fn2.attr))
+
+        for item in node.body:
+            if isinstance(item, ast.FunctionDef):
+                defined.add(item.name)
+                scan_method(item)
+            elif isinstance(item, ast.ClassDef):
+                defined.add(item.name)
+                check_class(item)
+            elif isinstance(item, ast.Assign):
+                for t in item.targets:
+                    if isinstance(t, ast.Attribute) and getattr(t.value, 'id', '') == 'self':
+                        assigned.add(t.attr)
+
+        resolved = defined | assigned | inherited | ST_PROVIDED
+        for line, name in calls:
+            if name in resolved or name.startswith('__'):
+                continue
+            found.append((node.name, line, name))
+
+    for item in ast.iter_child_nodes(tree):
+        if isinstance(item, ast.ClassDef):
+            check_class(item)
+    return found
 
 # ------------------------------------------------------------------ test rig
 FAILURES = []
@@ -411,6 +500,66 @@ def main():
           len(merged) == 1 and merged[0]['correct_answers'] == ['3\n'], repr(merged))
     merged2 = comp.merge_tests('x.cpp', [{'test': '9\n', 'correct_answers': []}])
     check('a genuinely new input is appended', len(merged2) == 2, repr(merged2))
+
+    print('== static checks: the regressions that unit tests cannot reach ==')
+    # 1. Every self.X() call must resolve inside its own class. This is the
+    #    v1.4.5 bug: a helper was defined on CphViewTesterCommand but called
+    #    from CphTestManagerCommand, so make_opd raised AttributeError right
+    #    after creating the -run view and the panel stayed empty.
+    problems = []
+    for path in _plugin_py_files():
+        for cname, line, name in _self_calls_without_definition(path):
+            problems.append('%s:%d %s.self.%s()' % (path, line, cname, name))
+    check('every self.<method>() is defined in its class', not problems,
+          '; '.join(problems[:5]))
+
+    # 2. The run panel is identified by a view setting now; comparing the old
+    #    'opd_info' status value is exactly how _refresh_panel silently broke.
+    stale = []
+    for path in _plugin_py_files():
+        with open(path, encoding='utf-8') as f:
+            for i, line in enumerate(f, 1):
+                if "get_status('opd_info') ==" in line:
+                    stale.append('%s:%d' % (path, i))
+    check('no stale opd_info marker comparisons', not stale, ', '.join(stale))
+
+    print('== merge policy (shared by import / clipboard / companion) ==')
+    merge = importlib.import_module(pkg + '.core.cph_tests_merge')
+
+    merged, conflicts = merge.merge_tests(
+        [{'test': '1\n', 'correct_answers': []}],
+        [{'test': '1\n', 'correct_answers': ['7\n']}])
+    check('answer is filled in when none was stored',
+          len(merged) == 1 and merged[0]['correct_answers'] == ['7\n'] and not conflicts,
+          repr((merged, conflicts)))
+
+    merged, conflicts = merge.merge_tests(
+        [{'test': '1\n', 'correct_answers': ['user\n']}],
+        [{'test': '1\n', 'correct_answers': ['sample\n']}])
+    check('a stored answer is never overwritten by a re-sent sample',
+          merged[0]['correct_answers'] == ['user\n'], repr(merged))
+    check('the conflict is reported to the caller', len(conflicts) == 1, repr(conflicts))
+
+    merged, _ = merge.merge_tests([{'test': '1\n', 'correct_answers': []}],
+                                  [{'test': '2\n', 'correct_answers': []}])
+    check('a different input is appended', len(merged) == 2, repr(merged))
+
+    print('== regard_pe_as_ac is wired to the setting ==')
+    pe_strict = verdict.get_verdict_by_code(
+        rtcode=0, runtime=10, time_limit_ms=1000, memory_limit_mb=256,
+        stderr='', stdout='1  2', expected_output='1 2')
+    pe_lenient = verdict.get_verdict_by_code(
+        rtcode=0, runtime=10, time_limit_ms=1000, memory_limit_mb=256,
+        stderr='', stdout='1  2', expected_output='1 2', regard_pe_as_ac=True)
+    check('PE stays PE by default', pe_strict['name'] == 'PE', pe_strict['name'])
+    check('regard_pe_as_ac=true turns PE into AC',
+          pe_lenient['name'] == 'AC', pe_lenient['name'])
+    with open(os.path.join(ROOT, 'cph-by-chenkx.sublime-settings'), encoding='utf-8') as f:
+        settings_text = f.read()
+    check('the setting is documented in the default settings',
+          '"regard_pe_as_ac"' in settings_text)
+    check('it defaults to false (strict)',
+          '"regard_pe_as_ac": false' in settings_text)
 
     print('')
     print('%d checks, %d failures' % (CHECKS[0], len(FAILURES)))

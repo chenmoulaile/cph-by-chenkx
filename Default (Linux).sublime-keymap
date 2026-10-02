@@ -360,5 +360,19 @@
 			"ctrl+alt+d"
 		],
 		"command": "cph_doctor"
+	},
+	{
+		"keys": [
+			"ctrl+alt+m"
+		],
+		"command": "cph_test_menu",
+		"context": [
+			{
+				"key": "selector",
+				"operator": "equal",
+				"match_all": false,
+				"operand": "source.c++, source.c, source.python, source.java, source.TestSyntax"
+			}
+		]
 	}
 ]
