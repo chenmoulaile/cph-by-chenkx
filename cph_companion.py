@@ -52,17 +52,24 @@ def _as_int(value):
 
 
 def merge_tests(file_name, incoming):
-    """Merge freshly received samples with the stored ones (dedup)."""
-    existing = load_all_tests(file_name) or []
+    """Merge freshly received samples with the stored ones.
+
+    Deduplicated by INPUT only. The browser regularly resends the same
+    sample - first without an answer, later with it - and keying on
+    (input, answers) used to create two cards for the same test.
+    """
     merged = []
-    seen = set()
-    for item in list(existing) + list(incoming):
-        key = (item.get('test', ''),
-               tuple(sorted(item.get('correct_answers', []))))
-        if key in seen:
+    index = {}
+    for item in list(load_all_tests(file_name) or []) + list(incoming):
+        key = item.get('test', '')
+        if key in index:
+            kept = merged[index[key]]
+            answers = item.get('correct_answers') or []
+            if answers and answers != (kept.get('correct_answers') or []):
+                kept['correct_answers'] = answers
             continue
-        seen.add(key)
-        merged.append(item)
+        index[key] = len(merged)
+        merged.append(dict(item))
     return merged
 
 

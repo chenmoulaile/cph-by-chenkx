@@ -36,7 +36,7 @@ def _resolve_source_file(view):
 
 
 def _is_run_view(view):
-	return view.get_status('opd_info') == 'opdebugger-file'
+	return bool(view.settings().get('cph_run_view'))
 
 
 def _refresh_panel(view):

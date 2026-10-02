@@ -28,6 +28,22 @@ def _hidden_startupinfo():
 _SHELL_METACHARS = set('|&;<>()`$\n*?[]{}~')
 
 
+class _LenientFormat(dict):
+	"""Format mapping that renders unknown placeholders as ''.
+
+	`str.format` raises KeyError for a missing key, which used to abort the
+	whole run with a cryptic "compile failed: 'extra_sources'".
+	"""
+
+	def __init__(self, values):
+		dict.__init__(self, values)
+		self.unknown = set()
+
+	def __missing__(self, key):
+		self.unknown.add(key)
+		return ''
+
+
 def _needs_shell(cmd):
 	"""True when a command relies on shell features (pipes, &&, globs...).
 
@@ -158,13 +174,20 @@ class ProcessManager(object):
 
 	def format_command(self, cmd, args=''):
 		file = path.split(self.file)[1]
-		return cmd.format(
-			file=file,
-			source_file=self.file,
-			source_file_dir=path.dirname(self.file),
-			file_name=self.file_name,
-			args=args
-		)
+		values = _LenientFormat({
+			'file': file,
+			'source_file': self.file,
+			'source_file_dir': path.dirname(self.file),
+			'file_name': self.file_name,
+			'args': args,
+		})
+		out = cmd.format_map(values)
+		if values.unknown:
+			# Never abort a run because of a placeholder typo or a command
+			# written for a newer version: substitute '' and say so.
+			print('[cph-by-chenkx] unknown placeholder(s) in command: %s'
+				  % ', '.join(sorted(values.unknown)))
+		return out
 
 	def get_lang_entry(self):
 		"""Return the run_settings entry matching this file's extension."""
@@ -222,6 +245,24 @@ class ProcessManager(object):
 			pass
 		return files
 
+	def _expand_optional(self, cmd, entry):
+		"""Expand the optional multi-file placeholders.
+
+		MUST run before format_command(): they are not keys of the format
+		mapping, so str.format() would raise KeyError on them. The shipped
+		default C++ compile_cmd contains both, which made every fresh install
+		fail with "compile failed: 'extra_sources'".
+		"""
+		if '{extra_sources}' in cmd:
+			extra = self.get_extra_sources(entry)
+			cmd = cmd.replace('{extra_sources}',
+							  ' '.join('"%s"' % f for f in extra))
+		if '{include_dirs}' in cmd:
+			inc = self.get_include_dirs(entry)
+			cmd = cmd.replace('{include_dirs}',
+							  ' '.join('-I "%s"' % d for d in inc))
+		return cmd
+
 	def get_compile_cmd(self):
 		opt = self.run_settings
 		file_ext = path.splitext(self.file)[1][1:]
@@ -229,18 +270,7 @@ class ProcessManager(object):
 			if file_ext in x['extensions']:
 				if x['compile_cmd'] is None:
 					return None
-				cmd = self.format_command(x['compile_cmd'])
-				# Multi-file support: {extra_sources} and {include_dirs} are
-				# optional placeholders; commands without them are untouched.
-				if '{extra_sources}' in cmd:
-					extra = self.get_extra_sources(x)
-					cmd = cmd.replace('{extra_sources}',
-						' '.join('"%s"' % f for f in extra))
-				if '{include_dirs}' in cmd:
-					inc = self.get_include_dirs(x)
-					cmd = cmd.replace('{include_dirs}',
-						' '.join('-I "%s"' % d for d in inc))
-				return cmd
+				return self.format_command(self._expand_optional(x['compile_cmd'], x))
 		else:
 			return -1
 
@@ -358,6 +388,14 @@ class ProcessManager(object):
 			creationflags=creationflags
 		)
 
+		# Remember the process group now: once the direct child is reaped,
+		# os.getpgid(pid) raises ProcessLookupError and a backgrounded
+		# grandchild would survive the SIGKILL escalation.
+		try:
+			self.pgid = os.getpgid(self.process.pid)
+		except Exception:
+			self.pgid = self.process.pid
+
 		# Sample peak memory while the process is alive: /proc/<pid> and the
 		# Windows handle both disappear once it exits. One synchronous sample
 		# first, because a program that finishes in a few milliseconds could
@@ -395,8 +433,17 @@ class ProcessManager(object):
 			return
 		if isinstance(s, str):
 			s = s.encode('utf-8', 'replace')
-		proc.stdin.write(s)
-		proc.stdin.flush()
+		try:
+			proc.stdin.write(s)
+			proc.stdin.flush()
+		except (OSError, ValueError) as e:
+			# The program exited before reading everything (BrokenPipeError
+			# on a closed stdin). Drop the input instead of letting the
+			# exception escape into the command stack / listener thread.
+			self.stdin_closed = True
+			sublime.status_message('[cph-by-chenkx] %s'
+								   % t('process_already_exited'))
+			print('[cph-by-chenkx] stdin closed (%s), input dropped' % e)
 
 	def is_stopped(self):
 		"""Exit code, or None while still running.
@@ -480,9 +527,18 @@ class ProcessManager(object):
 			# linux AND osx: the child leads its own session (setsid), so
 			# killing the process group is the only way to reach the real
 			# program. Escalate to SIGKILL if SIGTERM is ignored.
+			pgid = getattr(self, 'pgid', None)
+			if not pgid:
+				try:
+					pgid = os.getpgid(pid)
+				except Exception:
+					pgid = None
 			for sig, grace in ((signal.SIGTERM, 0.6), (signal.SIGKILL, 0.0)):
 				try:
-					os.killpg(os.getpgid(pid), sig)
+					if pgid:
+						os.killpg(pgid, sig)
+					else:
+						self.process.kill()
 				except Exception:
 					try:
 						self.process.kill()

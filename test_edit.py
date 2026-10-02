@@ -119,6 +119,7 @@ class CphTestEditCommand(sublime_plugin.TextCommand):
 			else _i18n_t('edit_answer_hint')
 		content = content.format(
 			test_id=self.test_id,
+			test_label=_i18n_t('test_label'),
 			save_label=_i18n_t('save'),
 			delete_label=_i18n_t('delete'),
 			hint=hint,
@@ -154,6 +155,7 @@ class CphTestEditCommand(sublime_plugin.TextCommand):
 		# also uses 'edit_mode' for its own inline-edit phase, so listeners
 		# must be able to tell the two apart).
 		v.settings().set('cph_edit_view', True)
+		v.settings().set('cph_edit_source', source_view_id)
 		v.settings().set('edit_mode', True)
 		v.set_syntax_file('Packages/%s/TestSyntax.sublime-syntax' % base_name)
 		# No leading sentinel '\n' any more: content starts at position 0

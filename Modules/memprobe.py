@@ -8,8 +8,10 @@ cph-by-chenkx - 子进程峰值内存采样（零第三方依赖）
 - Windows: psapi GetProcessMemoryInfo -> PeakWorkingSetSize（进程自启动以来的
   工作集峰值，bytes），句柄用 OpenProcess(QUERY_LIMITED_INFORMATION | VM_READ)
 - Linux:   /proc/<pid>/status 的 VmHWM（峰值 RSS，kB），缺失时回退 VmRSS
-- macOS:   resource.getrusage(RUSAGE_CHILDREN).ru_maxrss（bytes，累计峰值）
-           以及 /proc 不可用，故用 rusage 作为近似值
+- macOS:   libproc.proc_pid_rusage(pid, RUSAGE_INFO_V2) 的 ri_phys_footprint
+           （bytes，单进程）。**不能**用
+           resource.getrusage(RUSAGE_CHILDREN).ru_maxrss —— 那是本进程所有
+           已回收子进程（含 g++、历次运行）的累计峰值，会虚高并误判 MLE
 
 采样器（MemorySampler）在进程存活期间每 25ms 取一次最大值，进程退出后再
 尽力补取一次；因为 Linux 的 /proc/<pid> 和 Windows 的句柄都会在进程结束后
@@ -24,6 +26,21 @@ import time
 _WINDOWS = sys.platform.startswith('win') or os.name == 'nt'
 _LINUX = sys.platform.startswith('linux')
 _DARWIN = sys.platform.startswith('darwin')
+
+if _DARWIN:
+	import ctypes
+	import struct
+
+	try:
+		_libproc = ctypes.CDLL('/usr/lib/libproc.dylib', use_errno=True)
+	except Exception:
+		_libproc = None
+
+	# rusage_info_v2: ri_uuid[16] followed by 8-byte fields, so
+	# ri_resident_size sits at offset 64 and ri_phys_footprint at 72.
+	_RUSAGE_INFO_V2 = 2
+	_RUSAGE_RESIDENT_OFF = 64
+	_RUSAGE_FOOTPRINT_OFF = 72
 
 
 if _WINDOWS:
@@ -76,7 +93,7 @@ def sample_memory_bytes(pid):
 		if _LINUX:
 			return _sample_linux(pid)
 		if _DARWIN:
-			return _sample_darwin()
+			return _sample_darwin(pid)
 	except Exception:
 		return None
 	return None
@@ -135,11 +152,26 @@ def _sample_linux(pid):
 		return None
 
 
-def _sample_darwin():
+def _sample_darwin(pid):
+	"""Memory of ONE process via libproc (macOS).
+
+	resource.getrusage(RUSAGE_CHILDREN) must NOT be used here: it reports the
+	cumulative peak of every child that was ever reaped (compilers, previous
+	test runs), which inflated the displayed value and made the MLE verdict
+	fire on data from a completely different process.
+	"""
+	if _libproc is None:
+		return None
 	try:
-		import resource
-		# ru_maxrss on macOS is bytes; RUSAGE_CHILDREN covers waited-for children
-		return int(resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss)
+		buf = ctypes.create_string_buffer(512)
+		rc = _libproc.proc_pid_rusage(int(pid), _RUSAGE_INFO_V2,
+									  ctypes.byref(buf))
+		if rc != 0:
+			return None
+		raw = buf.raw
+		footprint = struct.unpack_from('<Q', raw, _RUSAGE_FOOTPRINT_OFF)[0]
+		resident = struct.unpack_from('<Q', raw, _RUSAGE_RESIDENT_OFF)[0]
+		return int(footprint or resident) or None
 	except Exception:
 		return None
 

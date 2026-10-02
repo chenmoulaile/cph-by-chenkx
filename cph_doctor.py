@@ -44,8 +44,13 @@ def _check_command(cmd):
 	exe = _first_token(cmd)
 	if not exe:
 		return None, 'n/a'
+	if '{' in exe:
+		# Unresolved placeholder: run_cmd points at the binary the plugin
+		# itself builds ({source_file_dir}/{file_name}.exe), so there is
+		# nothing to look up. Reporting FAIL here was misinformation.
+		return True, '%s (template)' % exe
 	if os.path.isabs(exe) or os.sep in exe:
-		return (os.path.exists(exe), exe if os.path.exists(exe) else exe)
+		return (os.path.exists(exe), exe)
 	found = shutil.which(exe)
 	return (bool(found), found or exe)
 

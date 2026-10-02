@@ -1,3 +1,74 @@
+# v1.4.5 更新内容（中文）
+
+第三轮审查（P0-P2）的逐条修复。
+
+## ⚠️ P0：出厂配置下 C++ 编译必然失败（v1.4.0 引入，一直没被发现）
+
+`format_command` 先用 `str.format` 格式化，而 `{extra_sources}` / `{include_dirs}`
+是在**之后**才替换的——可 `str.format` 不认识这两个键，直接抛
+`KeyError: 'extra_sources'`。而出厂 C++ 的 `compile_cmd` 恰好含这两个占位符，
+于是**任何新装用户第一次 Ctrl+Alt+B 就报「compile failed: 'extra_sources'」**。
+（老用户因为 User 设置里覆盖了 run_settings 才没撞上。）
+
+- 可选占位符改为**在 format 之前**展开
+- `format_command` 换成宽容映射：遇到不认识的占位符替换为空并打印一行告警，
+  不再让一个拼写错误（或未来版本的占位符）中断整次运行
+- 新增回归断言：**遍历出厂设置里每个语言的 `compile_cmd` / `run_cmd`，
+  必须能格式化成功**——这类「配置 × 代码」组合缺陷以后会被自动拦住
+
+## P1 修复
+
+- **macOS 的内存占用是错的**：原来用 `resource.getrusage(RUSAGE_CHILDREN).ru_maxrss`，
+  那是**本进程所有已回收子进程**（编译器、历次运行）的累计峰值，不是被测程序；
+  v1.4.4 的同步首采还把这个错误放大成「必然 ≥ 上次的旧峰值」。
+  现改用 `libproc.proc_pid_rusage(pid, RUSAGE_INFO_V2)` 取该进程的
+  `ri_phys_footprint`，取不到就返回「未测到」，绝不再用累计值参与 MLE 判定
+- **「只重跑失败」模式下展开被跳过的卡片会崩**：`update_configs` 里裸访问
+  `test.rtcode`，而该属性从未初始化 → AttributeError 打断渲染。
+  现在 `Test.__init__` 初始化 `rtcode = '0'`，读取处也统一用 `getattr`
+- **环境自检误报**：`doctor` 把默认 `run_cmd` 里的模板占位符当成路径去 `exists`，
+  必然 FAIL 并提示「请把 {source_file_dir}/{file_name}.exe 加入 PATH」。
+  现在带 `{` 的命令识别为模板，报 `ok (template)`
+
+## P2 修复
+
+- `swap_tests`（交换测试顺序）后**不刷新卡片** → 补 `update_configs()`
+- **删除测试后 detail 标签页错位**：删 test i 后，后面测试全部下移，
+  但已打开的 `test N detail` 仍保留旧名字与旧内容 → 现在关闭所有索引 ≥ i 的 detail 页
+- **向已退出的进程喂输入会抛 BrokenPipeError**（沿主线程命令栈冒出）→
+  捕获 `OSError` 丢掉该次输入并提示「程序已退出」
+- **编辑标签页可重复打开**：连点两次 edit 会得到两对同名标签，保存时只有一对生效 →
+  现在按「名字 + 归属源视图」复用已存在的标签
+- **输出截断对用户不可见**（只在控制台 print）→ 输出里插入一行截断提示，
+  并写入 `test.message`，详情视图的 Message 段会显示
+- **编辑栏仍写死英文 `test {test_id}`** → 改为 `{test_label} {test_id}`（中文显示「测试 3」）
+- **terminate 的 SIGKILL 升级失效**：直接子进程被 `poll()` 回收后
+  `os.getpgid()` 抛异常，落到 `process.kill()` 的 no-op，复合命令留下的孙进程
+  会变孤儿继续跑 → 现在 Popen 后即缓存 pgid，terminate 直接用
+- **Companion 重复建测试点**：去重键原为 `(输入, 答案)`，浏览器先发无答案样例、
+  后又带答案重发同一题就会得到两条 → 改为**按输入单键**去重，答案取新值
+- 琐项：删除无人使用的 `CphViewTesterCommand.ROOT`；运行视图状态栏不再常驻
+  FOC 遗留的 `opdebugger-file`，改为显示语言与限制（`C++ · TL 2000ms · ML 256MB`），
+  并用独立的 view setting 作为运行面板标记；`Example.sublime-keymap` 已同步
+  （此前缺少 run modes / 剪贴板 / 导出 / doctor / 模板等新命令）
+
+## 性能
+
+- **大粘贴**：`insert_cb` 原来按行拆分，粘贴 10⁴ 行样例 = 10⁴ 次主线程命令分发；
+  现在整段一次插入（一次 stdin 写入）
+
+## 工程
+
+- **CI 增加平台矩阵**：ubuntu(3.8/3.12) + **windows** + **macOS**——
+  `memprobe` / `terminate` / `_needs_shell` / `taskkill` 全是平台分支，
+  正好是原来 CI 覆盖不到的地方
+- 回归测试 36 → **47 项**（新增出厂命令可格式化、rtcode 初始化、
+  doctor 模板判定、companion 按输入去重）
+- `messages/1.4.5.txt` 升级提示；README 增加「已知限制」小节
+  （macOS 内存为单进程采样、`sync_output` 权衡、PE 严格口径、输出截断）
+
+---
+
 # v1.4.4 更新内容（中文）
 
 ## 修复：输出里的换行显示成 `<0x0d>`

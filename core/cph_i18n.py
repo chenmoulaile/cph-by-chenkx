@@ -566,6 +566,10 @@ STRINGS = {
         'zh': '设置文件可解析',
         'en': 'settings file readable',
     },
+    'process_already_exited': {
+        'zh': '程序已退出，输入被丢弃',
+        'en': 'the program exited, input dropped',
+    },
     'stress_already_running': {
         'zh': '对拍已经在运行中',
         'en': 'a stress test is already running',

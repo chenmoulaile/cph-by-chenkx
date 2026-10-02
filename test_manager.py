@@ -219,6 +219,11 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 			self.fold = True
 			self.end = end
 			self.runtime = '-'
+			# Initialized here on purpose: update_configs() reads .rtcode when
+			# expanding a card that was skipped by 're-run failed tests'
+			# (uninitialized attribute -> AttributeError inside a phantom
+			# callback).
+			self.rtcode = '0'
 			self.memory = '-'
 			self.verdict = None
 			self.verdict_name = None
@@ -591,6 +596,13 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 				# the program is never blocked on a full pipe buffer.
 				if not self.output_truncated:
 					self.output_truncated = True
+					# Make the truncation visible instead of silently showing a
+					# mysterious WA: a marker in the output plus the detail
+					# view's message section.
+					marker = '\n' + t('output_truncated_warn') + '\n'
+					self.prog_out[n] += marker
+					self.tests[n].message = t('output_truncated_warn')
+					self.on_out(marker)
 					print('[cph-by-chenkx] %s' % t('output_truncated_warn'))
 				return
 			self.prog_out[n] += s
@@ -801,10 +813,12 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 		if not self.tester:
 			return
 		s = sublime.get_clipboard()
-		lst = s.split('\n')
-		for i in range(len(lst) - 1):
-			self.tester.insert(lst[i] + '\n', call_on_insert=True)
-		self.tester.insert(lst[-1], call_on_insert=True)
+		if not s:
+			return
+		# Insert the paste in one go. The old loop dispatched one command per
+		# line, so pasting a 10k line sample meant 10k round trips through the
+		# main thread (and 10k writes into the child's stdin).
+		self.tester.insert(s, call_on_insert=True)
 
 	def toggle_fold(self, i):
 		v = self.view
@@ -856,6 +870,21 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 		v.sel().add(Region(v.size()))
 		self.update_configs()
 
+	def _find_edit_view(self, test_id, mode):
+		"""Existing 'test N -edit/-answer' tab owned by this source view."""
+		window = self.view.window()
+		if window is None:
+			return None
+		name = 'test %d %s' % (test_id, '-edit' if mode == 'input' else '-answer')
+		for wv in window.views():
+			if (wv.name() or '') != name:
+				continue
+			if not wv.settings().get('cph_edit_view'):
+				continue
+			if wv.settings().get('cph_edit_source') == self.view.id():
+				return wv
+		return None
+
 	def open_test_edit(self, i):
 		v = self.view
 		window = v.window()
@@ -871,7 +900,11 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 		# view replaces the old fragile "------ answer ------" separator
 		# line which was easy to delete by accident.
 		window.focus_group(1)
-		input_view = window.new_file()
+		# Reuse an already-open tab for this test instead of stacking a
+		# second identical one (saving then edited the first match only).
+		input_view = self._find_edit_view(i, 'input')
+		if input_view is None:
+			input_view = window.new_file()
 		window.set_view_index(input_view, 1, 1)
 		input_view.run_command('cph_test_edit', {
 			'action': 'init',
@@ -880,7 +913,9 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 			'test': test.test_string,
 			'source_view_id': v.id()
 		})
-		answer_view = window.new_file()
+		answer_view = self._find_edit_view(i, 'answer')
+		if answer_view is None:
+			answer_view = window.new_file()
 		window.set_view_index(answer_view, 1, 1)
 		answer_view.run_command('cph_test_edit', {
 			'action': 'init',
@@ -1238,6 +1273,19 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 		self.detail_phantoms[i].update([detail])
 		self.detail_open.add(i)
 
+	def close_stale_detail_views(self, from_index):
+		"""Close detail tabs of tests that shifted down (index >= from_index)."""
+		window = self.view.window()
+		if window is None:
+			return
+		for wv in window.views():
+			m = re.search(r'- test (\d+) detail$', wv.name() or '')
+			if m and int(m.group(1)) - 1 >= from_index:
+				try:
+					wv.close()
+				except Exception:
+					pass
+
 	def close_test_detail(self, i):
 		# close the inline phantom detail if one is open
 		if hasattr(self, 'detail_open'):
@@ -1361,7 +1409,10 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 			elif not tester.tests[i].fold:
 				pt += len(tester.tests[i].test_string) + len(tester.prog_out[i]) + 1
 
-			if not running and not tester.tests[i].fold and str(tester.tests[i].rtcode) == '0' and tester.prog_out[i]:
+			# getattr for safety, matching the other three call sites
+			if (not running and not tester.tests[i].fold
+					and str(getattr(tester.tests[i], 'rtcode', '0')) == '0'
+					and tester.prog_out[i]):
 				if tester.tests[i].is_correct_answer(tester.prog_out[i], _float_tolerance):
 					type = 'decline'
 				else:
@@ -1805,7 +1856,12 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 		v.set_scratch(True)
 		v.run_command('set_setting', {'setting': 'fold_buttons', 'value': False})
 		v.run_command('set_setting', {'setting': 'line_numbers', 'value': False})
-		v.set_status('opd_info', 'opdebugger-file')
+		# 'cph_run_view' marks this scratch view as the run panel. The old
+		# status key still exists but now carries something useful
+		# (language and limits) instead of the FOC-era 'opdebugger-file'.
+		v.settings().set('cph_run_view', True)
+		v.set_status('opd_info', self._run_view_status_label(run_file,
+			time_limit_ms, memory_limit_mb))
 		self.clear_all()
 		self.close_edit_views()
 		if load_session:
@@ -1958,6 +2014,10 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 		del tester.prog_out[id]
 		tester.test_iter -= 1
 		self.close_test_detail(id)
+		# Every detail tab is named '<file> - test N detail': after removing
+		# one test all following ones shift down, so their open tabs would
+		# keep a stale name and content.
+		self.close_stale_detail_views(id)
 		self.memorize_tests()
 		self.update_configs()
 
@@ -2076,6 +2136,9 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 			for x in tester.tests[i].__sel:
 				begin = self.get_tie_pos(i)
 				view.sel().add(Region(begin + x.a, begin + x.b))
+		# The cards carry the verdict of the row they were drawn for, so
+		# they must be re-rendered after the swap.
+		self.update_configs()
 
 	def toggle_hide_phantoms(self):
 		view = self.view
@@ -2213,18 +2276,17 @@ class CphTestDetailViewCommand(sublime_plugin.TextCommand):
 
 class ModifiedListener(sublime_plugin.EventListener):
 	def on_selection_modified(self, view):
-		if view.get_status('opd_info') == 'opdebugger-file' and not view.settings().get('edit_mode'):
+		if view.settings().get('cph_run_view') and not view.settings().get('edit_mode'):
 			view.run_command('cph_test_manager', { 'action': 'sync_read_only' })
 
 
 class CloseListener(sublime_plugin.EventListener):
 	def on_pre_close(self, view):
-		if view.get_status('opd_info') == 'opdebugger-file':
+		if view.settings().get('cph_run_view'):
 			view.run_command('cph_test_manager', {'action': 'close'})
 
 
 class CphViewTesterCommand(sublime_plugin.TextCommand):
-	ROOT = dirname(__file__)
 	def create_opd(self, clr_tests=False, sync_out=None,
 				   time_limit_ms=None, memory_limit_mb=None,
 				   run_all=False, run_failed=False, force_compile=False):
@@ -2311,6 +2373,28 @@ class CphViewTesterCommand(sublime_plugin.TextCommand):
 			'run_failed': run_failed,
 			'force_compile': force_compile,
 		})
+
+	def _run_view_status_label(self, run_file, time_limit_ms, memory_limit_mb):
+		"""Short status-bar label for the run panel (language + limits)."""
+		try:
+			ext = path.splitext(run_file or '')[1][1:]
+			entry = None
+			for x in (get_settings().get('run_settings') or []):
+				if ext in (x.get('extensions') or []):
+					entry = x
+					break
+			if not entry:
+				return ''
+			parts = [entry.get('name', 'run')]
+			tl = time_limit_ms or entry.get('time_limit_ms')
+			ml = memory_limit_mb or entry.get('memory_limit_mb')
+			if tl:
+				parts.append('TL %dms' % int(tl))
+			if ml:
+				parts.append('ML %dMB' % int(ml))
+			return ' · '.join(parts)
+		except Exception:
+			return ''
 
 	def is_enabled(self, action=None, **kwargs):
 		"""Run only makes sense on a saved file with a configured language.

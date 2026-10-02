@@ -10,8 +10,8 @@ import sublime_plugin
 
 
 def _is_run_view(view):
-	"""The -run panel is a scratch view tagged with this status."""
-	return view.get_status('opd_info') == 'opdebugger-file'
+	"""The -run panel is a scratch view tagged with this setting."""
+	return bool(view.settings().get('cph_run_view'))
 
 
 class _RunModeMixin(object):

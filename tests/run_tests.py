@@ -17,6 +17,7 @@ import importlib.util
 import io
 import json
 import os
+import re
 import sys
 import types
 
@@ -363,6 +364,53 @@ def main():
     check('cph-ng folder path present',
           any(p.endswith(os.path.join('tests', 'foo.cpp__tests')) for p in paths),
           str(paths))
+
+    print('== shipped settings: every command must be formattable ==')
+    # This is the P0 that shipped in v1.4.0-v1.4.4: the default C++ compile_cmd
+    # contains {extra_sources} / {include_dirs}, which are NOT format keys, so
+    # str.format() raised KeyError on the very first run of a fresh install.
+    import tempfile
+    raw = open(os.path.join(ROOT, 'cph-by-chenkx.sublime-settings'), encoding='utf-8').read()
+    raw = re.sub(r'//[^\n]*', '', raw)
+    shipped = json.loads(raw)
+    tmpdir = tempfile.mkdtemp()
+    file_names = {'cpp': 'main.cpp', 'py': 'main.py', 'java': 'Main.java'}
+    for entry in shipped.get('run_settings', []):
+        for ext in entry.get('extensions', []):
+            target = os.path.join(tmpdir, file_names.get(ext, 'prog.' + ext))
+            with open(target, 'w'):
+                pass
+            mgr = pm_mod.ProcessManager(target, 'source.' + ext,
+                                        run_settings=shipped['run_settings'])
+            for label, getter in (('compile_cmd', lambda m=mgr: m.get_compile_cmd()),
+                                  ('run_cmd', lambda m=mgr: m.get_run_cmd(''))):
+                name = '%s %s formats' % (entry.get('name', '?'), label)
+                try:
+                    getter()
+                    check(name, True)
+                except Exception as e:
+                    check(name, False, '%s: %s' % (type(e).__name__, e))
+
+    print('== Test model: attributes used by rendering ==')
+    fresh = tm.CphTestManagerCommand.Test({'test': '1\n'})
+    check('rtcode is initialized (expanding a skipped card)',
+          getattr(fresh, 'rtcode', None) == '0', repr(getattr(fresh, 'rtcode', None)))
+
+    print('== doctor: template commands are not a failure ==')
+    doc = importlib.import_module(pkg + '.cph_doctor')
+    ok, detail = doc._check_command('"{source_file_dir}/{file_name}.exe" {args}')
+    check('run_cmd template is not reported as missing', ok is True, detail)
+    ok2, _ = doc._check_command('g++ -O2 -o x')
+    check('plain compiler command is looked up', ok2 is not None)
+
+    print('== companion: merge keyed by input ==')
+    comp = importlib.import_module(pkg + '.cph_companion')
+    comp.load_all_tests = lambda f: [{'test': '1 2\n', 'correct_answers': []}]
+    merged = comp.merge_tests('x.cpp', [{'test': '1 2\n', 'correct_answers': ['3\n']}])
+    check('resending the same input updates the answer instead of duplicating',
+          len(merged) == 1 and merged[0]['correct_answers'] == ['3\n'], repr(merged))
+    merged2 = comp.merge_tests('x.cpp', [{'test': '9\n', 'correct_answers': []}])
+    check('a genuinely new input is appended', len(merged2) == 2, repr(merged2))
 
     print('')
     print('%d checks, %d failures' % (CHECKS[0], len(FAILURES)))

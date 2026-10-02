@@ -1,0 +1,28 @@
+cph-by-chenkx 1.4.5
+===================
+
+Fixed in this release:
+
+* Fresh installs could not compile C++ at all: the shipped default
+  compile_cmd contains {extra_sources} / {include_dirs}, which raised
+  KeyError on the very first run. Commands are now expanded safely and an
+  unknown placeholder only prints a warning.
+* macOS memory readings used the cumulative peak of every reaped child
+  process (compilers, earlier runs) instead of the program being tested;
+  they now come from libproc for that one process.
+* Expanding a card that "re-run failed tests" had skipped raised
+  AttributeError and stopped the panel from rendering.
+* 'Check environment (doctor)' no longer reports the default run command as
+  missing - the template placeholders are recognised now.
+* Carriage returns no longer show up as <0x0d> anywhere in the panel.
+
+Behaviour notes:
+
+* The edit/answer button bar is back to the single-line FastOlympicCoding
+  layout (the two-line variant from 1.4.2 looked wrong).
+* `sync_output` defaults to off (it was unreachable before 1.4.2, so runs got
+  faster); set it to true only for interactive programs.
+* New keys: Ctrl+Alt+R (re-run failed only), Ctrl+Alt+Shift+B (run all),
+  Ctrl+Alt+V (add test from clipboard), Ctrl+Alt+C / Ctrl+Alt+Shift+C (copy
+  expected / actual), Ctrl+Alt+E (export tests), Ctrl+Alt+D (doctor),
+  Ctrl+Alt+T (template snippet). On macOS use Cmd instead of Ctrl.

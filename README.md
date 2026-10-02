@@ -121,6 +121,18 @@ cph-by-chenkx 是基于 [FastOlympicCoding](https://github.com/Jatana/FastOlympi
 > 通用。如果你更习惯 Windows 的反斜杠写法，编辑
 > `cph-by-chenkx (Windows).sublime-settings` 覆盖 `run_settings` 即可。
 
+## 已知限制
+
+- **macOS 的内存占用**是单进程实时采样（`libproc.proc_pid_rusage`）的峰值，
+  不是内核严格意义上的峰值 RSS，因此显示的数值可能比 Activity Monitor 略低；
+  它已经不会再用 `RUSAGE_CHILDREN` 那种「所有子进程累计峰值」的错误口径。
+- **`sync_output`（逐字符同步输出）默认关闭**：开启后输出会一个字符一次刷新视图，
+  只适合交互式程序；普通题目保持关闭，输出量大时才不会卡。
+- **`PE`（Presentation Error）判定为严格口径**：只有「token 完全相同但空白/换行不同」
+  才算 PE，且默认与 WA 分别显示（没有把 PE 当成 AC）。
+- 判定使用首个测试点的答案文件时，若程序输出超过 `max_output_bytes`（默认 8MB），
+  超出部分会被丢弃，输出里会插入一行截断提示。
+
 ## 快捷键
 
 | 按键 | 功能 |
