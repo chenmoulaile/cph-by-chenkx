@@ -1,8 +1,24 @@
 # cph-by-chenkx — Package Control Submission Notes
 
-Package version: v1.4.6
+Package version: v1.4.7
 Repository: https://github.com/chenmoulaile/cph-by-chenkx
 Channel entry file: `repository/c/cph-by-chenkx.json` (see snippet at the bottom)
+
+## v1.4.7 notes (Package Control review round)
+
+Reviewer feedback addressed:
+
+- **Root level plugin imports** - `cph_doctor.py` imported `.cph_companion`; the
+  listener state now lives in `core/cph_state.py` and doctor reads it from there.
+- **Key bindings without a context** - the panel collapse/restore, stress stop,
+  Companion stop and doctor bindings now carry contexts. A new listener
+  (`cph_context.py`) answers four custom context keys (`cph_run_view`,
+  `cph_has_run_panel`, `cph_stress_running`, `cph_listener_running`), so keys
+  only fire when they actually apply.
+- **Platform settings variant** - `cph-by-chenkx (Windows).sublime-settings` was
+  removed; the shipped default command is already platform neutral.
+- **Channel entry** - the `name` key was dropped (derivable from `details`).
+- `tests/run_tests.py` now enforces these four rules (62 checks in total).
 
 ## v1.4.6 notes
 

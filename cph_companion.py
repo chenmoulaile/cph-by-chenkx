@@ -21,6 +21,7 @@ import threading
 from .core.cph_i18n import t
 from .core.cph_settings import load_all_tests, save_tests, set_problem_limits
 from .core.cph_tests_merge import merge_tests as merge_stored_with
+from .core.cph_state import set_listener
 
 
 # Competitive Companion 官方字段单位: timeLimit = ms, memoryLimit = MB
@@ -202,6 +203,7 @@ def _start_listener(view):
             return
         _listener['server'] = server
         _listener['port'] = port
+        set_listener(server, port, view.id())
         thread = threading.Thread(target=server.serve_forever)
         thread.daemon = True
         _listener['thread'] = thread
@@ -218,6 +220,7 @@ def _stop_listener():
             sublime.status_message(t('listener_not_running'))
             return
         _listener['server'] = None
+        set_listener(None)
         _listener['thread'] = None
         _listener['port'] = None
         _listener['view_id'] = None

@@ -118,8 +118,8 @@ cph-by-chenkx 是基于 [FastOlympicCoding](https://github.com/Jatana/FastOlympi
 
 
 > **关于默认运行命令**：默认 `run_cmd` 使用正斜杠路径，Windows / Linux / macOS
-> 通用。如果你更习惯 Windows 的反斜杠写法，编辑
-> `cph-by-chenkx (Windows).sublime-settings` 覆盖 `run_settings` 即可。
+> 通用（Windows 也接受反斜杠）。想换成自己的写法，把 `run_settings` 复制到
+> User 设置里覆盖即可。
 
 ## 已知限制
 

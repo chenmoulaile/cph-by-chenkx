@@ -14,6 +14,7 @@ from os import path
 
 from .core.cph_settings import base_name, get_settings, root_dir, load_all_tests, save_tests
 from .core.cph_tests_merge import merge_tests
+from .core.cph_state import set_stress_running
 from .core.cph_i18n import t
 from .core.cph_verdict import normalize_lines
 from .Highlight.test_interface import get_test_styles
@@ -116,6 +117,7 @@ class CphStartStressTestCommand(sublime_plugin.TextCommand):
 
         _stress_state['running'] = True
         _stress_state['stop_requested'] = False
+        set_stress_running(True)
         _stress_state['std_file'] = std_file
         _stress_state['generator_file'] = gen_file
         _stress_state['user_file'] = user_file
@@ -408,6 +410,7 @@ def _run_stress_loop(user_file, std_file, gen_file, time_limit, max_rounds):
 def _stop_stress():
     _stress_state['running'] = False
     _stress_state['stop_requested'] = False
+    set_stress_running(False)
 
 
 def _append_stress(text):

@@ -1,0 +1,44 @@
+"""cph-by-chenkx - 跨模块共享的运行时状态
+
+放在子包里是有原因的：Sublime 会把包根目录下的每个 .py 当成独立插件加载，
+根级模块之间互相 import 会被 Package Control 审查判为错误
+（"Do not import root-level plugin module"）。把共享状态放到 core/ 下，
+根级插件只允许 import 子包内的模块，这样既没有该问题，也避免重复加载。
+
+这里只放"当前是否正在做什么"这类瞬时标志，不放用户设置（那属于 cph_settings）。
+"""
+
+# 对拍是否正在运行（cph_stress 写，快捷键上下文读）
+state = {
+	'stress_running': False,
+	# Competitive Companion 监听器
+	'listener_running': False,
+	'listener_port': None,
+	'listener_view_id': None,
+}
+
+
+def set_stress_running(running):
+	state['stress_running'] = bool(running)
+
+
+def is_stress_running():
+	return bool(state.get('stress_running'))
+
+
+def set_listener(server, port=None, view_id=None):
+	state['listener_running'] = server is not None
+	if server is None:
+		state['listener_port'] = None
+		state['listener_view_id'] = None
+	else:
+		state['listener_port'] = port
+		state['listener_view_id'] = view_id
+
+
+def is_listener_running():
+	return bool(state.get('listener_running'))
+
+
+def get_listener_port():
+	return state.get('listener_port')

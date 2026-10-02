@@ -16,8 +16,8 @@
 	//   {include_dirs}    额外 -I 目录（见 include_dirs 设置）
 	// 注意: compile_cmd 里 "-o" 后面必须紧跟输出文件名 "{file_name}"，
 	//       顺序写错会导致编译失败！
-	// 默认命令使用正斜杠，Linux/macOS/Windows 都可用；Windows 想用反斜杠路径
-	// 可在 "cph-by-chenkx (Windows).sublime-settings" 里覆盖整个 run_settings。
+	// 默认命令使用正斜杠（Windows / Linux / macOS 都可用，反斜杠同样有效）。
+	// 想改成自己的写法，把 run_settings 复制到 User 设置里覆盖即可。
 	"run_settings": [
 		{
 			"name": "C++",

@@ -89,11 +89,11 @@ def _check_port(port):
 
 
 def _our_listener_running():
-	try:
-		from .cph_companion import _listener
-		return _listener.get('server') is not None
-	except Exception:
-		return False
+	# Read the shared state from the subpackage: importing a root level
+	# plugin module (.cph_companion) is not allowed, Sublime loads each
+	# root level .py as an independent plugin.
+	from .core.cph_state import is_listener_running
+	return is_listener_running()
 
 
 def _check_tests_path(file_name):

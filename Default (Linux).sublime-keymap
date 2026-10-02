@@ -191,7 +191,14 @@
 		"command": "cph_view_tester",
 		"args": {
 			"action": "sync_opdebugs"
-		}
+		},
+		"context": [
+			{
+				"key": "cph_has_run_panel",
+				"operator": "equal",
+				"operand": true
+			}
+		]
 	},
 	{
 		"keys": [
@@ -201,7 +208,14 @@
 		"command": "cph_view_tester",
 		"args": {
 			"action": "sync_opdebugs"
-		}
+		},
+		"context": [
+			{
+				"key": "cph_has_run_panel",
+				"operator": "equal",
+				"operand": true
+			}
+		]
 	},
 	{
 		"keys": [
@@ -235,7 +249,14 @@
 		"keys": [
 			"ctrl+alt+shift+s"
 		],
-		"command": "cph_stop_stress_test"
+		"command": "cph_stop_stress_test",
+		"context": [
+			{
+				"key": "cph_stress_running",
+				"operator": "equal",
+				"operand": true
+			}
+		]
 	},
 	{
 		"keys": [
@@ -255,7 +276,14 @@
 		"keys": [
 			"ctrl+alt+shift+l"
 		],
-		"command": "cph_companion_stop_listener"
+		"command": "cph_companion_stop_listener",
+		"context": [
+			{
+				"key": "cph_listener_running",
+				"operator": "equal",
+				"operand": true
+			}
+		]
 	},
 	{
 		"keys": [
@@ -359,7 +387,15 @@
 		"keys": [
 			"ctrl+alt+d"
 		],
-		"command": "cph_doctor"
+		"command": "cph_doctor",
+		"context": [
+			{
+				"key": "selector",
+				"operator": "equal",
+				"match_all": false,
+				"operand": "source.c++, source.c, source.python, source.java, source.TestSyntax"
+			}
+		]
 	},
 	{
 		"keys": [

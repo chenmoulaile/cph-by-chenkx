@@ -561,6 +561,63 @@ def main():
     check('it defaults to false (strict)',
           '"regard_pe_as_ac": false' in settings_text)
 
+    print('== Package Control review rules ==')
+    # 1. Every shipped binding needs a concrete context (selector, setting.*
+    #    or a custom context key). Bare bindings are a review failure.
+    bare = []
+    for name in ('Default (Windows).sublime-keymap', 'Default (Linux).sublime-keymap',
+                 'Default (OSX).sublime-keymap'):
+        with open(os.path.join(ROOT, name), encoding='utf-8') as f:
+            for entry in json.load(f):
+                if not entry.get('context'):
+                    bare.append('%s %s' % (name, entry.get('keys')))
+    check('every shipped key binding has a context', not bare, '; '.join(bare))
+
+    # 2. Custom context keys used in keymaps must be answered by the listener.
+    with open(os.path.join(ROOT, 'cph_context.py'), encoding='utf-8') as f:
+        ctx_src = f.read()
+    used_keys = set()
+    for name in ('Default (Windows).sublime-keymap', 'Default (Linux).sublime-keymap',
+                 'Default (OSX).sublime-keymap'):
+        with open(os.path.join(ROOT, name), encoding='utf-8') as f:
+            for entry in json.load(f):
+                for item in entry.get('context') or []:
+                    key = item.get('key', '')
+                    if key.startswith('cph_'):
+                        used_keys.add(key)
+    unanswered = [k for k in sorted(used_keys) if ("'%s'" % k) not in ctx_src]
+    check('custom context keys are answered by cph_context', not unanswered,
+          '; '.join(unanswered))
+    check('at least one custom context key is exercised', bool(used_keys),
+          'none found')
+
+    # 3. Root level plugin modules must not be imported from each other
+    #    (Sublime loads every root level .py as an independent plugin).
+    root_modules = set()
+    for name in os.listdir(ROOT):
+        if name.endswith('.py') and os.path.isfile(os.path.join(ROOT, name)):
+            root_modules.add(name[:-3])
+    violations = []
+    for rel in _plugin_py_files():
+        if '/' in rel:          # only root level files matter
+            continue
+        with open(os.path.join(ROOT, rel), encoding='utf-8') as f:
+            for i, line in enumerate(f, 1):
+                stripped = line.strip()
+                if not stripped.startswith('from .'):
+                    continue
+                # 'from .cph_companion import x' -> '.cph_companion' -> 'cph_companion'
+                target = stripped.split()[1].lstrip('.').split('.')[0]
+                if target in root_modules - {'__init__'}:
+                    violations.append('%s:%d %s' % (rel, i, stripped))
+    check('no root-level plugin module imports', not violations,
+          '; '.join(violations[:3]))
+
+    # 4. Platform specific settings variants must be named after the package
+    #    or a syntax we ship - we ship none, so the base file must stay neutral.
+    stray = [f for f in os.listdir(ROOT) if ' (' in f and f.endswith('.sublime-settings')]
+    check('no stray platform settings variants', not stray, '; '.join(stray))
+
     print('')
     print('%d checks, %d failures' % (CHECKS[0], len(FAILURES)))
     if FAILURES:
