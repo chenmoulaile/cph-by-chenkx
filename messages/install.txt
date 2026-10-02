@@ -1,0 +1,25 @@
+cph-by-chenkx - C++ competitive programming for Sublime Text
+===========================================================
+
+Thanks for installing. Quick start:
+  1. Save your .cpp file, press Ctrl+Alt+B to run the tests.
+  2. Right-click -> cph-by-chenkx -> Listen to Competitive Companion,
+     then send samples from your browser (port 12345).
+
+Handy keys (source view):
+  Ctrl+Alt+B           run tests
+  Ctrl+Alt+V           add a test case from the clipboard
+  Ctrl+Alt+C           copy expected output of a test
+  Ctrl+Alt+Shift+C     copy actual output of a test
+  Ctrl+Alt+E           export tests as 1.in / 1.out files
+  Ctrl+Alt+R           re-run failed tests only
+  Ctrl+Alt+Shift+B     run all tests (keep going after failures)
+  Ctrl+Alt+Shift+R     run with a forced recompile
+  Ctrl+Alt+S           stress test
+  Ctrl+Alt+I           import tests from files
+  Ctrl+Alt+T           expand a template snippet (fastio / main / ...)
+  Ctrl+Alt+D           check environment (doctor)
+  Ctrl+Alt+P           collapse/restore the run panel
+
+Settings: Preferences -> Package Settings -> cph-by-chenkx
+On macOS use Cmd instead of Ctrl.

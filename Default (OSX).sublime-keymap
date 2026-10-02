@@ -1,140 +1,308 @@
 [
-	{ "keys": ["tab"],
-		"command": "olympic_funcs",
-		"args": {"action": "insert_template"},
+	{
+		"keys": [
+			"super+alt+t"
+		],
+		"command": "cph_insert_template",
 		"context": [
-			{"operand": "source.c++", "operator": "equal", "match_all": true, "key": "selector"},
-			{"key": "preceding_text", "operator": "regex_contains", "operand": "^(\\w+)$", "match_all": true}
+			{
+				"operand": "source.c++",
+				"operator": "equal",
+				"match_all": true,
+				"key": "selector"
+			}
 		]
 	},
-
 	{
-		"keys": ["enter"],
+		"keys": [
+			"enter"
+		],
 		"command": "cph_test_manager",
-		"args": {"action": "insert_line"},
+		"args": {
+			"action": "insert_line"
+		},
 		"context": [
-			{"operand": "source.TestSyntax", "operator": "equal", "match_all": true, "key": "selector"},
-			{"key": "setting.edit_mode", "operator": "equal", "operand": false}
+			{
+				"operand": "source.TestSyntax",
+				"operator": "equal",
+				"match_all": true,
+				"key": "selector"
+			},
+			{
+				"key": "setting.edit_mode",
+				"operator": "equal",
+				"operand": false
+			}
 		]
 	},
-
 	{
-		"keys": ["ctrl+enter"],
+		"keys": [
+			"ctrl+enter"
+		],
 		"command": "cph_test_manager",
-		"args": {"action": "new_test"},
+		"args": {
+			"action": "new_test"
+		},
 		"context": [
-			{"operand": "source.TestSyntax", "operator": "equal", "match_all": true, "key": "selector"},
-			{"key": "setting.edit_mode", "operator": "equal", "operand": false}
+			{
+				"operand": "source.TestSyntax",
+				"operator": "equal",
+				"match_all": true,
+				"key": "selector"
+			},
+			{
+				"key": "setting.edit_mode",
+				"operator": "equal",
+				"operand": false
+			}
 		]
 	},
-
 	{
-		"keys": ["super+v"],
+		"keys": [
+			"super+v"
+		],
 		"command": "cph_test_manager",
-		"args": {"action": "insert_cb"},
+		"args": {
+			"action": "insert_cb"
+		},
 		"context": [
-			{"operand": "source.TestSyntax", "operator": "equal", "match_all": true, "key": "selector"},
-			{"key": "setting.edit_mode", "operator": "equal", "operand": false}
+			{
+				"operand": "source.TestSyntax",
+				"operator": "equal",
+				"match_all": true,
+				"key": "selector"
+			},
+			{
+				"key": "setting.edit_mode",
+				"operator": "equal",
+				"operand": false
+			}
 		]
 	},
-
 	{
-		"keys": ["super+x"],
+		"keys": [
+			"super+x"
+		],
 		"command": "cph_test_manager",
-		"args": {"action": "kill_proc"},
+		"args": {
+			"action": "kill_proc"
+		},
 		"context": [
-			{"operand": "source.TestSyntax", "operator": "equal", "match_all": true, "key": "selector"}
+			{
+				"operand": "source.TestSyntax",
+				"operator": "equal",
+				"match_all": true,
+				"key": "selector"
+			}
 		]
 	},
-
 	{
-		"keys": ["super+d"],
+		"keys": [
+			"super+d"
+		],
 		"command": "cph_test_manager",
-		"args": {"action": "delete_tests"},
+		"args": {
+			"action": "delete_tests"
+		},
 		"context": [
-			{"operand": "source.TestSyntax", "operator": "equal", "match_all": true, "key": "selector"}
+			{
+				"operand": "source.TestSyntax",
+				"operator": "equal",
+				"match_all": true,
+				"key": "selector"
+			}
 		]
 	},
-
 	{
-		"keys": ["super+shift+up"],
+		"keys": [
+			"super+shift+up"
+		],
 		"command": "cph_test_manager",
-		"args": {"action": "swap_tests", "dir": -1},
+		"args": {
+			"action": "swap_tests",
+			"dir": -1
+		},
 		"context": [
-			{"operand": "source.TestSyntax", "operator": "equal", "match_all": true, "key": "selector"}
+			{
+				"operand": "source.TestSyntax",
+				"operator": "equal",
+				"match_all": true,
+				"key": "selector"
+			}
 		]
 	},
-
 	{
-		"keys": ["super+shift+down"],
+		"keys": [
+			"super+shift+down"
+		],
 		"command": "cph_test_manager",
-		"args": {"action": "swap_tests", "dir": 1},
+		"args": {
+			"action": "swap_tests",
+			"dir": 1
+		},
 		"context": [
-			{"operand": "source.TestSyntax", "operator": "equal", "match_all": true, "key": "selector"}
+			{
+				"operand": "source.TestSyntax",
+				"operator": "equal",
+				"match_all": true,
+				"key": "selector"
+			}
 		]
 	},
-
 	{
-		"keys": ["super+alt+b"],
+		"keys": [
+			"super+alt+b"
+		],
 		"command": "cph_view_tester",
-		"args": {"action": "make_opd"},
+		"args": {
+			"action": "make_opd"
+		},
 		"context": [
-			{"operand": "source.TestSyntax", "operator": "not_equal", "match_all": true, "key": "selector"}
+			{
+				"operand": "source.TestSyntax",
+				"operator": "not_equal",
+				"match_all": true,
+				"key": "selector"
+			}
 		]
 	},
-
 	{
-		"keys": ["super+alt+b"],
+		"keys": [
+			"super+alt+b"
+		],
 		"command": "cph_test_manager",
-		"args": {"action": "make_opd", "load_session": true},
+		"args": {
+			"action": "make_opd",
+			"load_session": true
+		},
 		"context": [
-			{"operand": "source.TestSyntax", "operator": "equal", "match_all": true, "key": "selector"}
+			{
+				"operand": "source.TestSyntax",
+				"operator": "equal",
+				"match_all": true,
+				"key": "selector"
+			}
 		]
 	},
-
 	{
-		"keys": ["super+alt+p"],
+		"keys": [
+			"super+alt+p"
+		],
 		"command": "cph_view_tester",
-		"args": {"action": "sync_opdebugs"}
+		"args": {
+			"action": "sync_opdebugs"
+		}
 	},
-
 	{
-		"keys": ["super+k", "super+p"],
+		"keys": [
+			"super+k",
+			"super+p"
+		],
 		"command": "cph_view_tester",
-		"args": {"action": "sync_opdebugs"}
+		"args": {
+			"action": "sync_opdebugs"
+		}
 	},
-
 	{
-		"keys": ["super+alt+i"],
+		"keys": [
+			"super+alt+i"
+		],
 		"command": "cph_import_tests",
 		"context": [
-			{"operand": "source.TestSyntax", "operator": "not_equal", "match_all": true, "key": "selector"}
+			{
+				"operand": "source.TestSyntax",
+				"operator": "not_equal",
+				"match_all": true,
+				"key": "selector"
+			}
 		]
 	},
-
 	{
-		"keys": ["super+alt+s"],
+		"keys": [
+			"super+alt+s"
+		],
 		"command": "cph_start_stress_test",
 		"context": [
-			{"operand": "source.TestSyntax", "operator": "not_equal", "match_all": true, "key": "selector"}
+			{
+				"operand": "source.TestSyntax",
+				"operator": "not_equal",
+				"match_all": true,
+				"key": "selector"
+			}
 		]
 	},
-
 	{
-		"keys": ["super+alt+shift+s"],
+		"keys": [
+			"super+alt+shift+s"
+		],
 		"command": "cph_stop_stress_test"
 	},
-
 	{
-		"keys": ["super+alt+l"],
+		"keys": [
+			"super+alt+l"
+		],
 		"command": "cph_companion_listener",
 		"context": [
-			{"operand": "source.TestSyntax", "operator": "not_equal", "match_all": true, "key": "selector"}
+			{
+				"operand": "source.TestSyntax",
+				"operator": "not_equal",
+				"match_all": true,
+				"key": "selector"
+			}
 		]
 	},
-
 	{
-		"keys": ["super+alt+shift+l"],
+		"keys": [
+			"super+alt+shift+l"
+		],
 		"command": "cph_companion_stop_listener"
+	},
+	{
+		"keys": [
+			"super+alt+shift+b"
+		],
+		"command": "cph_run_all_tests"
+	},
+	{
+		"keys": [
+			"super+alt+r"
+		],
+		"command": "cph_run_failed_tests"
+	},
+	{
+		"keys": [
+			"super+alt+shift+r"
+		],
+		"command": "cph_run_force_recompile"
+	},
+	{
+		"keys": [
+			"super+alt+v"
+		],
+		"command": "cph_add_test_from_clipboard"
+	},
+	{
+		"keys": [
+			"super+alt+c"
+		],
+		"command": "cph_copy_test_expected"
+	},
+	{
+		"keys": [
+			"super+alt+shift+c"
+		],
+		"command": "cph_copy_test_actual"
+	},
+	{
+		"keys": [
+			"super+alt+e"
+		],
+		"command": "cph_export_tests"
+	},
+	{
+		"keys": [
+			"super+alt+d"
+		],
+		"command": "cph_doctor"
 	}
 ]

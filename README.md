@@ -11,7 +11,7 @@ cph-by-chenkx 是基于 [FastOlympicCoding](https://github.com/Jatana/FastOlympi
 每个测试点会显示：
 - **彩色 verdict 徽章**：`AC`（绿）、`WA`（红）、`TLE`（深蓝）、`MLE`（紫）、`RE`（蓝）、`PE`（粉）、`CE`（黄）等
 - **运行时间**：毫秒级显示，超过 5 秒自动转换为秒
-- **内存占用**：MB / GB 显示
+- **内存占用**：MB / GB 显示（跨平台真实采样进程峰值内存，Windows 用 `GetProcessMemoryInfo`、Linux 读 `/proc/<pid>/status VmHWM`、macOS 用 `getrusage`），超限会真的判 `MLE`
 - **超时硬杀**：程序超过时间限制会被自动终止并判 `TLE`（cph-ng 行为），
   不会再出现死循环杀不掉的问题；手动停止的测试显示 `SK`
 - **三个按钮**：`编辑`、`运行`、`详情`
@@ -98,6 +98,29 @@ cph-by-chenkx 是基于 [FastOlympicCoding](https://github.com/Jatana/FastOlympi
    输入 (`test N -edit`) 与标准答案 (`test N -answer`) 两个标签页，
    在答案页填入预期输出后 `save`，即可自动重新评判
 
+### 6. 运行模式与效率
+
+- **编译缓存**：源文件（含多文件）与编译命令没变时跳过编译直接跑，
+  改样例反复调试时不再每次等编译；需要时用 `Ctrl+Alt+Shift+R` 强制重编
+- **只重跑失败 / 跑完全部**：`Ctrl+Alt+R` 只重跑没 AC 的测试点，
+  `Ctrl+Alt+Shift+B` 跑完全部（默认第一个失败即停，可用
+  `stop_on_first_failure` 改默认行为）
+- **浮点容差**：设置 `float_tolerance`（如 `1e-6`）后，数字型输出按
+  相对/绝对误差比较，浮点题不再因为 `0.1+0.2 != 0.3` 误判 `WA`
+- **输出上限**：`max_output_bytes`（默认 8MB）防止程序在时限内疯狂输出卡死编辑器
+- **多文件编译**：在 `run_settings` 里用 `extra_sources`（glob）与
+  `include_dirs`，编译命令中用 `{extra_sources}` / `{include_dirs}` 占位符
+- **面板汇总行**：运行面板底部显示 `4/5 通过 · 首个失败 test 3 · 总用时 1.24s`
+- **环境自检**：`Ctrl+Alt+D` 一条命令检查编译器是否在 PATH、端口占用、
+  测试路径可写、资源可加载，排查问题先跑它
+- **对拍反例入库**：对拍发现反例会自动保存成一个正式测试点（可用
+  `stress_save_counterexample` 关闭）
+
+
+> **关于默认运行命令**：默认 `run_cmd` 使用正斜杠路径，Windows / Linux / macOS
+> 通用。如果你更习惯 Windows 的反斜杠写法，编辑
+> `cph-by-chenkx (Windows).sublime-settings` 覆盖 `run_settings` 即可。
+
 ## 快捷键
 
 | 按键 | 功能 |
@@ -107,7 +130,14 @@ cph-by-chenkx 是基于 [FastOlympicCoding](https://github.com/Jatana/FastOlympi
 | `Ctrl+Alt+S` / `Ctrl+Alt+Shift+S` (Mac: `Cmd+Alt+S` / `Cmd+Alt+Shift+S`) | 开始 / 停止对拍 |
 | `Ctrl+Alt+L` / `Ctrl+Alt+Shift+L` (Mac: `Cmd+Alt+L` / `Cmd+Alt+Shift+L`) | 开启 / 停止 Competitive Companion 监听 |
 | `Ctrl+Alt+P` 或 `Ctrl+K, Ctrl+P` (Mac: `Cmd+Alt+P` 或 `Cmd+K, Cmd+P`) | 收缩 / 恢复右侧测试面板 |
-| `Tab` (在 C++ 源码中) | 插入模板 |
+| `Ctrl+Alt+T` (Mac: `Cmd+Alt+T`) | 展开模板片段（光标停在关键字后，如 `fastio`） |
+| `Ctrl+Alt+V` (Mac: `Cmd+Alt+V`) | 用剪贴板内容新增测试点（`输入 --- 输出` 可同时带答案） |
+| `Ctrl+Alt+C` / `Ctrl+Alt+Shift+C` | 复制当前测试的 预期输出 / 实际输出 |
+| `Ctrl+Alt+E` (Mac: `Cmd+Alt+E`) | 把全部测试导出成 `1.in` / `1.out` 文件对 |
+| `Ctrl+Alt+R` (Mac: `Cmd+Alt+R`) | 只重跑失败的测试点（已 AC 的自动跳过） |
+| `Ctrl+Alt+Shift+B` | 跑完全部测试点（不因失败中断） |
+| `Ctrl+Alt+Shift+R` | 强制重新编译后运行（忽略编译缓存） |
+| `Ctrl+Alt+D` (Mac: `Cmd+Alt+D`) | 环境自检（编译器 / 端口 / 路径 / 资源） |
 | `Enter` (在 TestSyntax 中) | 插入行 |
 | `Ctrl+Enter` (在 TestSyntax 中) | 新建测试 |
 | `Ctrl+V` / `Cmd+V` (在 TestSyntax 中) | 粘贴 |

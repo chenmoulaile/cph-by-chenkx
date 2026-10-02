@@ -1,0 +1,208 @@
+"""
+cph-by-chenkx - 测试数据杂项 I/O
+
+- 从剪贴板新增测试点（"输入 --- 输出" 或整段当输入）
+- 复制某个测试点的 输入 / 预期输出 / 实际输出
+- 把全部测试点导出成 1.in / 1.out 文件对（方便离线调试或分享）
+
+以前这些都要手动开文件复制粘贴，是竞赛里高频但是零散的操作。
+"""
+
+import os
+import re
+import sublime
+import sublime_plugin
+
+from .core.cph_i18n import t
+from .core.cph_settings import load_all_tests, save_tests
+
+
+SEPARATOR = re.compile(r'^[ \t]*[-=]{3,}[ \t]*$', re.M)
+TEST_TITLE = re.compile(r'^Test (?P<id>\d+) \{')
+
+
+def _resolve_source_file(view):
+	"""Source file owning the tests, even when invoked from the -run panel."""
+	if view.file_name():
+		return view.file_name()
+	name = view.name() or ''
+	if name.endswith(' -run'):
+		base = name[:-len(' -run')]
+		for window in sublime.windows():
+			for v in window.views():
+				fn = v.file_name()
+				if fn and os.path.basename(fn) == base:
+					return fn
+	return None
+
+
+def _test_index_at_cursor(view):
+	"""Index of the test whose 'Test N {' title is above the cursor."""
+	if not len(view.sel()):
+		return None
+	row = view.rowcol(view.sel()[0].begin())[0]
+	for r in range(row, -1, -1):
+		line = view.substr(view.line(view.text_point(r, 0))).strip()
+		m = TEST_TITLE.match(line)
+		if m:
+			return int(m.group('id'))
+	return None
+
+
+def _refresh_panel(view):
+	"""Re-run make_opd on the paired -run view so the cards pick up the change."""
+	if view.get_status('opd_info') == 'opdebugger-file':
+		view.run_command('cph_test_manager', {'action': 'make_opd', 'load_session': True})
+		return
+	window = view.window()
+	if window is None or not view.file_name():
+		return
+	target = os.path.basename(view.file_name()) + ' -run'
+	for v in window.views():
+		if (v.name() or '') == target:
+			v.run_command('cph_test_manager', {'action': 'make_opd', 'load_session': True})
+			break
+
+
+def _merge_into_tests(file_name, new_tests):
+	existing = load_all_tests(file_name) or []
+	merged = []
+	seen = set()
+	for item in list(existing) + list(new_tests):
+		key = (item.get('test', ''),
+			   tuple(sorted(item.get('correct_answers', []))))
+		if key in seen:
+			continue
+		seen.add(key)
+		merged.append(item)
+	return save_tests(file_name, merged), len(merged)
+
+
+class CphAddTestFromClipboardCommand(sublime_plugin.TextCommand):
+	"""Add a test case from the clipboard."""
+
+	def run(self, edit):
+		view = self.view
+		file_name = _resolve_source_file(view)
+		if not file_name:
+			sublime.status_message(t('save_file_first'))
+			return
+
+		content = sublime.get_clipboard()
+		if not content or not content.strip():
+			sublime.status_message(t('clipboard_empty'))
+			return
+
+		parts = SEPARATOR.split(content, maxsplit=1)
+		if len(parts) == 2:
+			test_input, answer = parts[0], parts[1].strip()
+		else:
+			test_input, answer = content, ''
+
+		new_test = {
+			'test': test_input,
+			'correct_answers': [answer] if answer else [],
+		}
+		ok, total = _merge_into_tests(file_name, [new_test])
+		if not ok:
+			sublime.status_message(t('import_save_failed'))
+			return
+		sublime.status_message(t('clipboard_test_added', total=total))
+		_refresh_panel(view)
+
+
+class _CopyTestPartCommand(sublime_plugin.TextCommand):
+	"""Base: copy one part of the selected test to the clipboard."""
+
+	def part(self, test):
+		raise NotImplementedError
+
+	def run(self, edit):
+		view = self.view
+		file_name = _resolve_source_file(view)
+		if not file_name:
+			sublime.status_message(t('save_file_first'))
+			return
+
+		tests = load_all_tests(file_name) or []
+		if not tests:
+			sublime.status_message(t('no_tests'))
+			return
+
+		index = _test_index_at_cursor(view)
+		if index is None or index >= len(tests):
+			index = len(tests) - 1
+		value = self.part(tests[index]) or ''
+		if not value:
+			sublime.status_message(t('nothing_to_copy'))
+			return
+		sublime.set_clipboard(value)
+		sublime.status_message(t('copied_test_part', id=index + 1))
+
+	def is_enabled(self):
+		return bool(_resolve_source_file(self.view))
+
+
+class CphCopyTestInputCommand(_CopyTestPartCommand):
+	"""Copy the input of a test."""
+
+	def part(self, test):
+		return test.get('test', '')
+
+
+class CphCopyTestExpectedCommand(_CopyTestPartCommand):
+	"""Copy the expected answer of a test."""
+
+	def part(self, test):
+		answers = test.get('correct_answers') or []
+		return answers[0] if answers else ''
+
+
+class CphCopyTestActualCommand(_CopyTestPartCommand):
+	"""Copy the actual output of the most recent run."""
+
+	def part(self, test):
+		return test.get('stdout', '')
+
+
+class CphExportTestsCommand(sublime_plugin.TextCommand):
+	"""Export all tests as 1.in / 1.out file pairs."""
+
+	def run(self, edit):
+		view = self.view
+		file_name = _resolve_source_file(view)
+		if not file_name:
+			sublime.status_message(t('save_file_first'))
+			return
+
+		tests = load_all_tests(file_name) or []
+		if not tests:
+			sublime.status_message(t('no_tests'))
+			return
+
+		window = view.window()
+		default_dir = os.path.join(os.path.dirname(file_name), 'tests_export')
+		window.show_input_panel(
+			t('export_to_dir') + ':', default_dir, self._export, None, None)
+
+	def _export(self, target_dir):
+		target_dir = (target_dir or '').strip()
+		if not target_dir:
+			return
+		file_name = _resolve_source_file(self.view)
+		tests = load_all_tests(file_name) or []
+		try:
+			if not os.path.isdir(target_dir):
+				os.makedirs(target_dir)
+			for i, test in enumerate(tests, 1):
+				with open(os.path.join(target_dir, '%d.in' % i), 'w',
+						  encoding='utf-8') as f:
+					f.write(test.get('test', ''))
+				answers = test.get('correct_answers') or []
+				if answers:
+					with open(os.path.join(target_dir, '%d.out' % i), 'w',
+							  encoding='utf-8') as f:
+						f.write(answers[0])
+			sublime.status_message(t('export_done', count=len(tests), dir=target_dir))
+		except Exception as e:
+			sublime.error_message(t('import_failed', error=str(e)))

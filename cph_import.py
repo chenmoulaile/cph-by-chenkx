@@ -21,6 +21,30 @@ from .core.cph_settings import save_tests, load_all_tests
 from .core.cph_i18n import t
 
 
+def _read_text(file_path):
+    """Read test data tolerating non-UTF-8 encodings.
+
+    Chinese OJ data is often GB2312/GBK; strict UTF-8 decoding used to
+    abort the whole import with an exception.
+    """
+    errors = []
+    for enc in ('utf-8-sig', 'gb18030', 'utf-16'):
+        try:
+            with open(file_path, 'r', encoding=enc) as f:
+                return f.read()
+        except UnicodeDecodeError as e:
+            errors.append(str(e))
+        except Exception:
+            raise
+    with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
+        return f.read()
+
+
+def _strip_input_suffix(stem):
+    """"1.in" -> "1" so "1.out.txt" pairs correctly with "1.in.txt"."""
+    return re.sub(r'(?i)\.in$', '', stem)
+
+
 class CphImportTestsCommand(sublime_plugin.TextCommand):
     def run(self, edit):
         window = self.view.window()
@@ -73,19 +97,30 @@ class CphImportTestsCommand(sublime_plugin.TextCommand):
                     lambda idx: idx >= 0 and self._do_import(input_path, candidates[idx], append=True)
                 )
 
-        existing_in = self._find_cphng_input(src_dir)
-        if existing_in:
-            window.show_quick_panel(
-                [[os.path.basename(existing_in), t('use_existing_in_cphng')],
-                 [t('choose_other_file')]],
-                lambda idx: on_done(existing_in if idx == 0 else None)
-            )
-        else:
+        def ask_for_path():
             window.show_input_panel(
                 t('input_file_path') + ':', '',
                 lambda s: on_done(s.strip() or None),
                 None, None
             )
+
+        existing_in = self._find_cphng_input(src_dir)
+        if existing_in:
+            def on_pick(idx):
+                # idx == 1 is "choose another file": the old code called
+                # on_done(None), which silently did nothing at all.
+                if idx == 0:
+                    on_done(existing_in)
+                elif idx == 1:
+                    ask_for_path()
+
+            window.show_quick_panel(
+                [[os.path.basename(existing_in), t('use_existing_in_cphng')],
+                 [t('choose_other_file')]],
+                on_pick
+            )
+        else:
+            ask_for_path()
 
     def _find_cphng_input(self, src_dir):
         candidates = ['in.txt', 'input.txt', 'stdin.txt']
@@ -97,21 +132,23 @@ class CphImportTestsCommand(sublime_plugin.TextCommand):
 
     def _find_output_for_input(self, input_path):
         candidates = []
-        base, ext = os.path.splitext(input_path)
-        for new_ext in ['.out', '.ans', '.txt']:
-            p = base + new_ext
-            if os.path.exists(p) and p != input_path:
-                candidates.append(p)
+        base, _ext = os.path.splitext(input_path)
+        # "1.in.txt" -> stem "1": also try 1.out / 1.ans next to it
+        stems = {base, _strip_input_suffix(base)}
+        for stem in stems:
+            for new_ext in ['.out', '.ans', '.out.txt', '.ans.txt', '.txt']:
+                cand = stem + new_ext
+                if os.path.exists(cand) and cand != input_path:
+                    candidates.append(cand)
         for new_name in ['out.txt', 'output.txt', 'stdout.txt', 'ans.txt']:
-            p = os.path.join(os.path.dirname(input_path), new_name)
-            if os.path.exists(p) and p != input_path:
-                candidates.append(p)
-        return list(set(candidates))
+            cand = os.path.join(os.path.dirname(input_path), new_name)
+            if os.path.exists(cand) and cand != input_path:
+                candidates.append(cand)
+        return sorted(set(candidates))
 
     def _import_input_only(self, input_path):
         try:
-            with open(input_path, 'r', encoding='utf-8') as f:
-                content = f.read()
+            content = _read_text(input_path)
             tests = [{'test': content, 'correct_answers': []}]
             self._save_and_show(tests, input_path, append=True)
         except Exception as e:
@@ -119,12 +156,10 @@ class CphImportTestsCommand(sublime_plugin.TextCommand):
 
     def _do_import(self, input_path, output_path, append=False):
         try:
-            with open(input_path, 'r', encoding='utf-8') as f:
-                inp = f.read()
+            inp = _read_text(input_path)
             out = ''
             if output_path:
-                with open(output_path, 'r', encoding='utf-8') as f:
-                    out = f.read()
+                out = _read_text(output_path)
             tests = [{'test': inp, 'correct_answers': [out.strip()] if out.strip() else []}]
             self._save_and_show(tests, input_path, append=append)
         except Exception as e:
@@ -150,8 +185,7 @@ class CphImportTestsCommand(sublime_plugin.TextCommand):
             return
 
         try:
-            with open(file_path, 'r', encoding='utf-8') as f:
-                content = f.read()
+            content = _read_text(file_path)
         except Exception as e:
             sublime.error_message(t('read_failed', error=str(e)))
             return
@@ -235,21 +269,21 @@ class CphImportTestsCommand(sublime_plugin.TextCommand):
 
         new_tests = []
         for in_file in in_files:
-            base_file = os.path.splitext(in_file)[0]
+            # ".in.txt" must lose BOTH suffixes, otherwise the base
+            # becomes "1.in" and no "1.out.txt" is ever found.
+            base_file = _strip_input_suffix(os.path.splitext(in_file)[0])
             out_file = None
-            for out_ext in ['.out', '.ans', '.out.txt']:
+            for out_ext in ['.out', '.ans', '.ans.txt', '.out.txt']:
                 candidate = base_file + out_ext
                 if os.path.exists(candidate):
                     out_file = candidate
                     break
 
             try:
-                with open(in_file, 'r', encoding='utf-8') as f:
-                    inp = f.read()
+                inp = _read_text(in_file)
                 out = ''
                 if out_file:
-                    with open(out_file, 'r', encoding='utf-8') as f:
-                        out = f.read().strip()
+                    out = _read_text(out_file).strip()
 
                 new_tests.append({'test': inp, 'correct_answers': [out] if out else []})
             except Exception as e:
@@ -347,12 +381,10 @@ class CphImportTestsFileCommand(sublime_plugin.TextCommand):
                     candidates.append(p)
 
         try:
-            with open(file_path, 'r', encoding='utf-8') as f:
-                inp = f.read()
+            inp = _read_text(file_path)
             out = ''
             if candidates:
-                with open(candidates[0], 'r', encoding='utf-8') as f:
-                    out = f.read().strip()
+                out = _read_text(candidates[0]).strip()
             tests = [{'test': inp, 'correct_answers': [out] if out else []}]
             # append/merge with existing tests instead of overwriting them
             existing = load_all_tests(src_file)

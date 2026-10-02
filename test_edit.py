@@ -10,6 +10,7 @@ import sublime, sublime_plugin
 from sublime import Region, Phantom, PhantomSet
 
 from .core.cph_settings import base_name, root_dir
+from .core.cph_resources import read_resource
 from .core.cph_i18n import t as _i18n_t
 from .Highlight.test_interface import get_test_styles
 
@@ -112,7 +113,7 @@ class CphTestEditCommand(sublime_plugin.TextCommand):
 	def update_config(self):
 		v = self.view
 		styles = get_test_styles(v)
-		content = open(root_dir + '/Highlight/test_edit.html').read()
+		content = read_resource('Highlight/test_edit.html')
 
 		hint = _i18n_t('edit_input_hint') if self.mode == 'input' \
 			else _i18n_t('edit_answer_hint')

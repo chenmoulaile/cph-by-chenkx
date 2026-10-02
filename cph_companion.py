@@ -8,6 +8,8 @@ cph-by-chenkx - Competitive Companion 持久监听器
 - 一次启动后持续监听 (cph-ng 风格), 浏览器扩展可反复点击发送样例
 - 再次执行本命令只会切换目标文件, 不会重复起服务器/产生端口冲突
 - 收到样例后通过 cph_view_tester 正常走 Run 流程, 不会向源代码文件插入任何文字
+- 收到的样例与已有样例 **合并去重**（与导入流程语义一致），不再整体覆盖
+- 收到的 TL/ML 按源文件持久化，之后手动 Ctrl+Alt+B 也不会丢
 """
 
 import sublime
@@ -17,12 +19,16 @@ import json
 import threading
 
 from .core.cph_i18n import t
-from .core.cph_settings import save_tests
+from .core.cph_settings import load_all_tests, save_tests
 
+
+# Competitive Companion 官方字段单位: timeLimit = ms, memoryLimit = MB
+MAX_BODY_BYTES = 10 * 1024 * 1024
 
 _listener = {
     'server': None,      # HTTPServer instance
     'thread': None,      # serving thread
+    'port': None,
     'view_id': None,     # target source view id
     'lock': threading.Lock(),
 }
@@ -38,34 +44,122 @@ def _find_view(view_id):
     return None
 
 
+def _as_int(value):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def merge_tests(file_name, incoming):
+    """Merge freshly received samples with the stored ones (dedup)."""
+    existing = load_all_tests(file_name) or []
+    merged = []
+    seen = set()
+    for item in list(existing) + list(incoming):
+        key = (item.get('test', ''),
+               tuple(sorted(item.get('correct_answers', []))))
+        if key in seen:
+            continue
+        seen.add(key)
+        merged.append(item)
+    return merged
+
+
+def remember_limits(file_name, time_limit_ms, memory_limit_mb):
+    """Persist the problem limits per source file.
+
+    Without this the TL/ML received from the browser only applied to the
+    run it triggered, and a later manual Ctrl+Alt+B lost them again.
+    """
+    if not file_name or (time_limit_ms is None and memory_limit_mb is None):
+        return
+    try:
+        settings = sublime.load_settings('cph-by-chenkx.sublime-settings')
+        limits = settings.get('companion_limits') or {}
+        if not isinstance(limits, dict):
+            limits = {}
+        limits[file_name] = {
+            'time_limit_ms': time_limit_ms,
+            'memory_limit_mb': memory_limit_mb,
+        }
+        settings.set('companion_limits', limits)
+        sublime.save_settings('cph-by-chenkx.sublime-settings')
+    except Exception as e:
+        print('[cph-by-chenkx] failed to persist companion limits: %s' % e)
+
+
 class _CompanionHandler(BaseHTTPRequestHandler):
 
     def log_message(self, format, *args):
         pass
 
+    def _host_allowed(self):
+        """Block DNS-rebinding attempts from random web pages.
+
+        A malicious page could otherwise POST to localhost:12345 and make
+        the plugin write test files and compile/run code.
+        """
+        host = (self.headers.get('Host') or '').strip().lower()
+        if not host:
+            return True   # non-browser clients (curl/scripts) usually omit it
+        port = _listener.get('port') or ''
+        allowed = {
+            'localhost', '127.0.0.1', '[::1]',
+            'localhost:%s' % port, '127.0.0.1:%s' % port, '[::1]:%s' % port,
+        }
+        return host in allowed
+
+    def _deny(self, code=403):
+        try:
+            self.send_response(code)
+            self.end_headers()
+            self.wfile.write(b'forbidden')
+        except Exception:
+            pass
+
     def do_POST(self):
+        if not self._host_allowed():
+            self._deny()
+            return
+
         try:
             content_length = int(self.headers.get('Content-Length', 0))
-            body = self.rfile.read(content_length)
-            data = json.loads(body.decode('utf-8'))
-            tests = data.get('tests', [])
+        except (TypeError, ValueError):
+            content_length = 0
+        if content_length > MAX_BODY_BYTES:
+            self._deny(413)
+            return
+
+        try:
+            raw = self.rfile.read(content_length) if content_length else b''
+            data = json.loads(raw.decode('utf-8'))
+        except Exception:
+            self._deny(400)
+            return
+
+        # Everything below touches the Sublime API -> main thread only
+        sublime.set_timeout(lambda data=data: self._handle_on_main(data), 0)
+
+        try:
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b'ok')
+        except Exception:
+            pass
+        # 保持服务器运行, 不 shutdown —— 浏览器扩展可以反复点击
+
+    def _handle_on_main(self, data):
+        try:
+            tests = data.get('tests', []) or []
             problem_name = data.get('name', '')
+            time_limit_ms = _as_int(data.get('timeLimit'))
+            memory_limit_mb = _as_int(data.get('memoryLimit'))
 
-            time_limit_ms = data.get('timeLimit')
-            memory_limit_mb = data.get('memoryLimit')
-            try:
-                time_limit_ms = int(time_limit_ms) if time_limit_ms else None
-            except (TypeError, ValueError):
-                time_limit_ms = None
-            try:
-                memory_limit_mb = int(memory_limit_mb) // (1024 * 1024) if memory_limit_mb else None
-            except (TypeError, ValueError):
-                memory_limit_mb = None
-
-            ntests = []
+            incoming = []
             for test in tests:
                 output = (test.get('output') or '').strip()
-                ntests.append({
+                incoming.append({
                     'test': test.get('input', ''),
                     'correct_answers': [output] if output else [],
                 })
@@ -75,41 +169,28 @@ class _CompanionHandler(BaseHTTPRequestHandler):
                 sublime.status_message(t('listener_no_target'))
                 return
 
-            # 样例保存位置与插件其余部分完全一致 (save_tests)
-            if not save_tests(view.file_name(), ntests):
+            file_name = view.file_name()
+            merged = merge_tests(file_name, incoming)
+            if not save_tests(file_name, merged):
                 sublime.status_message(t('import_save_failed'))
                 return
-            print('[cph-by-chenkx] %s' % t('new_test_file_path', path=view.file_name()))
+            remember_limits(file_name, time_limit_ms, memory_limit_mb)
+            print('[cph-by-chenkx] %s' % t('new_test_file_path', path=file_name))
 
-            count = len(ntests)
+            count = len(incoming)
             tl = time_limit_ms if time_limit_ms is not None else '-'
             ml = memory_limit_mb if memory_limit_mb is not None else '-'
 
-            def _reload(view_id=_listener.get('view_id')):
-                target = _find_view(view_id)
-                if target is None:
-                    return
-                # 正常 Run 流程: 复用/创建 -run 视图并从磁盘读取刚保存的样例
-                target.run_command('cph_view_tester', {
-                    'action': 'make_opd',
-                    'time_limit_ms': time_limit_ms,
-                    'memory_limit_mb': memory_limit_mb,
-                })
-                sublime.status_message(t('tests_received',
-                                         name=problem_name or '?',
-                                         count=count, time=tl, memory=ml))
-
-            sublime.set_timeout(_reload, 0)
+            view.run_command('cph_view_tester', {
+                'action': 'make_opd',
+                'time_limit_ms': time_limit_ms,
+                'memory_limit_mb': memory_limit_mb,
+            })
+            sublime.status_message(t('tests_received',
+                                     name=problem_name or '?',
+                                     count=count, time=tl, memory=ml))
         except Exception as e:
             print(t('error_handling_post', error=str(e)))
-        finally:
-            try:
-                self.send_response(200)
-                self.end_headers()
-                self.wfile.write(b'ok')
-            except Exception:
-                pass
-            # 保持服务器运行, 不 shutdown —— 浏览器扩展可以反复点击
 
 
 def _start_listener(view):
@@ -123,14 +204,16 @@ def _start_listener(view):
         if _listener['server'] is not None:
             sublime.status_message(t('listener_retarget', file=file_name))
             return
+        port = 12345
         try:
             port = int(sublime.load_settings('cph-by-chenkx.sublime-settings')
                        .get('companion_port', 12345) or 12345)
             server = HTTPServer(('localhost', port), _CompanionHandler)
         except Exception as e:
-            sublime.status_message(t('listener_port_error', port=12345, error=str(e)))
+            sublime.status_message(t('listener_port_error', port=port, error=str(e)))
             return
         _listener['server'] = server
+        _listener['port'] = port
         thread = threading.Thread(target=server.serve_forever)
         thread.daemon = True
         _listener['thread'] = thread
@@ -148,6 +231,7 @@ def _stop_listener():
             return
         _listener['server'] = None
         _listener['thread'] = None
+        _listener['port'] = None
         _listener['view_id'] = None
     threading.Thread(target=server.shutdown, daemon=True).start()
     try:
@@ -178,6 +262,7 @@ def plugin_unloaded():
             server = _listener.get('server')
             _listener['server'] = None
             _listener['thread'] = None
+            _listener['port'] = None
     except Exception:
         return
     if server is not None:

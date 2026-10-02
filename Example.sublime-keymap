@@ -1,10 +1,8 @@
 [
-	{ "keys": ["tab"],
-		"command": "olympic_funcs",
-		"args": {"action": "insert_template"},
+	{ "keys": ["ctrl+alt+t"],
+		"command": "cph_insert_template",
 		"context": [
-			{"operand": "source.c++", "operator": "equal", "match_all": true, "key": "selector"},
-			{"key": "preceding_text", "operator": "regex_contains", "operand": "^(\\w+)$", "match_all": true}
+			{"operand": "source.c++", "operator": "equal", "match_all": true, "key": "selector"}
 		]
 	},
 

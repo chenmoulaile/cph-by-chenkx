@@ -132,9 +132,57 @@ def get_verdict_by_name(name):
     return VERDICTS_BY_NAME.get(name)
 
 
+def tokenize(s):
+    if not s:
+        return []
+    return s.split()
+
+
+def numbers_equal(a, b, tolerance):
+    """Compare two tokens with a numeric tolerance when both look numeric.
+
+    tolerance is used both as an absolute floor and as a relative factor:
+    |a - b| <= tolerance * max(1, |a|, |b|)
+    """
+    try:
+        fa = float(a)
+        fb = float(b)
+    except (TypeError, ValueError):
+        return None
+    if fa != fa and fb != fb:  # both NaN
+        return True
+    scale = max(1.0, abs(fa), abs(fb))
+    return abs(fa - fb) <= tolerance * scale
+
+
+def outputs_equal(actual, expected, float_tolerance=0):
+    """Compare program output with the expected answer.
+
+    float_tolerance <= 0 (default): exact token comparison.
+    float_tolerance > 0: numeric tokens are allowed to differ within
+    the given relative/absolute tolerance (floating point problems).
+    """
+    if actual is None or expected is None:
+        return False
+    a_tokens = tokenize(actual)
+    e_tokens = tokenize(expected)
+    if len(a_tokens) != len(e_tokens):
+        return False
+    if float_tolerance and float_tolerance > 0:
+        for a, e in zip(a_tokens, e_tokens):
+            if a == e:
+                continue
+            verdict_numeric = numbers_equal(a, e, float_tolerance)
+            if verdict_numeric is None or not verdict_numeric:
+                return False
+        return True
+    return a_tokens == e_tokens
+
+
 def get_verdict_by_code(rtcode, runtime, time_limit_ms, memory_limit_mb,
                         stderr, stdout, expected_output,
-                        ignore_error=True, ole_size=None, regard_pe_as_ac=False):
+                        ignore_error=True, ole_size=None, regard_pe_as_ac=False,
+                        memory_used_mb=None, float_tolerance=0):
     if rtcode is None:
         return get_verdict('unknown_error')
 
@@ -150,6 +198,10 @@ def get_verdict_by_code(rtcode, runtime, time_limit_ms, memory_limit_mb,
 
     if time_limit_ms and runtime and runtime > time_limit_ms:
         return get_verdict('time_limit_exceed')
+
+    # Real MLE: only reachable once the peak memory was actually measured
+    if memory_limit_mb and memory_used_mb and memory_used_mb > float(memory_limit_mb):
+        return get_verdict('memory_limit_exceed')
 
     if not expected_output or not expected_output.strip():
         # 没有设置正确答案时,不能判定为 AC,返回未评判
@@ -173,6 +225,11 @@ def get_verdict_by_code(rtcode, runtime, time_limit_ms, memory_limit_mb,
         if not s:
             return ''
         return ''.join(s.split())
+
+    if float_tolerance and float_tolerance > 0:
+        if not outputs_equal(stdout, expected_output, float_tolerance):
+            return get_verdict('wrong_answer')
+        return get_verdict('accepted')
 
     if compress(stdout) != compress(expected_output):
         return get_verdict('wrong_answer')

@@ -1,3 +1,104 @@
+# v1.4.0 更新内容（中文）
+
+本轮针对一份第三方代码审查报告（P0-P5）逐条核实并修复，同时补齐此前规划的功能。
+**重要**：这次修掉了"上线即炸"的打包问题与多个正确性缺陷。
+
+## P0 正确性修复
+
+- **打包后资源全部读不到（Package Control 上线阻塞项）**：全部 HTML/CSS 以前用真实
+  文件路径 `open()` 读取，装成 `.sublime-package`（zip）后会抛 FileNotFoundError，
+  卡片/详情/编译面板全部渲染失败。现已统一改用 `sublime.load_resource()`
+  （新增 `core/cph_resources.py`，带进程内缓存），并补齐 `Modules/`、`Highlight/`
+  的 `__init__.py`，让 zip 加载模式可靠工作
+- **MLE 从来不会触发**：`Test.set_memory()` 全项目零调用点、判定函数从未拿到实际
+  内存值。现新增 `Modules/memprobe.py`（零依赖）跨平台采样进程峰值内存：
+  Windows `GetProcessMemoryInfo`、Linux `/proc/<pid>/status VmHWM`、
+  macOS `getrusage`；内存超限真正判 `MLE`，卡片显示真实占用
+- **macOS 上杀不掉正在运行的程序**：原来只有 Linux 走 `killpg`，macOS 只杀 shell，
+  被评测程序在自己的进程组里继续跑。现 POSIX 全平台杀进程组，SIGTERM 后
+  0.6s 未退出升级 SIGKILL；Windows 改用 `taskkill /F /T` 杀进程树
+- **`load_session` 恢复失败时崩溃**：会话不存在时只插一条提示就继续执行，
+  随后 `path.splitext(None)` TypeError、`code_view_id`/`dbg_file` 未定义。
+  现已直接 `return`，并在 `__init__` 预置延迟属性
+- **`kill_proc`（Ctrl+X）无保护**：tester 为 None 或进程已被回收时直接抛异常。
+  现只在确实有进程运行时接管该键，否则回退默认行为
+- **"Run with clean tests" 清不干净**：只清传统路径 `foo.cpp__tests`，
+  `tests/foo.cpp__tests` 保留下来又被合并回来。现清空 `get_tests_paths()` 的全部路径
+- **未保存文件 / 不支持的语言点 Run 崩溃**：`create_opd` 增加文件与扩展名校验并
+  给出友好提示，`cph_view_tester` 增加 `is_enabled`（只约束 `make_opd`，
+  面板收缩等命令不受影响）
+- **`close_opds` 关掉所有运行面板**：多题工作流下开 B 题会连带销毁 A 题面板与会话。
+  现只关闭与当前源文件配对的那个，并修掉 `name()` 为 None 的崩溃
+
+## P0 数据与服务修复
+
+- **Competitive Companion 的 `memoryLimit` 单位错误**：官方该字段就是 MB，
+  代码却再除以 `1024*1024`，256MB 会变成 0。已修正
+- **Companion 服务安全加固**：校验 `Host` 头（挡 DNS rebinding）、
+  `Content-Length` 上限 10MB、所有 Sublime API 调用改到主线程
+- **Companion 改为合并去重**：不再整体覆盖已有测试点（此前第二次点浏览器图标
+  会丢掉之前 accept 的答案），与导入流程语义一致
+- **TL/ML 持久化**：按源文件记住浏览器发来的时限/内存限制，之后手动
+  Ctrl+Alt+B 不会再丢
+- **导入缺陷**：快速面板选"选择其他文件"以前什么都不发生（`on_done(None)`），
+  现在会打开路径输入框；文件夹批量导入的 `.in.txt` 以前只剥一层后缀导致
+  `1.out.txt` 永远配不上；候选文件排序确定；读取数据文件增加 GBK/UTF-16 回退
+  （中文 OJ 数据不再直接报错）
+
+## P2 性能修复
+
+- **逐字节读取导致的 O(n²) 输出**：`create_opd` 默认 `sync_out=True`，每个字节都
+  触发一次视图插入 + 字符串拼接。现默认关闭（新增 `sync_output` 设置供交互式
+  程序开启）
+- **主线程阻塞**：重新运行时在 UI 线程 `sleep` 最长 2 秒 → 改为异步轮询；
+  面板单测按钮里同步编译最长冻结 30 秒 → 改为异步编译
+- **资源重复读盘**：每张卡片每次刷新都重新 `open()` HTML 与 CSS →
+  改为 `load_resource` + 进程内缓存
+
+## 新功能
+
+- **编译缓存**：源文件（含 `extra_sources`）与编译命令未变时跳过编译
+  （`compile_cache_enabled`，强制重编见下）
+- **运行模式命令**：`Run all tests`（失败继续跑完）、
+  `Re-run failed tests only`（跳过已 AC 的测试点）、`Run (force recompile)`
+- **`stop_on_first_failure` 设置**：默认仍为第一个失败即停，可改为跑完全部
+- **浮点容差** `float_tolerance`：数字型 token 按 `|a-b| <= tol*max(1,|a|,|b|)`
+  比较，浮点题不再误判 WA
+- **输出体积上限** `max_output_bytes`（默认 8MB）：超出部分丢弃并提示，
+  防止疯狂输出卡死编辑器
+- **多文件编译**：`run_settings` 新增 `extra_sources` / `include_dirs`，
+  编译命令支持 `{extra_sources}` / `{include_dirs}` 占位符
+- **模板片段 `Ctrl+Alt+T`**：实现此前 README 宣传但一直不存在的功能
+  （原来 `Tab` 绑到从未定义的 `olympic_funcs`）。支持
+  `algorithms_base` 目录、`templates` 设置与内置片段（fastio / main / bf / debug / testlib）
+- **测试数据 I/O**：`Ctrl+Alt+V` 从剪贴板加测试点（`输入 --- 输出`）、
+  `Ctrl+Alt+C` / `Ctrl+Alt+Shift+C` 复制预期/实际输出、
+  `Ctrl+Alt+E` 导出 `1.in`/`1.out`
+- **面板汇总行**：`4/5 通过 · 首个失败 test 3 · 总用时 1.24s`（`show_summary_bar`）
+- **环境自检 `Ctrl+Alt+D`**：检查编译器是否在 PATH、端口占用、测试路径可写、
+  资源可加载、扩展名是否有对应配置
+- **对拍增强**：复用 `run_settings` 的编译/运行命令（不再硬编码
+  `g++ -std=c++11`，避免对拍二进制与真实评测不一致）、比较口径与判题一致
+  （`normalize_lines`）、发现反例自动保存为测试点、增加重入保护
+
+## 仓库卫生
+
+- `repository-cph-by-chenkx.json` 的 `sublime_text` 由 `*` 改为 `>=4095`
+  （minihtml 的 CSS 变量语法需要 ST4）
+- 删除失效的 `push_to_github.bat`（内含粘贴 token 流程、remote 指向错误的仓库）
+  与个人脚本 `tools/create_release.py`
+- 删除 8 个从未被引用的图标，只保留实际使用的 `arrow_left/right.png`
+- 新增 `.gitattributes`（开发文件不进入 `.sublime-package`）、
+  `messages.json` + `messages/install.txt`（安装后提示快捷键）
+- 清理死设置（`lint_*`、`cpp_complete_enabled`）与死代码
+  （`olympic_funcs` 绑定、`set_tests_status` 调用、`Tester.del_test/del_tests`、
+  调试器遗留 `eval(frames)` 与幽灵 action、无人引用的 `CppVarHighlight.py`）
+- 默认 `run_cmd` 改为正斜杠路径（Windows/Linux/macOS 通用），去掉无用的
+  `-debug` 参数；新增 `cph-by-chenkx (Windows).sublime-settings` 平台覆盖
+- 语言设置默认值与代码/文档对齐（`"language": "zh"`），改设置即时生效无需重启
+
+---
+
 # v1.2.2 更新内容（中文）
 
 ## 调整

@@ -8,6 +8,18 @@ import shlex
 import signal
 import sublime
 import tempfile
+import time
+
+from .memprobe import MemorySampler, bytes_to_mb
+
+
+def _hidden_startupinfo():
+	"""STARTUPINFO that keeps helper consoles from flashing on Windows."""
+	if sublime.platform() != 'windows':
+		return None
+	si = subprocess.STARTUPINFO()
+	si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+	return si
 
 
 class ProcessManager(object):
@@ -46,6 +58,11 @@ class ProcessManager(object):
 
 		self.time_limit_override = None
 		self.memory_limit_override = None
+
+		# Peak memory sampling (makes the MLE verdict real instead of dead code)
+		self.pid = None
+		self._mem_sampler = None
+		self.peak_memory_mb = None
 
 	def set_time_limit(self, time_ms):
 		self.time_limit_override = time_ms
@@ -111,6 +128,62 @@ class ProcessManager(object):
 	def has_var_view_api(self):
 		return False
 
+	def get_lang_entry(self):
+		"""Return the run_settings entry matching this file's extension."""
+		opt = self.run_settings
+		if not opt:
+			return None
+		file_ext = path.splitext(self.file)[1][1:]
+		for x in opt:
+			if file_ext in x['extensions']:
+				return x
+		return None
+
+	def get_extra_sources(self, entry=None):
+		"""Files matched by the 'extra_sources' glob patterns (multi-file
+		problems). Patterns are relative to the source file directory."""
+		if entry is None:
+			entry = self.get_lang_entry()
+		if not entry:
+			return []
+		import glob
+		src_dir = path.dirname(self.file)
+		found = []
+		main_abs = path.abspath(self.file)
+		for pat in (entry.get('extra_sources') or []):
+			pat = self.format_command(pat)
+			full = pat if path.isabs(pat) else path.join(src_dir, pat)
+			for f in sorted(glob.glob(full)):
+				if path.abspath(f) == main_abs:
+					continue
+				if f not in found:
+					found.append(f)
+		return found
+
+	def get_include_dirs(self, entry=None):
+		"""Extra -I directories from the 'include_dirs' setting."""
+		if entry is None:
+			entry = self.get_lang_entry()
+		if not entry:
+			return []
+		src_dir = path.dirname(self.file)
+		out = []
+		for d in (entry.get('include_dirs') or []):
+			d = self.format_command(d)
+			if not path.isabs(d):
+				d = path.join(src_dir, d)
+			out.append(d)
+		return out
+
+	def get_compile_inputs(self):
+		"""All files a compile depends on (for the compile cache)."""
+		files = [self.file]
+		try:
+			files.extend(self.get_extra_sources())
+		except Exception:
+			pass
+		return files
+
 	def get_compile_cmd(self):
 		opt = self.run_settings
 		file_ext = path.splitext(self.file)[1][1:]
@@ -118,7 +191,18 @@ class ProcessManager(object):
 			if file_ext in x['extensions']:
 				if x['compile_cmd'] is None:
 					return None
-				return self.format_command(x['compile_cmd'])
+				cmd = self.format_command(x['compile_cmd'])
+				# Multi-file support: {extra_sources} and {include_dirs} are
+				# optional placeholders; commands without them are untouched.
+				if '{extra_sources}' in cmd:
+					extra = self.get_extra_sources(x)
+					cmd = cmd.replace('{extra_sources}',
+						' '.join('"%s"' % f for f in extra))
+				if '{include_dirs}' in cmd:
+					inc = self.get_include_dirs(x)
+					cmd = cmd.replace('{include_dirs}',
+						' '.join('-I "%s"' % d for d in inc))
+				return cmd
 		else:
 			return -1
 
@@ -186,11 +270,14 @@ class ProcessManager(object):
 		PIPE = subprocess.PIPE
 		preexec_fn = None
 
+		creationflags = 0
 		if sublime.platform() == 'windows':
 			use_shell = False
-			startupinfo = subprocess.STARTUPINFO()
-			startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+			startupinfo = _hidden_startupinfo()
 			preexec_fn = None
+			# Own process group so the shell + program can be killed as a
+			# tree instead of leaving the program running (see terminate()).
+			creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
 		else:
 			startupinfo = None
 			use_shell = True
@@ -212,8 +299,38 @@ class ProcessManager(object):
 			cwd=os.path.split(self.file)[0],
 			startupinfo=startupinfo,
 			preexec_fn=preexec_fn,
-			universal_newlines=True
+			creationflags=creationflags,
+			# Explicit UTF-8: the default (locale, e.g. cp936 on Simplified
+			# Chinese Windows) corrupted any non-ASCII test data / output.
+			encoding='utf-8',
+			errors='replace'
 		)
+
+		# Start sampling peak memory while the process is alive: /proc/<pid>
+		# and the Windows handle both disappear once it exits.
+		self.peak_memory_mb = None
+		try:
+			self.pid = self.process.pid
+			self._mem_sampler = MemorySampler(self.pid)
+			self._mem_sampler.start()
+		except Exception:
+			self._mem_sampler = None
+
+	def finish_memory_sampling(self):
+		"""Stop the sampler and return the peak memory usage in MB."""
+		if self._mem_sampler is None:
+			return self.peak_memory_mb
+		try:
+			peak = self._mem_sampler.stop()
+			if peak:
+				self.peak_memory_mb = bytes_to_mb(peak)
+		except Exception:
+			pass
+		self._mem_sampler = None
+		return self.peak_memory_mb
+
+	def get_peak_memory_mb(self):
+		return self.peak_memory_mb
 
 	def insert(self, s):
 		if self.process.poll() is None:
@@ -240,10 +357,46 @@ class ProcessManager(object):
 
 	def terminate(self):
 		self.terminated = True
-		if sublime.platform() == 'linux':
-			os.killpg(os.getpgid(self.process.pid), signal.SIGTERM)
+		pid = getattr(self.process, 'pid', None)
+		if pid is None:
+			self.is_run = False
+			return
+
+		if sublime.platform() == 'windows':
+			# The evaluated program can be a child of the shell, so a plain
+			# kill(pid) would leave it running: kill the whole tree.
+			try:
+				subprocess.Popen(
+					['taskkill', '/F', '/T', '/PID', str(pid)],
+					stdout=subprocess.DEVNULL,
+					stderr=subprocess.DEVNULL,
+					startupinfo=_hidden_startupinfo()
+				).wait(timeout=3)
+			except Exception:
+				try:
+					self.process.kill()
+				except Exception:
+					pass
 		else:
-			self.process.kill()
+			# linux AND osx: the child leads its own session (setsid), so
+			# killing the process group is the only way to reach the real
+			# program. Escalate to SIGKILL if SIGTERM is ignored.
+			for sig, grace in ((signal.SIGTERM, 0.6), (signal.SIGKILL, 0.0)):
+				try:
+					os.killpg(os.getpgid(pid), sig)
+				except Exception:
+					try:
+						self.process.kill()
+					except Exception:
+						pass
+				if grace:
+					waited = 0.0
+					while self.process.poll() is None and waited < grace:
+						time.sleep(0.05)
+						waited += 0.05
+					if self.process.poll() is not None:
+						break
+
 		# The process is being killed: clear the running marker right here
 		# so a follow-up run_file() never trips over the stale flag even
 		# if the listener thread's __on_stop has not fired yet.

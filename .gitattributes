@@ -5,4 +5,7 @@
 
 .gitattributes export-ignore
 .gitignore export-ignore
+.workbuddy export-ignore
 ScreenShots/ export-ignore
+PC_SUBMISSION_NOTES.md export-ignore
+RELEASE_NOTES_CN.md export-ignore

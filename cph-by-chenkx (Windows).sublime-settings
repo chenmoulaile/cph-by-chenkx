@@ -1,0 +1,36 @@
+{
+	// ============ Windows 平台覆盖 ============
+	// Sublime 会把本文件叠加在 cph-by-chenkx.sublime-settings 之上。
+	// 列表类型的设置（run_settings）是整体替换，所以要写完整。
+	// 只有需要 Windows 专属写法时才改这里：默认设置里的正斜杠写法
+	// 在 Windows 上同样可用，因此这里保持与默认一致的反斜杠版本，
+	// 方便你按习惯修改。
+	"run_settings": [
+		{
+			"name": "C++",
+			"extensions": ["cpp"],
+			"compile_cmd": "g++ \"{source_file}\" {extra_sources} {include_dirs} -std=c++23 -o \"{file_name}.exe\" -DLOCAL",
+			"run_cmd": "\"{source_file_dir}\\{file_name}.exe\" {args}",
+			"time_limit_ms": 2000,
+			"memory_limit_mb": 256,
+			"extra_sources": [],
+			"include_dirs": []
+		},
+		{
+			"name": "Python",
+			"extensions": ["py"],
+			"compile_cmd": null,
+			"run_cmd": "python \"{source_file}\"",
+			"time_limit_ms": 5000,
+			"memory_limit_mb": 256
+		},
+		{
+			"name": "Java",
+			"extensions": ["java"],
+			"compile_cmd": "javac -J-Dfile.encoding=utf8 -d \"{source_file_dir}\" \"{source_file}\"",
+			"run_cmd": "java -classpath \"{source_file_dir}\" \"{file_name}\"",
+			"time_limit_ms": 5000,
+			"memory_limit_mb": 256
+		}
+	]
+}

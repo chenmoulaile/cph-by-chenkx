@@ -445,6 +445,135 @@ STRINGS = {
         'zh': '选择其他文件...',
         'en': 'Choose another file...',
     },
+
+    'compile_cached': {
+        'zh': '编译缓存命中，已跳过编译',
+        'en': 'compile skipped (cache hit)',
+    },
+    'output_truncated_warn': {
+        'zh': '输出过大，已截断显示',
+        'en': 'output too large, truncated',
+    },
+    'summary_passed': {
+        'zh': '{passed}/{total} 通过',
+        'en': '{passed}/{total} passed',
+    },
+    'summary_first_fail': {
+        'zh': '首个失败 test {id}',
+        'en': 'first failure: test {id}',
+    },
+    'summary_total_time': {
+        'zh': '总用时 {time}s',
+        'en': 'total {time}s',
+    },
+    'no_running_process': {
+        'zh': '当前没有正在运行的程序',
+        'en': 'no running process',
+    },
+    'unsupported_language': {
+        'zh': '没有为 .{ext} 配置运行方式（见 run_settings）',
+        'en': 'no run_settings entry for .{ext}',
+    },
+    'template_no_keyword': {
+        'zh': '请把光标放在关键字后（如 fastio）再按快捷键',
+        'en': 'put the cursor after a keyword (e.g. fastio)',
+    },
+    'template_not_found': {
+        'zh': '没有名为 {name} 的模板（可用 algorithms_base 或 templates 设置）',
+        'en': 'no template named {name} (see algorithms_base / templates)',
+    },
+    'clipboard_empty': {
+        'zh': '剪贴板为空',
+        'en': 'clipboard is empty',
+    },
+    'clipboard_test_added': {
+        'zh': '已从剪贴板新增测试点，共 {total} 个',
+        'en': 'added test from clipboard, {total} total',
+    },
+    'no_tests': {
+        'zh': '当前没有测试数据',
+        'en': 'no test data',
+    },
+    'nothing_to_copy': {
+        'zh': '这一项是空的，没有内容可复制',
+        'en': 'nothing to copy',
+    },
+    'copied_test_part': {
+        'zh': '已复制 test {id} 的内容到剪贴板',
+        'en': 'copied test {id} to clipboard',
+    },
+    'export_to_dir': {
+        'zh': '导出目录',
+        'en': 'export folder',
+    },
+    'export_done': {
+        'zh': '已导出 {count} 个测试点到 {dir}',
+        'en': 'exported {count} tests to {dir}',
+    },
+    'stress_counterexample_added': {
+        'zh': '已把对拍反例保存为测试点（共 {total} 个）',
+        'en': 'saved the counterexample as a test ({total} total)',
+    },
+    'doctor_title': {
+        'zh': 'cph-by-chenkx 环境自检',
+        'en': 'cph-by-chenkx environment check',
+    },
+    'doctor_no_run_settings': {
+        'zh': 'run_settings 为空，先去设置里配置语言',
+        'en': 'run_settings is empty - configure a language first',
+    },
+    'doctor_languages': {
+        'zh': '语言配置',
+        'en': 'language entry',
+    },
+    'doctor_compile': {
+        'zh': '编译命令',
+        'en': 'compile',
+    },
+    'doctor_run': {
+        'zh': '运行命令',
+        'en': 'run',
+    },
+    'doctor_fix_path': {
+        'zh': '找不到 {name}，请确认它在 PATH 中或改用绝对路径',
+        'en': '{name} not found - add it to PATH or use an absolute path',
+    },
+    'doctor_port': {
+        'zh': 'Companion 端口',
+        'en': 'Companion port',
+    },
+    'doctor_port_busy': {
+        'zh': '端口被占用：监听器可能已在运行，或换 companion_port 设置',
+        'en': 'port busy: a listener may already be running, or change companion_port',
+    },
+    'doctor_tests_path': {
+        'zh': '测试数据路径',
+        'en': 'tests path',
+    },
+    'doctor_extension': {
+        'zh': '当前文件扩展名',
+        'en': 'current file extension',
+    },
+    'doctor_no_file': {
+        'zh': '当前视图没有文件（无法检查测试路径）',
+        'en': 'current view has no file (tests path not checked)',
+    },
+    'doctor_resources': {
+        'zh': 'HTML/CSS 资源加载',
+        'en': 'HTML/CSS resources',
+    },
+    'doctor_settings': {
+        'zh': '设置文件可解析',
+        'en': 'settings file readable',
+    },
+    'stress_already_running': {
+        'zh': '对拍已经在运行中',
+        'en': 'a stress test is already running',
+    },
+    'doctor_footer': {
+        'zh': '提示：把结果贴到 issue 里可以更快定位问题。',
+        'en': 'tip: paste this report into an issue to speed up diagnosis.',
+    },
 }
 
 

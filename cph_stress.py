@@ -5,13 +5,16 @@ cph-by-chenkx - 对拍 (Stress Test) 功能
 import sublime
 import sublime_plugin
 import os
+import re
+import shlex
 import subprocess
 import threading
 import time
 from os import path
 
-from .core.cph_settings import base_name, get_settings, root_dir
+from .core.cph_settings import base_name, get_settings, root_dir, load_all_tests, save_tests
 from .core.cph_i18n import t
+from .core.cph_verdict import normalize_lines
 from .Highlight.test_interface import get_test_styles
 
 
@@ -38,6 +41,12 @@ class CphStartStressTestCommand(sublime_plugin.TextCommand):
         settings = sublime.load_settings('cph-by-chenkx.sublime-settings')
         saved_std = settings.get('stress_std_file', '')
         saved_gen = settings.get('stress_generator_file', '')
+
+        # Re-entrancy guard: a second Start used to silently overwrite the
+        # state of the loop that is still running.
+        if _stress_state.get('running'):
+            sublime.status_message('cph-by-chenkx: ' + t('stress_already_running'))
+            return
 
         src_dir = os.path.dirname(user_file)
         default_std = saved_std if saved_std and os.path.exists(saved_std) else \
@@ -155,29 +164,69 @@ class CphStopStressTestCommand(sublime_plugin.TextCommand):
             sublime.status_message('cph-by-chenkx: no stress test running')
 
 
-def _compile_program(file, time_limit=30):
+def _hidden_startupinfo():
+    if sublime.platform() != 'windows':
+        return None
+    startupinfo = subprocess.STARTUPINFO()
+    startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    return startupinfo
+
+
+def _lang_entry(file):
+    """run_settings entry matching this file, or None."""
+    run_settings = sublime.load_settings('cph-by-chenkx.sublime-settings') \
+        .get('run_settings') or []
+    ext = os.path.splitext(file)[1][1:]
+    for entry in run_settings:
+        if ext in (entry.get('extensions') or []):
+            return entry
+    return None
+
+
+def _format_cmd(template, file, drop_args=True):
     src_dir = os.path.dirname(file)
     base = os.path.splitext(os.path.basename(file))[0]
-    exe_path = os.path.join(src_dir, base + ('.exe' if sublime.platform() == 'windows' else ''))
+    cmd = template or ''
+    # optional multi-file placeholders are meaningless for stress programs
+    cmd = cmd.replace('{extra_sources}', '').replace('{include_dirs}', '')
+    if drop_args:
+        cmd = cmd.replace('{args}', '')
+    return cmd.format(source_file=file, source_file_dir=src_dir, file_name=base, args='')
 
-    ext = os.path.splitext(file)[1].lower()
-    if ext in ('.cpp', '.cc', '.cxx', '.c'):
-        cmd = ['g++', file, '-std=c++11', '-O2', '-o', exe_path]
-    elif ext == '.py':
-        return True, file
-    else:
+
+def _compile_program(file, time_limit=30):
+    """Build a stress-test program using the SAME config as the main flow.
+
+    Previously this was hardcoded to `g++ -std=c++11 -O2`, so the stress
+    binary could differ from what the judge-like runner actually builds.
+    """
+    entry = _lang_entry(file)
+    if entry is None:
+        print('[cph-by-chenkx] stress: no run_settings entry for %s' % file)
         return False, None
 
-    startupinfo = None
-    if sublime.platform() == 'windows':
-        startupinfo = subprocess.STARTUPINFO()
-        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    src_dir = os.path.dirname(file)
+    base = os.path.splitext(os.path.basename(file))[0]
+    template = entry.get('compile_cmd')
+    if not template:
+        # interpreted language (python/java handled by its own run_cmd)
+        return True, file
+
+    cmd = _format_cmd(template, file)
+    m = re.search(r'-o\s+"?([^"\s]+)"?', cmd)
+    if m:
+        out_name = m.group(1)
+        exe_path = out_name if os.path.isabs(out_name) else os.path.join(src_dir, out_name)
+    else:
+        exe_path = os.path.join(
+            src_dir, base + ('.exe' if sublime.platform() == 'windows' else ''))
+
     try:
         result = subprocess.run(
-            cmd, cwd=src_dir,
+            cmd, cwd=src_dir, shell=True,
             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             timeout=time_limit, text=True,
-            startupinfo=startupinfo
+            startupinfo=_hidden_startupinfo()
         )
         if result.returncode != 0:
             print('[cph-by-chenkx] Compile error in %s:\n%s' % (file, result.stderr))
@@ -188,19 +237,28 @@ def _compile_program(file, time_limit=30):
         return False, None
 
 
-def _run_program(exe_path, input_data, cwd=None, time_limit=2.0):
+def _program_argv(file):
+    """Command line to run a program, taken from run_settings.run_cmd."""
+    entry = _lang_entry(file)
+    if entry is None:
+        return None
+    run_cmd = entry.get('run_cmd')
+    if not run_cmd:
+        return None
+    cmd = _format_cmd(run_cmd, file)
+    try:
+        return shlex.split(cmd, posix=(sublime.platform() != 'windows'))
+    except Exception:
+        return [cmd]
+
+
+def _run_program(program, input_data, cwd=None, time_limit=2.0):
+    """Run a program with the run_settings command; program is a source file."""
+    argv = _program_argv(program) if not isinstance(program, list) else program
+    if not argv:
+        return (-1, '', 'no run command configured', False)
     if cwd is None:
-        cwd = os.path.dirname(exe_path)
-    # Python sources can't be executed directly on Windows; go through
-    # the interpreter instead
-    if exe_path.endswith('.py'):
-        argv = ['python', exe_path]
-    else:
-        argv = [exe_path]
-    startupinfo = None
-    if sublime.platform() == 'windows':
-        startupinfo = subprocess.STARTUPINFO()
-        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        cwd = os.path.dirname(program if isinstance(program, str) else argv[0])
     try:
         result = subprocess.run(
             argv,
@@ -210,7 +268,9 @@ def _run_program(exe_path, input_data, cwd=None, time_limit=2.0):
             stderr=subprocess.PIPE,
             timeout=time_limit,
             text=True,
-            startupinfo=startupinfo
+            encoding='utf-8',
+            errors='replace',
+            startupinfo=_hidden_startupinfo()
         )
         return (result.returncode, result.stdout, result.stderr, False)
     except subprocess.TimeoutExpired:
@@ -263,28 +323,32 @@ def _run_stress_loop(view, user_file, std_file, gen_file, time_limit, max_rounds
 
             _stress_state['current_round'] = round_count
 
-            ret, inp, _, _ = _run_program(gen_exe, '', time_limit=time_limit)
+            ret, inp, _, _ = _run_program(gen_file, '', time_limit=time_limit)
             if ret != 0:
                 sublime.set_timeout(
-                    lambda: _append_stress('[cph-by-chenkx] Generator failed at round %d\n' % round_count), 0)
+                    lambda r=round_count: _append_stress(
+                        '[cph-by-chenkx] Generator failed at round %d\n' % r), 0)
                 break
 
-            ret1, user_out, _, tle1 = _run_program(user_exe, inp, time_limit=time_limit)
+            ret1, user_out, _, tle1 = _run_program(user_file, inp, time_limit=time_limit)
             if tle1:
                 sublime.set_timeout(
-                    lambda: _append_stress('[cph-by-chenkx] Round %d: user program TLE\n' % round_count), 0)
+                    lambda r=round_count: _append_stress(
+                        '[cph-by-chenkx] Round %d: user program TLE\n' % r), 0)
                 continue
 
-            ret2, std_out, _, tle2 = _run_program(std_exe, inp, time_limit=time_limit)
+            ret2, std_out, _, tle2 = _run_program(std_file, inp, time_limit=time_limit)
             if tle2:
                 sublime.set_timeout(
-                    lambda: _append_stress('[cph-by-chenkx] Round %d: std program TLE\n' % round_count), 0)
+                    lambda r=round_count: _append_stress(
+                        '[cph-by-chenkx] Round %d: std program TLE\n' % r), 0)
                 continue
 
-            user_norm = user_out.rstrip('\n').rstrip()
-            std_norm = std_out.rstrip('\n').rstrip()
+            # Same comparison rules as the judge-like runner (ignore trailing
+            # whitespace per line and trailing blank lines).
+            is_diff = normalize_lines(user_out) != normalize_lines(std_out)
 
-            if user_norm != std_norm:
+            if is_diff:
                 _stress_state['last_diff'] = {
                     'round': round_count,
                     'input': inp,
@@ -350,5 +414,31 @@ def _on_stress_failed(round_count, inp, user_out, std_out):
             text += 'Line %d:\n' % (i + 1)
             text += '  user: %s\n' % u
             text += '  std:  %s\n' % s
+
+    # Save the counterexample as a permanent test case: finding a
+    # counterexample is only useful if it comes back as a regression test.
+    try:
+        if get_settings().get('stress_save_counterexample', True):
+            user_file = _stress_state.get('user_file')
+            if user_file:
+                existing = load_all_tests(user_file) or []
+                answer = std_out.strip()
+                merged = []
+                seen = set()
+                for item in list(existing) + [{
+                        'test': inp,
+                        'correct_answers': [answer] if answer else []}]:
+                    key = (item.get('test', ''),
+                           tuple(sorted(item.get('correct_answers', []))))
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    merged.append(item)
+                if save_tests(user_file, merged):
+                    text += '\n[cph-by-chenkx] ' + \
+                        t('stress_counterexample_added', total=len(merged)) + '\n'
+    except Exception as e:
+        print('[cph-by-chenkx] failed to save counterexample: %s' % e)
+
     _append_stress(text)
     _stop_stress()

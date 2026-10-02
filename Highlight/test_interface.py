@@ -1,12 +1,14 @@
 import sublime
-from os import path
 
-base = path.dirname(__file__)
+from ..core.cph_resources import read_resource
+
 
 def get_test_styles(view):
-	if view.settings().get('theme')	== 'Spacegray.sublime-theme':
-		return open(path.join(base, 'test_styles_spacegray.css')).read()
-	elif view.settings().get('theme') == 'Spacegray Light.sublime-theme':
-		return open(path.join(base, 'test_styles_spacegraylight.css')).read()
-	else:
-		return open(path.join(base, 'test_styles.css')).read()
+	"""CSS for the test cards. Read through the zip-safe resource loader
+	(and cached) instead of opening files on disk every refresh."""
+	theme = view.settings().get('theme')
+	if theme == 'Spacegray.sublime-theme':
+		return read_resource('Highlight/test_styles_spacegray.css')
+	elif theme == 'Spacegray Light.sublime-theme':
+		return read_resource('Highlight/test_styles_spacegraylight.css')
+	return read_resource('Highlight/test_styles.css')
