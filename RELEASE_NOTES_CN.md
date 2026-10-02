@@ -1,3 +1,16 @@
+# v1.4.3 更新内容（中文）
+
+- **回退 v1.4.2 对编辑视图卡片排版的改动**：把按钮条拆成两行后观感反而变差，
+  现恢复为 v1.4.1 / FastOlympicCoding 的原版单行卡片（`test N` + `save` +
+  `delete` + 提示文案在同一行）
+- `-edit` 与 `-answer` 两个视图**共用同一个卡片模板**，只是卡片上的提示文案
+  不同（输入：`saves input + answer`；答案：`expected answer`）—— 这与 FOC 的做法
+  一致
+- 已核对：`test_edit.py` 与 `Highlight/test_edit.html` 现在与 v1.4.1 标签
+  逐字节一致（diff 0 行）
+
+---
+
 # v1.4.2 更新内容（中文）
 
 第二轮第三方审查（P0-P2）的逐条修复。**P0 三条都是我上一轮引入的回归**，抱歉。
