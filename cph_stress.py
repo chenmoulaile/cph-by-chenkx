@@ -128,7 +128,7 @@ class CphStartStressTestCommand(sublime_plugin.TextCommand):
 
         t_thread = threading.Thread(
             target=_run_stress_loop,
-            args=(self, user_file, std_file, gen_file, time_limit, max_rounds)
+            args=(user_file, std_file, gen_file, time_limit, max_rounds)
         )
         t_thread.daemon = True
         t_thread.start()
@@ -306,7 +306,7 @@ def _run_program(program, input_data, cwd=None, time_limit=2.0):
         return (-1, '', str(e), False)
 
 
-def _run_stress_loop(view, user_file, std_file, gen_file, time_limit, max_rounds):
+def _run_stress_loop(user_file, std_file, gen_file, time_limit, max_rounds):
     try:
         sublime.set_timeout(
             lambda: _append_stress('[cph-by-chenkx] Compiling programs...\n'), 0)

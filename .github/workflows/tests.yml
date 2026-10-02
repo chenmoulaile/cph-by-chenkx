@@ -1,0 +1,29 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.8', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Python 3.3 host compatibility guard
+        run: python tests/check_py33.py
+
+      - name: Regression tests (no Sublime required)
+        run: python tests/run_tests.py
+
+      - name: Byte-compile every module
+        run: python -m compileall -q .

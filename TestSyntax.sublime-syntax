@@ -6,13 +6,8 @@ scope: source.TestSyntax
 
 contexts:
   main:
-    - match: Test
-      scope: storage.type.OPD
-    - match: "(} )(out)( {)"
-      captures: 
-        2: storage.type.OPD
-    - match: (} )(rtcode)
-      captures:
-        2: storage.type.OPD
-    - match: \d+
+    # The old 'Test N {' / '} rtcode' markers are no longer written into the
+    # buffer (they came from the FOC-era format), so only the numeric
+    # highlight is kept.
+    - match: \b\d+\b
       scope: constant.numeric.OPD

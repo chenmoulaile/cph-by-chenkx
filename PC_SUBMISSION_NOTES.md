@@ -1,8 +1,50 @@
 # cph-by-chenkx — Package Control Submission Notes
 
-Package version: v1.4.0
+Package version: v1.4.2
 Repository: https://github.com/chenmoulaile/cph-by-chenkx
 Channel entry file: `repository/c/cph-by-chenkx.json` (see snippet at the bottom)
+
+## v1.4.2 notes
+
+- Fixed three regressions from the previous round: the "re-run failed tests"
+  chain raised `IndexError` when it skipped accepted tests (the iterator was
+  padded a single slot), the `sync_output` setting was unreachable because
+  the command signature defaulted to `sync_out=True`, and the run summary
+  phantom ended up inside a test after expanding a folded AC test.
+- The edit/answer panel bar is now split over two lines (`test N` as a
+  heading, buttons below it).
+- `#include "..."` headers (depth 3) are part of the compile cache key, so
+  editing a header triggers a rebuild instead of running a stale binary.
+- POSIX only spawns through a shell when the command really needs one
+  (pipes/globs/`&&`); otherwise `shlex.split` + `shell=False`, so the memory
+  sampler measures the program and `killpg` reaches it.
+- Compiler diagnostics decode as UTF-8 and fall back to the locale encoding
+  (Chinese g++ messages were garbled).
+- i18n: the HTML templates now use the `next_label` / `stop_label` /
+  `test_label` / `time_label` / `type_label` placeholders the code always
+  passed; the Chinese UI no longer shows those words in English.
+- Dead code removed: `LayoutListener.move_syncer`, empty `isEnabled`,
+  unused `REGION_*_PROP` tables, `BEGIN/OUT/END_TEST_STRING`, the obsolete
+  `Test N {` / `} rtcode` highlight rules, the whole `use_debugger` plumbing,
+  `ProcessManager.get_path/has_var_view_api/new_test/communicate`.
+- `CphViewTesterCommand` state is per view instead of class attributes.
+- **Added `tests/` and CI**: `tests/run_tests.py` (26 checks, fake `sublime`
+  module, no third-party deps) and `tests/check_py33.py` (Python 3.3 guard
+  that already proved it catches the `Popen(encoding=...)` regression), both
+  run by `.github/workflows/tests.yml` on push/PR. `tests/`, `.github/`,
+  `.workbuddy/` and the dev documents are `export-ignore`d, so they stay out
+  of the `.sublime-package`.
+
+## v1.4.1 notes (packaging-relevant)
+
+- Sublime's plugin host is **Python 3.3**: `Popen(encoding=..., errors=...)`
+  (3.6/3.7+) crashed every run. Subprocesses now use binary pipes with an
+  incremental UTF-8 decoder, and `subprocess.run` was removed from the stress
+  test (it does not exist before 3.5).
+- Process state self-heals after a failed `Popen`
+  (`is_run` / `is_stopped` / `terminate` / `insert`).
+- No background writes to the user's settings file: the limits received from
+  Competitive Companion are kept in memory.
 
 ## v1.4.0 notes (packaging-critical)
 
@@ -15,21 +57,15 @@ Channel entry file: `repository/c/cph-by-chenkx.json` (see snippet at the bottom
   load reliably from a zip (no reliance on implicit namespace packages).
 - `messages.json` + `messages/install.txt` added (PC install message with the
   key bindings).
-- `.gitattributes` added: dev-only files (`PC_SUBMISSION_NOTES.md`,
-  `RELEASE_NOTES_CN.md`, `.workbuddy`, `TestSyntax.sublime-settings`, …) are
-  `export-ignore`d and stay out of the package.
+- `.gitattributes` added: dev-only files are `export-ignore`d.
 - Channel metadata uses `"sublime_text": ">=4095"`: the minihtml CSS uses ST4
   CSS variables (`var(--foreground)`, `color(... alpha(...))`).
 - Root `__init__.py` remains comment-only; `plugin_init.py` is the entry point;
   no `package-metadata.json`, no `.no-sublime-package`.
-- Dead code removed: `olympic_funcs` key binding (command never existed),
-  `set_tests_status` calls, `Tester.del_test/del_tests`, the whole debugger
-  leftovers (`show_frames` with `eval()`, non-existent `redirect_frames` /
-  `select_frame` actions), and the unreferenced `Highlight/CppVarHighlight.py`.
-- Default `run_cmd` now uses forward slashes (works on all three platforms) and
-  no longer passes the meaningless `-debug` argument; a
-  `cph-by-chenkx (Windows).sublime-settings` platform override is provided for
-  users who prefer backslash paths.
+- Memory limit verdicts are real: peak memory is sampled per platform
+  (`Modules/memprobe.py`) instead of being dead configuration.
+- Process termination kills the whole process tree on POSIX (`killpg`, SIGTERM
+  → SIGKILL) and on Windows (`taskkill /F /T`).
 
 ## v1.2.0 notes
 
@@ -76,7 +112,7 @@ Channel entry file: `repository/c/cph-by-chenkx.json` (see snippet at the bottom
 16. `ProcessManager.run_file` `is_run` guard fixed; `compile()` `stdin=None`
     (deadlock removed).
 
-## Package Control Review Checklist (verified for v1.4.0)
+## Package Control Review Checklist (verified for v1.4.2)
 
 - [x] No root-level plugin imports (`__init__.py` comment-only; `plugin_init.py` entry point).
 - [x] Key bindings carry `context` arrays.
@@ -89,6 +125,10 @@ Channel entry file: `repository/c/cph-by-chenkx.json` (see snippet at the bottom
 - [x] Commands and key bindings are listed in the menu and the command palette,
       and open settings in a split view.
 - [x] No package reload required for settings changes (`Settings.add_on_change`).
+- [x] Plugin code runs on the default Python 3.3 host (guarded by
+      `tests/check_py33.py`).
+- [x] No writes to the user's settings file from background callbacks.
+- [x] `tests/`, `.github/` and dev documents are `export-ignore`d.
 - [x] `README.md` and `LICENSE` included for users.
 
 ## Channel entry (repository/c/cph-by-chenkx.json)

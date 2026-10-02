@@ -18,7 +18,6 @@ from .core.cph_settings import load_all_tests, save_tests
 
 
 SEPARATOR = re.compile(r'^[ \t]*[-=]{3,}[ \t]*$', re.M)
-TEST_TITLE = re.compile(r'^Test (?P<id>\d+) \{')
 
 
 def _resolve_source_file(view):
@@ -36,17 +35,8 @@ def _resolve_source_file(view):
 	return None
 
 
-def _test_index_at_cursor(view):
-	"""Index of the test whose 'Test N {' title is above the cursor."""
-	if not len(view.sel()):
-		return None
-	row = view.rowcol(view.sel()[0].begin())[0]
-	for r in range(row, -1, -1):
-		line = view.substr(view.line(view.text_point(r, 0))).strip()
-		m = TEST_TITLE.match(line)
-		if m:
-			return int(m.group('id'))
-	return None
+def _is_run_view(view):
+	return view.get_status('opd_info') == 'opdebugger-file'
 
 
 def _refresh_panel(view):
@@ -114,37 +104,45 @@ class CphAddTestFromClipboardCommand(sublime_plugin.TextCommand):
 class _CopyTestPartCommand(sublime_plugin.TextCommand):
 	"""Base: copy one part of the selected test to the clipboard."""
 
-	def part(self, test):
-		raise NotImplementedError
+	part_name = 'input'
 
 	def run(self, edit):
 		view = self.view
+
+		# Inside the -run panel the live test model knows exactly which test
+		# the cursor is in (and holds the actual output of the last run).
+		if _is_run_view(view):
+			view.run_command('cph_test_manager', {
+				'action': 'copy_test_part', 'part': self.part_name})
+			return
+
+		# Otherwise fall back to the stored tests of the source file.
 		file_name = _resolve_source_file(view)
 		if not file_name:
 			sublime.status_message(t('save_file_first'))
 			return
-
 		tests = load_all_tests(file_name) or []
 		if not tests:
 			sublime.status_message(t('no_tests'))
 			return
-
-		index = _test_index_at_cursor(view)
-		if index is None or index >= len(tests):
-			index = len(tests) - 1
-		value = self.part(tests[index]) or ''
-		if not value:
+		value = (self.part(tests[len(tests) - 1]) or '').rstrip('\n')
+		if not value.strip():
 			sublime.status_message(t('nothing_to_copy'))
 			return
 		sublime.set_clipboard(value)
-		sublime.status_message(t('copied_test_part', id=index + 1))
+		sublime.status_message(t('copied_test_part', id=len(tests)))
+
+	def part(self, test):
+		raise NotImplementedError
 
 	def is_enabled(self):
-		return bool(_resolve_source_file(self.view))
+		return _is_run_view(self.view) or bool(_resolve_source_file(self.view))
 
 
 class CphCopyTestInputCommand(_CopyTestPartCommand):
 	"""Copy the input of a test."""
+
+	part_name = 'input'
 
 	def part(self, test):
 		return test.get('test', '')
@@ -153,13 +151,17 @@ class CphCopyTestInputCommand(_CopyTestPartCommand):
 class CphCopyTestExpectedCommand(_CopyTestPartCommand):
 	"""Copy the expected answer of a test."""
 
+	part_name = 'expected'
+
 	def part(self, test):
 		answers = test.get('correct_answers') or []
 		return answers[0] if answers else ''
 
 
 class CphCopyTestActualCommand(_CopyTestPartCommand):
-	"""Copy the actual output of the most recent run."""
+	"""Copy the actual output of the last run (run panel only)."""
+
+	part_name = 'actual'
 
 	def part(self, test):
 		return test.get('stdout', '')

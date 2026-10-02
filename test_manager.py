@@ -30,6 +30,34 @@ from .core.cph_i18n import t, set_lang, get_lang, LANG_ZH, LANG_EN
 _compile_cache = {}
 
 
+def _iter_local_includes(path, seen=None, depth=3):
+	"""Local headers reachable through `#include "..."` (best effort).
+
+	Without this, editing a header did not invalidate the compile cache and
+	the plugin happily ran a stale binary.
+	"""
+	if seen is None:
+		seen = set()
+	try:
+		abs_path = os.path.abspath(path)
+	except Exception:
+		return seen
+	if abs_path in seen or depth < 0:
+		return seen
+	seen.add(abs_path)
+	directory = os.path.dirname(abs_path)
+	try:
+		with open(abs_path, 'r', encoding='utf-8', errors='ignore') as f:
+			content = f.read()
+	except Exception:
+		return seen
+	for m in re.finditer(r'^\s*#\s*include\s+"([^"]+)"', content, re.M):
+		candidate = os.path.join(directory, m.group(1))
+		if os.path.exists(candidate):
+			_iter_local_includes(candidate, seen, depth - 1)
+	return seen
+
+
 def _source_fingerprint(process_manager):
 	"""(file, mtime, size) for every input of the compile + the command."""
 	parts = []
@@ -37,7 +65,14 @@ def _source_fingerprint(process_manager):
 		inputs = process_manager.get_compile_inputs()
 	except Exception:
 		inputs = [process_manager.file]
+
+	expanded = []
 	for f in inputs:
+		for path in sorted(_iter_local_includes(f)):
+			if path not in expanded:
+				expanded.append(path)
+
+	for f in expanded:
 		try:
 			st = os.stat(f)
 			parts.append((f, int(st.st_mtime), st.st_size))
@@ -132,24 +167,13 @@ def estimate_card_width_px(view, with_memory=False):
 
 
 class CphTestManagerCommand(sublime_plugin.TextCommand):
-	BEGIN_TEST_STRING = 'Test %d {'
-	OUT_TEST_STRING = ''
-	END_TEST_STRING = '} rtcode %s'
 	REGION_BEGIN_KEY = 'test_begin_%d'
 	REGION_OUT_KEY = 'test_out_%d'
 	REGION_END_KEY = 'test_end_%d'
-	REGION_POS_PROP = ['', '', sublime.HIDDEN]
-	REGION_ACCEPT_PROP = ['string', 'dot', sublime.HIDDEN]
-	REGION_DECLINE_PROP = ['variable.c++', 'dot', sublime.HIDDEN]
-	REGION_UNKNOWN_PROP = ['text.plain', 'dot', sublime.HIDDEN]
-	REGION_OUT_PROP = ['entity.name.function.opd', 'bookmark', sublime.HIDDEN]
 	REGION_BEGIN_PROP = ['string', 'Packages/cph-by-chenkx/icons/arrow_right.png', \
 				sublime.DRAW_NO_FILL | sublime.DRAW_STIPPLED_UNDERLINE | \
 					sublime.DRAW_NO_OUTLINE | sublime.DRAW_EMPTY_AS_OVERWRITE]
 	REGION_END_PROP = ['variable.c++', 'Packages/cph-by-chenkx/icons/arrow_left.png', sublime.HIDDEN]
-	REGION_LINE_PROP = ['string', 'dot', \
-				sublime.DRAW_NO_FILL | sublime.DRAW_STIPPLED_UNDERLINE | \
-					sublime.DRAW_NO_OUTLINE | sublime.DRAW_EMPTY_AS_OVERWRITE]
 
 	def __init__(self, view):
 		self.view = view
@@ -651,9 +675,13 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 					sublime.status_message(t('process_already_running'))
 					return
 
-			if n >= len(tests):
+			# Pad up to n: 'Run failed tests' can jump the iterator past
+			# accepted tests, so a single append is not enough (it used to
+			# raise IndexError on tests[n] / prog_out[i] and kill the whole
+			# chain in both the listener thread and update_configs).
+			while n >= len(tests):
 				tests.append(CphTestManagerCommand.Test(''))
-			if n >= len(prog_out):
+			while n >= len(prog_out):
 				prog_out.append('')
 			tests[n].set_tie_pos(tie_pos)
 			self.running_test = n
@@ -850,6 +878,57 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 			'source_view_id': v.id()
 		})
 		window.focus_view(input_view)
+
+	def test_index_at_cursor(self):
+		"""Index of the test block the cursor currently sits in.
+
+		Model based: the run view no longer writes 'Test N {' title lines
+		(that marker was removed with the old syntax), so parsing the buffer
+		always failed and every copy fell back to the last test.
+		"""
+		tester = self.tester
+		if tester is None or not tester.tests:
+			return None
+		v = self.view
+		pt = v.sel()[0].begin() if len(v.sel()) else 0
+		best = None
+		for i in range(len(tester.tests)):
+			try:
+				start = self.get_tie_pos(i)
+			except Exception:
+				continue
+			if start <= pt:
+				best = i
+			else:
+				break
+		return best
+
+	def copy_test_part(self, part='input'):
+		"""Copy one part of the test under the cursor to the clipboard."""
+		tester = self.tester
+		if tester is None or not tester.tests:
+			sublime.status_message(t('no_tests'))
+			return
+
+		idx = self.test_index_at_cursor()
+		if idx is None or idx >= len(tester.tests):
+			idx = len(tester.tests) - 1
+		test = tester.tests[idx]
+
+		if part == 'input':
+			value = test.test_string
+		elif part == 'expected':
+			answers = sorted(test.correct_answers)
+			value = answers[0] if answers else (test.expected_output or '')
+		else:
+			value = tester.prog_out[idx] if idx < len(tester.prog_out) else ''
+
+		value = (value or '').rstrip('\n')
+		if not value.strip():
+			sublime.status_message(t('nothing_to_copy'))
+			return
+		sublime.set_clipboard(value)
+		sublime.status_message(t('copied_test_part', id=idx + 1))
 
 	def update_summary_bar(self):
 		"""Phantom at the end of the run view: whole-run summary.
@@ -1306,6 +1385,11 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 			# Delayed so the layout/viewport settles before measuring
 			sublime.set_timeout(self.auto_fit_panel_width, 150)
 
+		# Re-anchor the summary bar here as well: expanding a folded (AC)
+		# test inserts its text and would otherwise leave the summary
+		# phantom stranded inside that test's block.
+		self.update_summary_bar()
+
 	def auto_fit_panel_width(self):
 		"""
 		Widen the run panel group until the widest test card fits on a
@@ -1620,11 +1704,10 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 				code_view.run_command('save')
 
 	def make_opd(self, edit, run_file=None, build_sys=None, clr_tests=False, \
-		sync_out=False, code_view_id=None, use_debugger=False, load_session=False,
+		sync_out=False, code_view_id=None, load_session=False,
 		time_limit_ms=None, memory_limit_mb=None,
 		run_all=False, run_failed=False, force_compile=False):
 
-		self.use_debugger = use_debugger
 		v = self.view
 
 		# Re-entry guard: only block while a compile is genuinely in flight.
@@ -1667,7 +1750,6 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 				'clr_tests': clr_tests,
 				'sync_out': sync_out,
 				'code_view_id': code_view_id,
-				'use_debugger': use_debugger,
 				'load_session': load_session,
 				'time_limit_ms': time_limit_ms,
 				'memory_limit_mb': memory_limit_mb,
@@ -1728,7 +1810,6 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 				clr_tests = self.session['clr_tests']
 				sync_out = self.session['sync_out']
 				code_view_id = self.session['code_view_id']
-				use_debugger = self.session['use_debugger']
 				time_limit_ms = self.session.get('time_limit_ms')
 				memory_limit_mb = self.session.get('memory_limit_mb')
 		else:
@@ -1739,7 +1820,6 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 				'clr_tests': clr_tests,
 				'sync_out': sync_out,
 				'code_view_id': code_view_id,
-				'use_debugger': use_debugger,
 				'time_limit_ms': time_limit_ms,
 				'memory_limit_mb': memory_limit_mb,
 			}
@@ -1994,10 +2074,10 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 		return v.get_regions(self.REGION_BEGIN_KEY % id)
 
 	def run(self, edit, action=None, run_file=None, build_sys=None, text=None, clr_tests=False, \
-			sync_out=False, code_view_id=None, var_name=None, use_debugger=False, pos=None, \
+			sync_out=False, code_view_id=None, var_name=None, pos=None, \
 			load_session=False, region=None, frame_id=None, data=None, id=None, dir=1,
 			time_limit_ms=None, memory_limit_mb=None,
-			run_all=False, run_failed=False, force_compile=False):
+			run_all=False, run_failed=False, force_compile=False, part=None):
 
 		v = self.view
 
@@ -2036,7 +2116,7 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 
 		elif action == 'make_opd':
 			self.make_opd(edit, run_file=run_file, build_sys=build_sys, clr_tests=clr_tests, \
-				sync_out=sync_out, code_view_id=code_view_id, use_debugger=use_debugger,
+				sync_out=sync_out, code_view_id=code_view_id,
 				load_session=load_session, time_limit_ms=time_limit_ms,
 				memory_limit_mb=memory_limit_mb,
 				run_all=run_all, run_failed=run_failed, force_compile=force_compile)
@@ -2079,6 +2159,9 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 		elif action == 'sync_read_only':
 			self.sync_read_only()
 
+		elif action == 'copy_test_part':
+			self.copy_test_part(part=part)
+
 		elif action == 'set_test_input':
 			self.set_test_input(id=id, test=data)
 
@@ -2099,10 +2182,6 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 			v.sel().add(Region(v.size(), v.size()))
 
 		self.sync_read_only()
-
-	def isEnabled(view, args):
-		pass
-
 
 class CphTestDetailViewCommand(sublime_plugin.TextCommand):
 	"""Fills the detail view with the (static) detail text of a test.
@@ -2133,11 +2212,7 @@ class CloseListener(sublime_plugin.EventListener):
 
 class CphViewTesterCommand(sublime_plugin.TextCommand):
 	ROOT = dirname(__file__)
-	ruler_opd_panel = 0.68
-	have_tied_dbg = False
-	use_debugger = False
-
-	def create_opd(self, clr_tests=False, sync_out=None, use_debugger=False,
+	def create_opd(self, clr_tests=False, sync_out=None,
 				   time_limit_ms=None, memory_limit_mb=None,
 				   run_all=False, run_failed=False, force_compile=False):
 		v = self.view
@@ -2217,7 +2292,6 @@ class CphViewTesterCommand(sublime_plugin.TextCommand):
 			'clr_tests': clr_tests,
 			'sync_out': sync_out,
 			'code_view_id': v.id(),
-			'use_debugger': use_debugger,
 			'time_limit_ms': time_limit_ms,
 			'memory_limit_mb': memory_limit_mb,
 			'run_all': run_all,
@@ -2261,9 +2335,16 @@ class CphViewTesterCommand(sublime_plugin.TextCommand):
 				except Exception:
 					pass
 
-	def run(self, edit, action=None, clr_tests=False, text=None, sync_out=True, \
+	def run(self, edit, action=None, clr_tests=False, text=None, sync_out=None, \
 			time_limit_ms=None, memory_limit_mb=None):
 		v = self.view
+		# Per-view state: these used to be class attributes, so two windows
+		# with a run panel shared (and clobbered) each other's view handles.
+		if not hasattr(self, 'ruler_opd_panel'):
+			self.ruler_opd_panel = 0.68
+			self.have_tied_dbg = False
+			self.tied_dbg = None
+
 		if action == 'insert':
 			v.insert(edit, v.sel()[0].begin(), text)
 		elif action == 'make_opd':
@@ -2295,14 +2376,3 @@ class LayoutListener(sublime_plugin.EventListener):
 	def __init__(self):
 		super(LayoutListener, self).__init__()
 
-	def move_syncer(self, view):
-		try:
-			w = view.window()
-			prop = w.get_view_index(view)
-			if view.name()[-4:] == '-run':
-				w.set_view_index(view, 1, 0)
-			elif prop[0] == 1:
-				active_view_index = w.get_view_index(w.active_view_in_group(0))[1]
-				w.set_view_index(view, 0, active_view_index + 1)
-		except:
-			pass

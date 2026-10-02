@@ -265,37 +265,9 @@
 		"context": [
 			{
 				"key": "selector",
-				"operator": "not_equal",
-				"operand": "source.TestSyntax",
-				"match_all": true
-			}
-		]
-	},
-	{
-		"keys": [
-			"super+alt+shift+b"
-		],
-		"command": "cph_run_all_tests",
-		"context": [
-			{
-				"key": "selector",
 				"operator": "equal",
-				"operand": "source.TestSyntax",
-				"match_all": true
-			}
-		]
-	},
-	{
-		"keys": [
-			"super+alt+r"
-		],
-		"command": "cph_run_failed_tests",
-		"context": [
-			{
-				"key": "selector",
-				"operator": "not_equal",
-				"operand": "source.TestSyntax",
-				"match_all": true
+				"match_all": false,
+				"operand": "source.c++, source.c, source.python, source.java, source.TestSyntax"
 			}
 		]
 	},
@@ -308,22 +280,8 @@
 			{
 				"key": "selector",
 				"operator": "equal",
-				"operand": "source.TestSyntax",
-				"match_all": true
-			}
-		]
-	},
-	{
-		"keys": [
-			"super+alt+shift+r"
-		],
-		"command": "cph_run_force_recompile",
-		"context": [
-			{
-				"key": "selector",
-				"operator": "not_equal",
-				"operand": "source.TestSyntax",
-				"match_all": true
+				"match_all": false,
+				"operand": "source.c++, source.c, source.python, source.java, source.TestSyntax"
 			}
 		]
 	},
@@ -336,22 +294,8 @@
 			{
 				"key": "selector",
 				"operator": "equal",
-				"operand": "source.TestSyntax",
-				"match_all": true
-			}
-		]
-	},
-	{
-		"keys": [
-			"super+alt+v"
-		],
-		"command": "cph_add_test_from_clipboard",
-		"context": [
-			{
-				"key": "selector",
-				"operator": "not_equal",
-				"operand": "source.TestSyntax",
-				"match_all": true
+				"match_all": false,
+				"operand": "source.c++, source.c, source.python, source.java, source.TestSyntax"
 			}
 		]
 	},
@@ -364,22 +308,8 @@
 			{
 				"key": "selector",
 				"operator": "equal",
-				"operand": "source.TestSyntax",
-				"match_all": true
-			}
-		]
-	},
-	{
-		"keys": [
-			"super+alt+c"
-		],
-		"command": "cph_copy_test_expected",
-		"context": [
-			{
-				"key": "selector",
-				"operator": "not_equal",
-				"operand": "source.TestSyntax",
-				"match_all": true
+				"match_all": false,
+				"operand": "source.c++, source.c, source.python, source.java, source.TestSyntax"
 			}
 		]
 	},
@@ -392,22 +322,8 @@
 			{
 				"key": "selector",
 				"operator": "equal",
-				"operand": "source.TestSyntax",
-				"match_all": true
-			}
-		]
-	},
-	{
-		"keys": [
-			"super+alt+shift+c"
-		],
-		"command": "cph_copy_test_actual",
-		"context": [
-			{
-				"key": "selector",
-				"operator": "not_equal",
-				"operand": "source.TestSyntax",
-				"match_all": true
+				"match_all": false,
+				"operand": "source.c++, source.c, source.python, source.java, source.TestSyntax"
 			}
 		]
 	},
@@ -420,22 +336,8 @@
 			{
 				"key": "selector",
 				"operator": "equal",
-				"operand": "source.TestSyntax",
-				"match_all": true
-			}
-		]
-	},
-	{
-		"keys": [
-			"super+alt+e"
-		],
-		"command": "cph_export_tests",
-		"context": [
-			{
-				"key": "selector",
-				"operator": "not_equal",
-				"operand": "source.TestSyntax",
-				"match_all": true
+				"match_all": false,
+				"operand": "source.c++, source.c, source.python, source.java, source.TestSyntax"
 			}
 		]
 	},
@@ -448,8 +350,8 @@
 			{
 				"key": "selector",
 				"operator": "equal",
-				"operand": "source.TestSyntax",
-				"match_all": true
+				"match_all": false,
+				"operand": "source.c++, source.c, source.python, source.java, source.TestSyntax"
 			}
 		]
 	},

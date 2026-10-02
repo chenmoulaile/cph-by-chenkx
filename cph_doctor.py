@@ -51,6 +51,11 @@ def _check_command(cmd):
 
 
 def _check_port(port):
+	"""True when we can bind the port.
+
+	Returns False both when another program holds it and when this plugin's
+	own listener is already running, so report that distinction upstream.
+	"""
 	sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 	try:
 		sock.bind(('localhost', port))
@@ -61,21 +66,34 @@ def _check_port(port):
 		sock.close()
 
 
-def _check_writable_tests(file_name):
+def _our_listener_running():
+	try:
+		from .cph_companion import _listener
+		return _listener.get('server') is not None
+	except Exception:
+		return False
+
+
+def _check_tests_path(file_name):
+	"""Can we write test data next to the source file? No side effects."""
 	path_to_use = get_tests_file_path(file_name)
 	if not path_to_use:
 		return False, 'n/a'
 	directory = os.path.dirname(path_to_use)
-	try:
-		if not os.path.isdir(directory):
-			os.makedirs(directory)
-		probe = path_to_use + '.probe'
-		with open(probe, 'w', encoding='utf-8') as f:
-			f.write('ok')
-		os.remove(probe)
-		return True, path_to_use
-	except Exception as e:
-		return False, '%s (%s)' % (path_to_use, e)
+	# Do NOT create the directory or write a probe file here: a health check
+	# must not leave anything behind.
+	if not os.path.isdir(directory):
+		parent = os.path.dirname(directory)
+		if not os.path.isdir(parent):
+			return False, '%s (%s)' % (path_to_use, _t_missing_parent())
+		writable = os.access(parent, os.W_OK)
+		return writable, '%s (%s)' % (path_to_use, 'dir not created yet' if writable else 'parent not writable')
+	writable = os.access(directory, os.W_OK)
+	return writable, '%s%s' % (path_to_use, '' if writable else ' (not writable)')
+
+
+def _t_missing_parent():
+	return 'parent directory missing'
 
 
 class CphDoctorCommand(sublime_plugin.TextCommand):
@@ -105,15 +123,23 @@ class CphDoctorCommand(sublime_plugin.TextCommand):
 
 		port = settings.get('companion_port', 12345) or 12345
 		free = _check_port(port)
-		lines.append('    %s %s: %s' % ('ok  ' if free else 'WARN',
-										t('doctor_port'), port))
-		if not free:
+		ours = _our_listener_running()
+		if free:
+			state = 'ok  '
+		elif ours:
+			# Our own listener holds the port - that is the expected state.
+			state = 'ok  '
+		else:
+			state = 'WARN'
+		lines.append('    %s %s: %s%s' % (state, t('doctor_port'), port,
+										  ' (listening)' if ours else ''))
+		if not free and not ours:
 			lines.append('         -> ' + t('doctor_port_busy'))
 		lines.append('')
 
 		file_name = self.view.file_name()
 		if file_name:
-			ok, detail = _check_writable_tests(file_name)
+			ok, detail = _check_tests_path(file_name)
 			lines.append('    %s %s: %s' % ('ok  ' if ok else 'FAIL',
 											t('doctor_tests_path'), detail))
 			ext = os.path.splitext(file_name)[1][1:]

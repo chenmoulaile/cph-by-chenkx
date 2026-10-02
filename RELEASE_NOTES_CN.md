@@ -1,3 +1,78 @@
+# v1.4.2 更新内容（中文）
+
+第二轮第三方审查（P0-P2）的逐条修复。**P0 三条都是我上一轮引入的回归**，抱歉。
+
+## P0 回归修复
+
+- **「只重跑失败样例」崩溃**：`advance_chain` 跳过已 AC 的测试点时会把迭代器
+  一次推前多格，而 `next_test` 对 `tests`/`prog_out` 的补齐只补**一格**
+  （`if` 应为 `while`），首个非 AC 测试下标 ≥1 时 `prog_out[i]` 抛 IndexError，
+  监听线程和主线程 `update_configs` 一起炸、整条链死掉
+- **`sync_output` 设置不生效**：`CphViewTesterCommand.run` 的签名默认值是
+  `sync_out=True`，导致 `create_opd` 里 `if sync_out is None: 读设置` 的分支
+  永远走不到 —— 也就是说 v1.4.0 声称的"逐字节输出性能修复"实际上没生效，
+  仍然是一个字节一次视图刷新。默认值改为 `None` 后设置真正生效
+- **汇总行跑到测试内部**：`1/1 passed` 的 phantom 只按运行结束时的缓冲区末尾
+  定位；AC 样例是折叠的（不占缓冲区），点开折叠后内容插入到锚点上方，汇总行
+  就落进了样例内部。现在每次 `update_configs`（含折叠/展开）都重新锚定
+
+## 排版调整
+
+- **编辑样例的按钮条拆成两行**：`test N` 独占第一行作标题，`save` / `delete` /
+  提示文字移到第二行（原来是挤在一行里）
+
+## P1 修复
+
+- `plugin_init.py` 里 `try_load_settings()` 复制粘贴了两遍（重复加载、状态条弹两次）
+- **「复制输入/预期输出/实际输出」的光标定位一直静默失效**：它按旧的 FOC 格式
+  `Test N {` 解析缓冲区，而运行视图早就不写这种标题行了，所以永远回退到最后一个
+  测试点。现在改为**基于测试模型**定位（`test_index_at_cursor`），在运行面板里
+  由 `cph_test_manager` 用实时状态作答，取到的"实际输出"也是真正那一次运行的输出
+- **编译缓存不跟踪本地头文件**：只 stat 主源文件与 `extra_sources`，改 `.h`
+  不会重编译、跑的还是旧二进制。现在递归解析 `#include "..."`（限深度 3）
+  并把头文件的 mtime/size 计入缓存键
+- **POSIX 下不再无条件走 shell**：只在命令真的需要 shell 特性（管道/重定向/`&&`/
+  通配）时才 `shell=True`，否则 `shlex.split` + `shell=False`。以前内存采样测的是
+  `sh` 的峰值、kill 也可能只杀掉 shell 而留下真正的程序
+
+## P2 打磨
+
+- **编译错误输出按本地编码回退解码**：以前 `decode('utf-8','ignore')`，
+  中文 Windows 下 g++ 的中文诊断全是乱码（运行侧 v1.4.1 已修，编译侧漏了）
+- **i18n 模板补上占位符**：`test_next.html`（next test）、`test_running.html`、
+  `test_config.html`（`test N` / `time:`）、`test_accdec.html`（accept/decline）
+  以前硬编码英文，代码传进去的 `next_label/stop_label/test_label/time_label/
+  type_label` 全被忽略 —— 中文界面里这几个词一直是英文
+- **环境自检不再有副作用**：`doctor` 以前会真的创建 `tests/` 目录并写入、删除
+  探针文件；现在只做只读检查。另外自己监听着端口时不再误报 `WARN`（会显示
+  `(listening)`）
+- **键位去重**：7 条新命令原本各有两条上下文不同但命令完全相同的绑定，
+  合并为一条复合选择器
+- **死代码清理**：`LayoutListener.move_syncer`（从未挂事件）、空的 `isEnabled`、
+  `REGION_POS/ACCEPT/DECLINE/UNKNOWN/OUT/LINE_PROP`、`BEGIN/OUT/END_TEST_STRING`、
+  `TestSyntax.sublime-syntax` 里对已不存在的 `Test N {` / `} rtcode` 的高亮规则、
+  全链路的 `use_debugger` 参数、`ProcessManager.get_path/has_var_view_api/
+  new_test/communicate`、对拍 `_run_stress_loop` 未使用的首参
+- `CphViewTesterCommand` 的 `ruler_opd_panel/have_tied_dbg/tied_dbg` 从类属性改为
+  **实例属性**（多窗口下会互相覆盖）
+
+## 新增：回归测试与 CI
+
+这次崩溃本可以被几行单测拦住，所以补上了自动化：
+
+- `tests/run_tests.py` —— 不依赖 Sublime：注入伪 `sublime` 模块后测试
+  `cph_verdict` 的比较/判定（含浮点容差、真实内存判 MLE、PE）、
+  `Tester.next_test` 的跳号补齐（就是本次 P0-1）、`is_skippable/
+  next_runnable_index`、`ProcessManager` 的 shell 判定与 UTF-8 解码、
+  测试数据路径解析。**26 项检查**
+- `tests/check_py33.py` —— Python 3.3 兼容性守卫：扫描 f-string、walrus、
+  变量注解、`subprocess.run`、`Popen(text=/encoding=/errors=)` 等；
+  已验证它能精确拦住 v1.4.1 那个 bug
+- `.github/workflows/tests.yml` —— push / PR 时在 Python 3.8 与 3.12 上
+  跑守卫 + 回归测试 + 字节编译
+
+---
+
 # v1.4.1 更新内容（中文）—— 紧急修复
 
 ## 修复：Sublime 插件宿主是 Python 3.3，上一版用到了 3.6+ 的参数

@@ -1,7 +1,7 @@
 <div class="panel">
 	<a class="test {test_type}" href="test-click">
 		<span class="verdict-badge {verdict_class}">{verdict_short}</span>
-		test {test_id}
+		{test_label} {test_id}
 	</a>
 
 	<a class="config" href="test-edit">
@@ -18,7 +18,7 @@
 
 	<a class="config">
 		<div style="display: inline; position: relative;">
-			time:
+			{time_label}:
 		</div>
 		<i class="runtime-info" style="padding: 1px; position: relative; font-style: normal">{runtime}</i>
 	</a>

@@ -10,6 +10,8 @@ import sublime
 import tempfile
 import time
 import codecs
+import locale
+import shlex
 
 from .memprobe import MemorySampler, bytes_to_mb
 
@@ -21,6 +23,44 @@ def _hidden_startupinfo():
 	si = subprocess.STARTUPINFO()
 	si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
 	return si
+
+
+_SHELL_METACHARS = set('|&;<>()`$\n*?[]{}~')
+
+
+def _needs_shell(cmd):
+	"""True when a command relies on shell features (pipes, &&, globs...).
+
+	Characters inside quotes (i.e. a plain path with spaces) do not count.
+	"""
+	in_single = False
+	in_double = False
+	for ch in cmd:
+		if ch == "'" and not in_double:
+			in_single = not in_single
+		elif ch == '"' and not in_single:
+			in_double = not in_double
+		elif not in_single and not in_double and ch in _SHELL_METACHARS:
+			return True
+	return False
+
+
+def _decode_output(data, errors='replace'):
+	"""Decode subprocess text: UTF-8 first, then the locale encoding.
+
+	Chinese Windows reports cp936, so g++'s localized diagnostics used to
+	come out as garbage when only UTF-8 was attempted.
+	"""
+	if data is None:
+		return ''
+	if isinstance(data, str):
+		return data
+	for enc in ('utf-8', locale.getpreferredencoding(False)):
+		try:
+			return data.decode(enc)
+		except (UnicodeDecodeError, LookupError, TypeError):
+			continue
+	return data.decode('utf-8', errors)
 
 
 class ProcessManager(object):
@@ -109,17 +149,6 @@ class ProcessManager(object):
 			return self.memory_limit_override
 		return self.memory_limit_mb
 
-	def get_path(self, lst):
-		rez = ''
-		for x in lst:
-			if x[0] == '-':
-				rez += ' ' + x
-			elif x[0] == '.':
-				rez += x
-			else:
-				rez += ' "' + x + '" '
-		return rez
-
 	def format_command(self, cmd, args=''):
 		file = path.split(self.file)[1]
 		return cmd.format(
@@ -129,9 +158,6 @@ class ProcessManager(object):
 			file_name=self.file_name,
 			args=args
 		)
-
-	def has_var_view_api(self):
-		return False
 
 	def get_lang_entry(self):
 		"""Return the run_settings entry matching this file's extension."""
@@ -245,7 +271,7 @@ class ProcessManager(object):
 				)
 				# Timeout so a hanging compiler doesn't freeze the plugin forever
 				try:
-					compile_result = p.communicate(timeout=30)[0].decode('utf-8', 'ignore')
+					compile_result = _decode_output(p.communicate(timeout=30)[0])
 				except subprocess.TimeoutExpired:
 					try:
 						p.kill()
@@ -286,8 +312,17 @@ class ProcessManager(object):
 			creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
 		else:
 			startupinfo = None
-			use_shell = True
 			preexec_fn = os.setsid
+			# Only go through a shell when the command actually needs one
+			# (pipes, redirection, &&...). Spawning through sh made the
+			# memory sampler measure the shell and left the real program
+			# orphaned in its own group when killed.
+			use_shell = _needs_shell(cmd)
+			if not use_shell:
+				try:
+					cmd = shlex.split(cmd)
+				except Exception:
+					use_shell = True
 
 		if self.separate_stderr:
 			stderr_target = tempfile.TemporaryFile(mode='w+b')
@@ -350,17 +385,6 @@ class ProcessManager(object):
 		proc.stdin.write(s)
 		proc.stdin.flush()
 
-	def communicate(self, s, timeout=None):
-		if isinstance(s, str):
-			s = s.encode('utf-8', 'replace')
-		out, err = self.process.communicate(input=s, timeout=timeout)
-		text = (out or b'').decode('utf-8', 'replace')
-		try:
-			text += self._out_decoder.decode(b'', final=True)
-		except Exception:
-			pass
-		return (text, err)
-
 	def is_stopped(self):
 		"""Exit code, or None while still running.
 
@@ -394,12 +418,6 @@ class ProcessManager(object):
 			except Exception:
 				return ''
 		return self._out_decoder.decode(data)
-
-	def new_test(self, input_data=None):
-		self.test_counter += 1
-		self.run_file()
-		if input_data != None:
-			self.insert(input_data)
 
 	def terminate(self):
 		self.terminated = True

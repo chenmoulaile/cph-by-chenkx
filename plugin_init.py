@@ -57,9 +57,3 @@ def _init():
         try_load_settings()
     except Exception as e:
         print('[cph-by-chenkx] Error loading settings: %s' % str(e))
-
-    try:
-        from .core.cph_settings import try_load_settings
-        try_load_settings()
-    except Exception as e:
-        print('[cph-by-chenkx] Error loading settings: %s' % str(e))
