@@ -119,6 +119,11 @@ class _CompanionHandler(BaseHTTPRequestHandler):
         if content_length > MAX_BODY_BYTES:
             self._deny(413)
             return
+        if content_length <= 0:
+            # A negative Content-Length used to slip past the check above and
+            # make rfile.read(-1) block until EOF, hanging the handler.
+            self._deny(400)
+            return
 
         try:
             raw = self.rfile.read(content_length) if content_length else b''

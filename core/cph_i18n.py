@@ -298,6 +298,14 @@ STRINGS = {
         'zh': '对拍通过: {rounds} 轮全部一致',
         'en': 'Stress test passed: {rounds} rounds all consistent',
     },
+    'runtime_error_at': {
+        'zh': '运行错误 (RE) 位置: {location}',
+        'en': 'runtime error (RE) at {location}',
+    },
+    'stress_all_timeout': {
+        'zh': '对拍结束: 所有轮次都超时, 未比较任何输出',
+        'en': 'stress test ended: every round timed out, nothing compared',
+    },
     'stress_failed': {
         'zh': '对拍失败: 第 {round} 轮输出不一致',
         'en': 'Stress test failed: mismatch at round {round}',

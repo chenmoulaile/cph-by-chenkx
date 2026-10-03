@@ -14,6 +14,7 @@ import locale
 import shlex
 
 from .memprobe import MemorySampler, bytes_to_mb, sample_memory_bytes
+from ..core.cph_i18n import t
 
 
 def _hidden_startupinfo():

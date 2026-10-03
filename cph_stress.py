@@ -345,6 +345,7 @@ def _run_stress_loop(user_file, std_file, gen_file, time_limit, max_rounds):
             ), 0)
 
         round_count = 0
+        compared = 0
         for round_count in range(1, max_rounds + 1):
             if _stress_state['stop_requested']:
                 sublime.set_timeout(
@@ -374,6 +375,7 @@ def _run_stress_loop(user_file, std_file, gen_file, time_limit, max_rounds):
                         '[cph-by-chenkx] Round %d: std program TLE\n' % r), 0)
                 continue
 
+            compared += 1
             # Same comparison rules as the judge-like runner (ignore trailing
             # whitespace per line and trailing blank lines).
             is_diff = normalize_lines(user_out) != normalize_lines(std_out)
@@ -396,13 +398,25 @@ def _run_stress_loop(user_file, std_file, gen_file, time_limit, max_rounds):
                     ), 0)
 
         else:
-            sublime.set_timeout(
-                lambda: _append_stress(
-                    '\n[cph-by-chenkx] ' + t('stress_passed', rounds=round_count) + '\n'
-                ), 0)
+            if compared:
+                sublime.set_timeout(
+                    lambda: _append_stress(
+                        '\n[cph-by-chenkx] ' + t('stress_passed', rounds=round_count) + '\n'
+                    ), 0)
+            else:
+                # Every round hit `continue` (TLE), so nothing was ever
+                # compared: the for/else used to still announce "passed".
+                sublime.set_timeout(
+                    lambda: _append_stress(
+                        '\n[cph-by-chenkx] ' + t('stress_all_timeout') + '\n'
+                    ), 0)
     except Exception as e:
+        # Bind `e` as a default argument: Python deletes the except-variable
+        # when the block ends, so a bare `lambda: ... % e` raised NameError
+        # by the time the deferred callback actually ran (the message never
+        # appeared and the real error was swallowed).
         sublime.set_timeout(
-            lambda: _append_stress('[cph-by-chenkx] Error: %s\n' % str(e)), 0)
+            lambda e=e: _append_stress('[cph-by-chenkx] Error: %s\n' % str(e)), 0)
     finally:
         _stop_stress()
 

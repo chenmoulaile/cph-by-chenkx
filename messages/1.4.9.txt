@@ -1,0 +1,45 @@
+cph-by-chenkx 1.4.9
+===================
+
+Fixed:
+
+* "Run all / Run failed / Force recompile" did nothing when invoked from the
+  source view or the command palette - the commands sent flags that the run
+  command did not accept, so it raised and exited (they only worked from the
+  run panel). Fixed.
+* Runtime errors (RE) are now located: when the program's own output names a
+  position (Python traceback, Java stack trace, -fsanitize diagnostic), the
+  card and the status bar show "runtime error (RE) at file:line".
+* Stress test: the error message never appeared (a deferred callback read an
+  already-deleted exception variable), and an all-timeout run no longer
+  reports "passed" when nothing was compared.
+* "Run failed tests" stopped at the first still-failing test instead of
+  continuing through the rest.
+* Running a test straight from the test menu could crash on a test that had
+  not been run yet (or was restored from a session); run / detail / swap are
+  now safe.
+* Deleting a test could make already-run tests run a second time.
+* With tests_relative_dir set, test data was written but never loaded or
+  cleared; that path is now probed.
+* Importing from a single file bypassed the shared merge policy and could
+  create duplicate tests; it now uses the same policy as every other path.
+* UTF-16 test data decoded as mojibake; the BOM is now detected first.
+* The card's status background never showed (its class name did not match any
+  CSS rule), so AC/WA cards lost their green/red tint; restored. Also fixed
+  the memory chip wrapping on a narrow panel and stderr not being shown.
+
+New:
+
+* Runtime-error location (see above).
+* The memory sampler thread stops by itself once the process is gone.
+* The Companion listener is robust against an abnormal Content-Length.
+* The card shows a hint when the program wrote to stderr.
+* README rewritten: it now leads with the advantages over the original and
+  states clearly that this plugin is a fork of FastOlympicCoding.
+
+Notes:
+
+* Regression checks: 66 -> 86.
+* A bare C++ segfault carries no line number; add
+  -g -fsanitize=address,undefined -fno-omit-frame-pointer to compile_cmd to
+  get the exact line (example in the README).

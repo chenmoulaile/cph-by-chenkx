@@ -21,6 +21,7 @@ import json
 import os
 import re
 import sys
+import time
 import types
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -292,6 +293,37 @@ def _self_calls_without_definition(rel_path):
             check_class(item)
     return found
 
+
+def _lambdas_leaking_except_var(rel_path):
+    """[(line, name)] where a lambda inside `except ... as NAME` reads NAME
+    without binding it.
+
+    Python deletes the exception variable when the except block ends, so a
+    deferred callback such as `set_timeout(lambda: ... % e)` raised NameError
+    by the time it ran (the error message was swallowed).
+    """
+    tree = ast.parse(open(os.path.join(ROOT, rel_path), encoding='utf-8').read())
+    found = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ExceptHandler) or not node.name:
+            continue
+        for sub in ast.walk(node):
+            if not isinstance(sub, ast.Lambda):
+                continue
+            bound = {a.arg for a in sub.args.args}
+            bound |= {a.arg for a in sub.args.kwonlyargs}
+            for default in list(sub.args.defaults) + [d for d in sub.args.kw_defaults if d]:
+                if isinstance(default, ast.Name):
+                    bound.add(default.id)
+            if node.name in bound:
+                continue
+            for inner in ast.walk(sub.body):
+                if (isinstance(inner, ast.Name) and inner.id == node.name
+                        and isinstance(inner.ctx, ast.Load)):
+                    found.append((sub.lineno, node.name))
+                    break
+    return found
+
 # ------------------------------------------------------------------ test rig
 FAILURES = []
 CHECKS = [0]
@@ -349,6 +381,34 @@ def main():
     check('line diff finds the changed line',
           diff is not None and any(op[0] == '!=' and op[1] == 2 for op in diff),
           str(diff))
+
+    print('== runtime error: detected and located ==')
+    for label, rtcode in (('segfault (139)', 139), ('abort (exit 3)', 3),
+                          ('signal (-11)', -11)):
+        got = verdict.get_verdict_by_code(
+            rtcode=rtcode, runtime=10, time_limit_ms=1000, memory_limit_mb=256,
+            stderr='', stdout='', expected_output='1')['name']
+        check('%s is a runtime error' % label, got == 'RE', got)
+
+    py_tb = ('Traceback (most recent call last):\n'
+             '  File "/tmp/main.py", line 12, in <module>\n'
+             '    print(1 / 0)\nZeroDivisionError: division by zero\n')
+    check('python traceback is located',
+          verdict.find_crash_location(py_tb, '/tmp/main.py') == ('/tmp/main.py', 12),
+          repr(verdict.find_crash_location(py_tb, '/tmp/main.py')))
+    java_tb = ('Exception in thread "main" java.lang.ArithmeticException: / by zero\n'
+               '\tat Main.main(Main.java:5)\n')
+    check('java stack trace is located',
+          verdict.find_crash_location(java_tb, 'Main.java') == ('Main.java', 5),
+          repr(verdict.find_crash_location(java_tb, 'Main.java')))
+    san = "main.cpp:7:5: runtime error: load of null pointer of type 'int'\n"
+    check('sanitizer diagnostic is located',
+          verdict.find_crash_location(san, 'main.cpp') == ('main.cpp', 7),
+          repr(verdict.find_crash_location(san, 'main.cpp')))
+    check('no location for a bare segfault',
+          verdict.find_crash_location('', 'main.cpp') is None)
+    check('ordinary output yields no location',
+          verdict.find_crash_location('3\n', 'main.cpp') is None)
 
     print('== Tester: the multi-sample chain crash ==')
     tm = importlib.import_module(pkg + '.test_manager')
@@ -464,8 +524,8 @@ def main():
         {'test': '1\r\n2\r\n', 'correct_answers': ['3\r\n4\r\n']})
     check('test input CR normalized',
           crlf_test.test_string == '1\n2\n', repr(crlf_test.test_string))
-    check('stored answer CR normalized',
-          list(crlf_test.correct_answers) == ['3\n4\n'],
+    check('stored answer normalized (CR folded + trimmed)',
+          list(crlf_test.correct_answers) == ['3\n4'],
           repr(crlf_test.correct_answers))
 
     # the exact regression: Popen must not receive 3.6+ only keywords
@@ -478,6 +538,18 @@ def main():
     except Exception as e:
         check('run_file avoids 3.6+ Popen keywords', False, str(e))
 
+    # insert() calls the i18n helper on a broken stdin pipe; the import was
+    # missing, so that "drop the input gracefully" path raised NameError.
+    check('ProcessManager can resolve t() used by insert()',
+          callable(getattr(pm_mod, 't', None)))
+
+    # cph_run_modes sends these flags to cph_view_tester.run(); before the
+    # fix they were rejected with TypeError, so "Run all / Run failed /
+    # Force recompile" did nothing when invoked outside the -run panel.
+    params = inspect.signature(tm.CphViewTesterCommand.run).parameters
+    missing = [k for k in ('run_all', 'run_failed', 'force_compile') if k not in params]
+    check('cph_view_tester.run accepts the run-mode flags', not missing, str(missing))
+
     print('== cph_settings: test file path resolution ==')
     settings = importlib.import_module(pkg + '.core.cph_settings')
     paths = settings.get_tests_paths(os.path.join('tmp', 'foo.cpp'))
@@ -486,6 +558,33 @@ def main():
     check('cph-ng folder path present',
           any(p.endswith(os.path.join('tests', 'foo.cpp__tests')) for p in paths),
           str(paths))
+
+    # tests_relative_dir is honoured by save_tests(); if it is not probed on
+    # load, the saved data becomes invisible (and "clear tests" misses it).
+    _real_rel_dir = settings.get_tests_relative_dir
+    settings.get_tests_relative_dir = lambda: 'rel'
+    try:
+        rel_paths = settings.get_tests_paths(os.path.join('tmp', 'foo.cpp'))
+        check('tests_relative_dir is probed first',
+              len(rel_paths) == 4
+              and rel_paths[0].endswith(os.path.join('rel', 'foo.cpp__tests')),
+              str(rel_paths))
+    finally:
+        settings.get_tests_relative_dir = _real_rel_dir
+
+    # Import must detect a UTF-16 BOM; otherwise the bytes decode as UTF-8
+    # mojibake / fall through to gb18030 and the utf-16 branch is dead code.
+    import tempfile
+    importer = importlib.import_module(pkg + '.cph_import')
+    fh = tempfile.NamedTemporaryFile(suffix='.in', delete=False)
+    fh.write('1 2 3\n'.encode('utf-16'))
+    fh.close()
+    try:
+        check('utf-16 test data decodes (BOM detected)',
+              importer._read_text(fh.name).strip() == '1 2 3',
+              repr(importer._read_text(fh.name)))
+    finally:
+        os.unlink(fh.name)
 
     print('== shipped settings: every command must be formattable ==')
     # This is the P0 that shipped in v1.4.0-v1.4.4: the default C++ compile_cmd
@@ -517,6 +616,53 @@ def main():
     fresh = tm.CphTestManagerCommand.Test({'test': '1\n'})
     check('rtcode is initialized (expanding a skipped card)',
           getattr(fresh, 'rtcode', None) == '0', repr(getattr(fresh, 'rtcode', None)))
+
+    print('== second round: card CSS, output bounds, stderr chip, sampler ==')
+    # The card's status class must exist in the shipped CSS themes, or the
+    # green/red tint is silently dead ('test-AC' / 'test-wrong-answer' matched
+    # no rule at all).
+    css_text = ''
+    for css_name in ('test_styles.css', 'test_styles_spacegray.css',
+                     'test_styles_spacegraylight.css'):
+        with open(os.path.join(ROOT, 'Highlight', css_name), encoding='utf-8') as f:
+            css_text += f.read()
+    for vname, expected in (('AC', 'test-accept'), ('WA', 'test-decline')):
+        card = tm.CphTestManagerCommand.Test({'test': '1\n'})
+        card.verdict = verdict.get_verdict_by_name(vname)
+        got = card.get_test_class()
+        check('card class for %s is defined in CSS' % vname,
+              got == expected and ('.' + got) in css_text, '%s -> %s' % (vname, got))
+
+    # every verdict the plugin can render (incl. one restored from a session)
+    # needs a badge rule, or the badge silently falls back to the base style
+    missing_css = sorted(n for n in set(verdict.VERDICT_NAME.values())
+                         if ('.verdict-' + n) not in css_text)
+    check('every verdict badge class is defined in CSS', not missing_css,
+          ', '.join(missing_css))
+
+    # prog_out can legitimately be shorter than the test list (session-restored
+    # tests, or the test menu acting on an un-materialised one).
+    tester = make_tester([tm.CphTestManagerCommand.Test('a')])
+    tester.prog_out = []
+    check('output_at() is safe for an un-materialised test', tester.output_at(3) == '')
+    tester.prog_out = ['abc']
+    check('output_at() returns the stored output',
+          tester.output_at(0) == 'abc' and tester.output_at(9) == '')
+
+    # the card template must actually surface a captured stderr
+    with open(os.path.join(ROOT, 'Highlight', 'test_config.html'), encoding='utf-8') as f:
+        card_tpl = f.read()
+    check('card template surfaces captured stderr',
+          '{stderr_display}' in card_tpl and '{stderr_label}' in card_tpl)
+
+    # a leaked MemorySampler used to poll a dead pid forever
+    mp = importlib.import_module(pkg + '.Modules.memprobe')
+    sampler = mp.MemorySampler(99999999)
+    sampler.start()
+    time.sleep(0.9)
+    still_alive = sampler._thread.is_alive()
+    sampler.stop()
+    check('memory sampler stops polling a dead pid', not still_alive)
 
     print('== doctor: template commands are not a failure ==')
     doc = importlib.import_module(pkg + '.cph_doctor')
@@ -589,6 +735,14 @@ def main():
                 if "get_status('opd_info') ==" in line:
                     stale.append('%s:%d' % (path, i))
     check('no stale opd_info marker comparisons', not stale, ', '.join(stale))
+
+    # 3. A lambda inside an except block must not read the exception variable
+    #    without binding it (Python deletes it when the block ends).
+    leaked = []
+    for path in _plugin_py_files():
+        for line, name in _lambdas_leaking_except_var(path):
+            leaked.append('%s:%d lambda reads except-var %s' % (path, line, name))
+    check('no lambda leaks an except variable', not leaked, '; '.join(leaked[:5]))
 
     print('== merge policy (shared by import / clipboard / companion) ==')
     merge = importlib.import_module(pkg + '.core.cph_tests_merge')

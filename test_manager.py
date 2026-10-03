@@ -20,7 +20,7 @@ from .Modules.ProcessManager import ProcessManager
 from .core.cph_settings import base_name, get_settings, root_dir, get_tests_file_path, get_tests_paths, load_all_tests, save_tests, is_run_supported_ext, get_problem_limits
 from .core.cph_resources import read_resource
 from .Highlight.test_interface import get_test_styles
-from .core.cph_verdict import get_verdict, get_verdict_by_code, get_verdict_by_name, build_line_diff, outputs_equal, VERDICTS
+from .core.cph_verdict import get_verdict, get_verdict_by_code, get_verdict_by_name, build_line_diff, outputs_equal, VERDICTS, find_crash_location
 from .core.cph_i18n import t, set_lang, get_lang, LANG_ZH, LANG_EN
 
 
@@ -239,9 +239,12 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 				self.uncorrect_answers = set()
 			else:
 				self.test_string = _clean_newlines(prop['test'])
-				self.correct_answers = set(_clean_newlines(x)
+				# Normalise exactly like add_correct_answer() (strip), or a
+				# stored answer such as '3\n' never matched the program's '3'
+				# in is_correct_answer() and the card kept offering accept.
+				self.correct_answers = set(_clean_newlines(x).strip()
 										   for x in prop.get('correct_answers', ()))
-				self.uncorrect_answers = set(_clean_newlines(x)
+				self.uncorrect_answers = set(_clean_newlines(x).strip()
 											 for x in prop.get('uncorrect_answers', ()))
 
 			self.start = start
@@ -260,6 +263,10 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 			self.stderr = ''
 			self.expected_output = ''
 			self.message = ''
+			# 'file:line' of a runtime error, when the program's own output
+			# told us where it died (Python traceback / Java stack trace /
+			# -fsanitize diagnostic).
+			self.crash_line = ''
 			self.time_limit_ms = None
 			self.memory_limit_mb = None
 
@@ -379,13 +386,21 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 			return 'verdict-' + self.verdict['name']
 
 		def get_test_class(self):
+			# The CSS themes only define .test-accept / .test-decline (the
+			# upstream FastOlympicCoding names). Emitting 'test-AC' /
+			# 'test-wrong-answer' matched no rule, so every card silently lost
+			# its green/red background tint.
 			if not self.verdict:
 				if str(getattr(self, 'rtcode', '0')) != '0':
-					return 'test-wrong-answer'
+					return 'test-decline'
 				return ''
-			v = self.verdict['name']
-			css_name = v.replace('_', '-')
-			return 'test-' + css_name
+			name = self.verdict['name']
+			if name == 'AC':
+				return 'test-accept'
+			if name == 'SK':
+				# skipped is not a failure - keep the neutral card background
+				return ''
+			return 'test-decline'
 
 		def get_config(self, i, pt, _cb_act, _out, view, running=False):
 			if not running:
@@ -633,11 +648,11 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 					marker = '\n' + t('output_truncated_warn') + '\n'
 					self.prog_out[n] += marker
 					self.tests[n].message = t('output_truncated_warn')
-					self.on_out(marker)
+					self.on_out(marker, epoch=self.epoch)
 					print('[cph-by-chenkx] %s' % t('output_truncated_warn'))
 				return
 			self.prog_out[n] += s
-			self.on_out(s)
+			self.on_out(s, epoch=self.epoch)
 
 		def __process_listener(self):
 			proc = self.process_manager
@@ -752,6 +767,12 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 			sublime.set_timeout_async(go, 10)
 
 		def run_test(self, id):
+			# The test menu can run any test directly, before the chain ever
+			# materialised it. prog_out starts empty, so self.prog_out[id]
+			# raised IndexError and the run never started (status stuck at
+			# COMPILING).
+			while id >= len(self.prog_out):
+				self.prog_out.append('')
 			# Compiling inside a phantom click callback froze the whole
 			# editor for up to 30s; do it on the async worker instead and
 			# reuse the compile cache when the sources are unchanged.
@@ -798,6 +819,17 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 			self.tests.clear()
 			for test in tests:
 				self.tests.append(CphTestManagerCommand.Test(test))
+
+		def output_at(self, i):
+			"""Output of test i; '' when it was never materialised.
+
+			The test menu can act on any test - including session-restored
+			ones this session never ran - so indexing prog_out directly used
+			to raise IndexError inside a Sublime callback (silently swallowed).
+			"""
+			if 0 <= i < len(self.prog_out):
+				return self.prog_out[i]
+			return ''
 
 		def accept_out(self, nth):
 			outs = self.prog_out
@@ -1343,7 +1375,7 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 			self.toggle_fold(i)
 
 		pt = self.get_tie_pos(i)
-		pt += len(test.test_string) + len(tester.prog_out[i]) + 1
+		pt += len(test.test_string) + len(tester.output_at(i)) + 1
 
 		detail = test.get_detail(i, pt, self.on_test_action, self.view)
 
@@ -1629,8 +1661,14 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 	def on_insert(self, s):
 		self.view.run_command('cph_test_manager', {'action': 'insert_opd_input', 'text': s})
 
-	def on_out(self, s):
+	def on_out(self, s, epoch=None):
 		v = self.view
+		# Same stale-listener guard as on_stop: a killed process can still
+		# drain bytes, and those would be inserted into the *new* run view at
+		# the new delta_input, corrupting it.
+		if epoch is not None and epoch != getattr(self, 'tester_epoch', None):
+			print('[cph-by-chenkx] dropped stale on_out from killed process')
+			return
 		self.view.run_command('cph_test_manager', {'action': 'insert_opd_out', 'text': s})
 		if not self.out_region_set:
 			self.out_region_set = True
@@ -1710,6 +1748,21 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 			self.tester.tests[test_id].set_memory(memory_used_mb)
 		self.tester.tests[test_id].set_verdict(verdict)
 		self.tester.tests[test_id].set_stdout(_outp)
+
+		# Locate a runtime error instead of leaving a bare RE badge: a Python
+		# traceback / Java stack trace / sanitizer diagnostic in the program's
+		# output names the file and the line. (`crash_line` used to be a
+		# parameter that was accepted but never computed.)
+		if verdict['name'] == 'RE':
+			source_file = getattr(pm, 'file', None) or self.dbg_file
+			location = find_crash_location(stderr or _outp, source_file)
+			if location:
+				crash_line = '%s:%d' % location
+				self.tester.tests[test_id].crash_line = crash_line
+				self.tester.tests[test_id].message = t('runtime_error_at',
+													   location=crash_line)
+				sublime.status_message('[cph-by-chenkx] '
+									   + t('runtime_error_at', location=crash_line))
 		self.tester.tests[test_id].set_stderr(stderr)
 		self.tester.tests[test_id].set_expected_output(expected_output)
 
@@ -1756,7 +1809,9 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 		#   run failed - continue, skipping tests already marked AC
 		stop_on_first = get_settings().get('stop_on_first_failure', True)
 		ok = str(rtcode) == '0'
-		cont = ok or (not stop_on_first) or getattr(tester, 'run_all', False)
+		cont = (ok or (not stop_on_first)
+				or getattr(tester, 'run_all', False)
+				or getattr(tester, 'run_failed', False))
 		if tester.running_new and cont and self.next_runnable_index() is not None:
 			self.update_configs(update_last=True)
 			sublime.set_timeout(self.advance_chain, 10)
@@ -1991,7 +2046,10 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 			# Try to load tests from all possible locations (traditional + cph-ng style folder)
 			loaded_data = load_all_tests(run_file)
 			if loaded_data:
-				tests = [self.Test(x) for x in loaded_data if x.get('test', '').strip()]
+				# Keep tests whose input is empty too: a legitimate test can
+				# read nothing, and a stress-test counterexample with empty
+				# input used to be dropped here on every reload.
+				tests = [self.Test(x) for x in loaded_data if isinstance(x, dict)]
 			else:
 				tests = []
 		else:
@@ -2098,8 +2156,13 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 				iter += 1
 
 		del tester.tests[id]
-		del tester.prog_out[id]
-		tester.test_iter -= 1
+		if id < len(tester.prog_out):
+			del tester.prog_out[id]
+		# test_iter counts the tests already run: deleting one that was never
+		# reached must not move the chain backwards (that made already-run
+		# tests run a second time).
+		if id < tester.test_iter:
+			tester.test_iter -= 1
 		self.close_test_detail(id)
 		# Every detail tab is named '<file> - test N detail': after removing
 		# one test all following ones shift down, so their open tabs would
@@ -2116,10 +2179,7 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 			sublime.status_message(t('stop_before_delete'))
 			return
 
-		if tester.proc_run:
-			k = tester.test_iter + 1
-		else:
-			k = tester.test_iter
+		k = tester.test_iter
 
 		to_del = []
 		for i in range(k):
@@ -2208,6 +2268,11 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 			else:
 				tester.tests[i].__unfold = False
 
+		# prog_out can be shorter than tests (session-restored tests that this
+		# session never ran): pad it so the parallel swap below cannot raise
+		# IndexError.
+		while len(tester.prog_out) < len(tester.tests):
+			tester.prog_out.append('')
 		if dir == 1:
 			selected.reverse()
 		for sel in selected:
@@ -2501,7 +2566,8 @@ class CphViewTesterCommand(sublime_plugin.TextCommand):
 					pass
 
 	def run(self, edit, action=None, clr_tests=False, text=None, sync_out=None, \
-			time_limit_ms=None, memory_limit_mb=None):
+			time_limit_ms=None, memory_limit_mb=None, \
+			run_all=False, run_failed=False, force_compile=False):
 		v = self.view
 		# Per-view state: these used to be class attributes, so two windows
 		# with a run panel shared (and clobbered) each other's view handles.
@@ -2516,13 +2582,18 @@ class CphViewTesterCommand(sublime_plugin.TextCommand):
 			if v.settings().get('syntax') == 'Packages/%s/TestSyntax.sublime-syntax' % base_name:
 				v.run_command('cph_test_manager', {
 					'action': 'make_opd',
-					'load_session': True
+					'load_session': True,
+					'run_all': run_all,
+					'run_failed': run_failed,
+					'force_compile': force_compile,
 				})
 			else:
 				self.close_opds()
 				self.create_opd(clr_tests=clr_tests, sync_out=sync_out,
 								time_limit_ms=time_limit_ms,
-								memory_limit_mb=memory_limit_mb)
+								memory_limit_mb=memory_limit_mb,
+								run_all=run_all, run_failed=run_failed,
+								force_compile=force_compile)
 		elif action == 'sync_opdebugs':
 			w = v.window()
 			layout = w.get_layout()

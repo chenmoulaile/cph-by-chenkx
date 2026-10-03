@@ -1,8 +1,36 @@
 # cph-by-chenkx — Package Control Submission Notes
 
-Package version: v1.4.8
+Package version: v1.4.9
 Repository: https://github.com/chenmoulaile/cph-by-chenkx
 Channel entry file: `repository/c/cph-by-chenkx.json` (see snippet at the bottom)
+
+## v1.4.9 notes
+
+- **Run modes fixed**: `cph_run_all_tests` / `cph_run_failed_tests` /
+  `cph_run_force_recompile` sent `run_all` / `run_failed` / `force_compile` to
+  `cph_view_tester`, whose `run()` did not accept them -> `TypeError`, so the
+  three commands were dead outside the run panel. They are now accepted and
+  forwarded to `create_opd()`.
+- **Runtime errors are located**: when a crashed program's output names a
+  position (Python traceback, Java stack trace, gcc/clang `-fsanitize`
+  diagnostic) the card/detail and the status bar show `file:line`. A bare C++
+  segfault carries no line - the README documents adding
+  `-fsanitize=address,undefined -g`.
+- **`ProcessManager`**: the stdin-closed handler called `t()` without importing
+  it (`NameError`); `cph_stress` leaked the `except ... as e` variable into a
+  deferred lambda (same class of bug); a stress run whose every round timed out
+  no longer reports success.
+- **Test chain**: `run_failed` mode now continues past a failing test; running
+  a not-yet-materialised test from the test menu no longer raises `IndexError`
+  (new `Tester.output_at()`); deleting a test no longer rewinds `test_iter`.
+- **`tests_relative_dir`** is now probed by `get_tests_paths()` (previously the
+  data was written but never loaded or cleared); single-file import now uses the
+  shared `merge_into_file()` policy; `_read_text()` detects a UTF-16 BOM first.
+- **Cards**: the status class emitted by `get_test_class()` matched no CSS rule
+  (`test-AC` / `test-wrong-answer` vs the shipped `.test-accept` /
+  `.test-decline`), so the green/red tint was dead - fixed; missing verdict
+  badge colours added; the card now surfaces a captured stderr.
+- Regression checks: 66 -> 86.
 
 ## v1.4.8 notes
 

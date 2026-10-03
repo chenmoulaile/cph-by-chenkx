@@ -111,8 +111,15 @@ def get_tests_paths(file):
 	filename = os.path.basename(file)
 	suffix = get_tests_file_suffix()
 	folder_name = get_tests_folder_name()
+	relative_dir = get_tests_relative_dir()
 
 	paths = []
+
+	# save_tests() writes here when tests_relative_dir is set, so it has to be
+	# probed as well - otherwise the data was written but never loaded (and
+	# "clear tests" never removed it).
+	if relative_dir:
+		paths.append(os.path.join(dirname, relative_dir, filename + suffix))
 
 	traditional_path = os.path.join(dirname, filename + suffix)
 	paths.append(traditional_path)

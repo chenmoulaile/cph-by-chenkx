@@ -18,7 +18,7 @@ import re
 import glob
 
 from .core.cph_settings import save_tests, load_all_tests
-from .core.cph_tests_merge import merge_tests
+from .core.cph_tests_merge import merge_tests, merge_into_file
 from .core.cph_i18n import t
 
 
@@ -28,8 +28,20 @@ def _read_text(file_path):
     Chinese OJ data is often GB2312/GBK; strict UTF-8 decoding used to
     abort the whole import with an exception.
     """
+    # A UTF-16 BOM must be handled before the UTF-8 attempt: UTF-16 bytes
+    # decode "successfully" as UTF-8 (mojibake) or fall through to gb18030,
+    # so the utf-16 branch below could never actually be reached.
+    try:
+        with open(file_path, 'rb') as fb:
+            head = fb.read(2)
+    except Exception:
+        head = b''
+    if head in (b'\xff\xfe', b'\xfe\xff'):
+        with open(file_path, 'r', encoding='utf-16') as f:
+            return f.read()
+
     errors = []
-    for enc in ('utf-8-sig', 'gb18030', 'utf-16'):
+    for enc in ('utf-8-sig', 'gb18030'):
         try:
             with open(file_path, 'r', encoding=enc) as f:
                 return f.read()
@@ -385,18 +397,15 @@ class CphImportTestsFileCommand(sublime_plugin.TextCommand):
             if candidates:
                 out = _read_text(candidates[0]).strip()
             tests = [{'test': inp, 'correct_answers': [out] if out else []}]
-            # append/merge with existing tests instead of overwriting them
-            existing = load_all_tests(src_file)
-            seen = set()
-            merged = []
-            for item in existing + tests:
-                key = (item.get('test', ''), tuple(sorted(item.get('correct_answers', []))))
-                if key not in seen:
-                    seen.add(key)
-                    merged.append(item)
-            if save_tests(src_file, merged):
-                sublime.status_message(t('imported_tests', count=len(merged),
+            # Same merge policy as every other import path (dedup by input,
+            # answers only filled in) instead of a bespoke (input, answer)
+            # key that let a re-import create a duplicate test point.
+            saved, total, conflicts = merge_into_file(src_file, tests)
+            if saved:
+                sublime.status_message(t('imported_tests', count=total,
                                          source=os.path.basename(file_path)))
+                if conflicts:
+                    sublime.status_message(t('answer_conflict_kept'))
                 self.view.run_command('cph_view_tester', {'action': 'make_opd'})
             else:
                 sublime.error_message(t('import_save_failed'))

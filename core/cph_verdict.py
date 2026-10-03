@@ -3,6 +3,7 @@ cph-by-chenkx - 评判系统 (类似 cph-ng)
 """
 
 import difflib
+import re
 
 VERDICT_NAME = {
     'unknown_error': 'UKE',
@@ -130,6 +131,48 @@ def get_verdict_by_name(name):
     if not name:
         return None
     return VERDICTS_BY_NAME.get(name)
+
+
+# Ways a crashed program reports WHERE it died. Most specific first.
+_CRASH_PATTERNS = (
+    # gcc/clang -fsanitize=address,undefined:  main.cpp:12:5: runtime error: ...
+    re.compile(r'([A-Za-z0-9_./\\-]+\.(?:c|cc|cpp|cxx|h|hpp)):(\d+):\d+:\s*'
+               r'(?:runtime error|AddressSanitizer|ERROR|SUMMARY)'),
+    # Python traceback:  File "main.py", line 12
+    re.compile(r'File "([^"]+)", line (\d+)'),
+    # Java stack trace:  at Main.main(Main.java:12)
+    re.compile(r'\(([A-Za-z0-9_./\\$-]+\.java):(\d+)\)'),
+    # gdb / backtrace:  ... at main.cpp:12
+    re.compile(r'\bat\s+([A-Za-z0-9_./\\-]+\.(?:c|cc|cpp|cxx|py|java)):(\d+)'),
+    # any compiler-style diagnostic:  main.cpp:12:5
+    re.compile(r'([A-Za-z0-9_./\\-]+\.(?:c|cc|cpp|cxx)):(\d+):\d+'),
+)
+
+
+def find_crash_location(text, source_file=None):
+    """Best-effort (file, line) for where a crashed program died, or None.
+
+    A plain segfault carries no line number, so this only reports what the
+    program's own output gives us: a Python traceback, a Java stack trace,
+    gcc/clang -fsanitize diagnostics or a gdb backtrace. A location matching
+    the source file being tested wins over the first unrelated one.
+    """
+    if not text:
+        return None
+    wanted = None
+    if source_file:
+        wanted = source_file.replace('\\', '/').rsplit('/', 1)[-1]
+    fallback = None
+    for pattern in _CRASH_PATTERNS:
+        for match in pattern.finditer(text):
+            path, line = match.group(1), int(match.group(2))
+            if wanted and path.replace('\\', '/').rsplit('/', 1)[-1] == wanted:
+                return (path, line)
+            if fallback is None:
+                fallback = (path, line)
+        if fallback is not None:
+            return fallback
+    return fallback
 
 
 def tokenize(s):

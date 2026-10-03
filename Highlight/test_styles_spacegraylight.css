@@ -89,6 +89,13 @@ a {
 .verdict-WT { background-color: color(var(--bluish) alpha(0.25)); color: var(--bluish); }
 .verdict-CP { background-color: color(var(--bluish) alpha(0.25)); color: var(--bluish); }
 .verdict-JG { background-color: color(var(--purplish) alpha(0.25)); color: var(--purplish); }
+/* Verdicts the judge does not emit today but a restored session can carry:
+   without these rules their badge fell back to the neutral base style. */
+.verdict-PC { background-color: color(var(--yellowish) alpha(0.4)); color: var(--yellowish); }
+.verdict-RF { background-color: color(var(--redish) alpha(0.4)); color: var(--redish); }
+.verdict-SE { background-color: color(var(--redish) alpha(0.4)); color: var(--redish); }
+.verdict-RJ { background-color: color(var(--redish) alpha(0.4)); color: var(--redish); }
+.verdict-CPD, .verdict-JGD, .verdict-CMP { background-color: color(var(--bluish) alpha(0.25)); color: var(--bluish); }
 
 .runtime-info {
 	color: color(var(--foreground));

@@ -194,10 +194,20 @@ class MemorySampler(object):
 		self._thread.start()
 
 	def __run(self):
+		# Stop on our own once the child is gone. The sampler is a daemon
+		# thread, but if the owning listener raised before stop() ran, a leaked
+		# thread would poll a dead pid every 25 ms for the rest of the session.
+		misses = 0
 		while not self._stop.is_set():
 			value = sample_memory_bytes(self.pid)
-			if value and value > self.peak:
-				self.peak = value
+			if value:
+				misses = 0
+				if value > self.peak:
+					self.peak = value
+			else:
+				misses += 1
+				if misses >= 20:
+					break
 			time.sleep(self.interval)
 
 	def stop(self):
