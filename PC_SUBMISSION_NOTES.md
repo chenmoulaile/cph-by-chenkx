@@ -1,8 +1,35 @@
 # cph-by-chenkx — Package Control Submission Notes
 
-Package version: v1.4.9
+Package version: v1.4.10
 Repository: https://github.com/chenmoulaile/cph-by-chenkx
 Channel entry file: `repository/c/cph-by-chenkx.json` (see snippet at the bottom)
+
+## v1.4.10 notes
+
+- New `Modules/build_artifact.py`. On Windows a compiler creates the `-o` file
+  through the ANSI codepage, so `A 中文.exe` lands on disk under the GBK bytes
+  read back as latin-1 and `os.path.exists()` is False - every run of a source
+  file with a non-ASCII name ended in `FileNotFoundError`. `resolve_artifact()`
+  finds the file the compiler really wrote (exact name, codepage round trip,
+  then the newest candidate of this compile), and `retarget_command()` /
+  `retarget_path()` point the run command at it. Only the executable token is
+  touched, only when it is missing, and never for a PATH command (`python`).
+- `ProcessManager.compile()` records what the compiler produced
+  (`artifact_paths()` / `_artifact_note()`), so a successful compile that wrote
+  nothing now says so instead of failing later with "file not found".
+- `cph_stress.py`: the generator has its own time budget
+  (`stress_generator_time_limit_seconds`, default 10s) and its timeout no longer
+  aborts the run as a failure; a failed compile prints the compiler exit code
+  and first error line; a generator that exits non-zero prints its exit code and
+  stderr; a program that cannot start is reported instead of being compared as
+  an empty (wrong) answer; `_compile_program()` verifies the artifact and
+  returns a reason.
+- `test_manager.py`: `get_view_by_id()` and `make_opd()` survive a view that is
+  no longer attached to a window (was `AttributeError: 'NoneType' object has no
+  attribute 'views'`, leaving an empty `-run` tab); `get_clipboard()` is
+  guarded. `CphStartStressTestCommand` reuses the remembered source file when
+  invoked from the scratch `-stress` view.
+- Regression checks: 86 -> 107.
 
 ## v1.4.9 notes
 

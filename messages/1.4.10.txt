@@ -1,0 +1,30 @@
+cph-by-chenkx 1.4.10
+====================
+
+Fixed:
+
+* On Windows a compiler writes the -o file through the ANSI codepage, so a
+  Chinese file name ended up on disk under a different name and running it
+  failed with "file not found". The plugin now checks what the compiler
+  actually wrote and runs that, both for the normal run and for the stress
+  test (your program, std and the generator).
+* The stress test reported "Generator failed at round 1" for a generator that
+  was merely slow: it shared the program's time limit and its timeout flag was
+  dropped, so one short timeout aborted the whole run. The generator now has
+  its own limit (stress_generator_time_limit_seconds, default 10s), a timeout
+  skips the round and says so, and only three in a row stop the run.
+* A program that could not be started at all was compared as if it had
+  produced empty output (a fake wrong answer); it is now reported as
+  "cannot run <program>: <reason>".
+* Compile failures now show the compiler exit code and first error line;
+  a generator that exits non-zero shows its exit code and stderr.
+
+New:
+
+* stress_generator_time_limit_seconds (seconds, default 10), written into the
+  default settings file.
+* A one-off hint when your program times out: a debug() call left inside a
+  loop while the compile command defines LOCAL writes O(n^2) to unbuffered
+  stderr and makes local runs time out (measured: over 20s at n=2000, 0.02s
+  without -DLOCAL).
+* 86 -> 107 regression checks.

@@ -14,6 +14,7 @@ import locale
 import shlex
 
 from .memprobe import MemorySampler, bytes_to_mb, sample_memory_bytes
+from .build_artifact import output_path_from_compile_cmd, resolve_artifact, retarget_command
 from ..core.cph_i18n import t
 
 
@@ -284,6 +285,40 @@ class ProcessManager(object):
 		else:
 			return -1
 
+	def artifact_paths(self, cmd=None):
+		"""(expected, actual) paths for the artifact of this compile.
+
+		`expected` is what the -o argument asked for, `actual` is the file
+		that is really on disk (None when the scan found nothing).
+		"""
+		if cmd is None:
+			cmd = self.get_compile_cmd()
+		wanted = output_path_from_compile_cmd(cmd)
+		if not wanted:
+			return None, None
+		src_dir = os.path.split(self.file)[0]
+		if not path.isabs(wanted):
+			wanted = os.path.join(src_dir, wanted)
+		return wanted, resolve_artifact(wanted, src_dir)
+
+	def _artifact_note(self, cmd):
+		"""One line when the compiled binary is not where we asked for it.
+
+		Without this the first run either succeeded silently (we retarget the
+		command) or ended in a bare 'file not found' after the compiler had
+		already reported success.
+		"""
+		wanted, actual = self.artifact_paths(cmd)
+		if wanted is None:
+			return ''
+		if actual is None:
+			return ('[cph-by-chenkx] the compiler exited successfully but no '
+					'%s was produced\n' % path.basename(wanted))
+		if actual != wanted:
+			return ('[cph-by-chenkx] the binary was written as %s (the '
+					'compiler did not use the -o name)\n' % path.basename(actual))
+		return ''
+
 	def get_run_cmd(self, args):
 		opt = self.run_settings
 		file_ext = path.splitext(self.file)[1][1:]
@@ -291,7 +326,12 @@ class ProcessManager(object):
 			if file_ext in x['extensions']:
 				if x['run_cmd'] is None:
 					return None
-				return self.format_command(x['run_cmd'], args=args)
+				cmd = self.format_command(x['run_cmd'], args=args)
+				# The compiler does not always write the name we asked for
+				# (non-ASCII -o names go through the ANSI codepage on
+				# Windows), so point the command at the file that is really
+				# there instead of failing with "file not found".
+				return retarget_command(cmd, os.path.split(self.file)[0])
 		else:
 			return -1
 
@@ -330,6 +370,8 @@ class ProcessManager(object):
 					# A typo like {file_nmae} silently becomes '' and the user just
 					# sees a weird command; say which name was ignored.
 					compile_result = ('[cph-by-chenkx] ignored unknown placeholder(s): %s\n' % ', '.join(unknown)) + compile_result
+				if p.returncode == 0:
+					compile_result = compile_result + self._artifact_note(cmd)
 				return (p.returncode, compile_result)
 			except Exception as e:
 				return (1, '[cph-by-chenkx] failed to run compile command: %s\n(cmd: %s)' % (e, cmd))

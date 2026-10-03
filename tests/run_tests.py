@@ -20,8 +20,9 @@ import io
 import json
 import os
 import re
+import shutil
 import sys
-import time
+import tempfile
 import types
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -655,11 +656,13 @@ def main():
     check('card template surfaces captured stderr',
           '{stderr_display}' in card_tpl and '{stderr_label}' in card_tpl)
 
-    # a leaked MemorySampler used to poll a dead pid forever
+    # A leaked MemorySampler used to poll a dead pid for the whole session.
+    # Use an impossible pid and join() rather than a wall-clock sleep (a fixed
+    # sleep was too tight on a slow macOS runner).
     mp = importlib.import_module(pkg + '.Modules.memprobe')
     sampler = mp.MemorySampler(99999999)
     sampler.start()
-    time.sleep(0.9)
+    sampler._thread.join(timeout=8.0)
     still_alive = sampler._thread.is_alive()
     sampler.stop()
     check('memory sampler stops polling a dead pid', not still_alive)
@@ -838,6 +841,135 @@ def main():
     #    or a syntax we ship - we ship none, so the base file must stay neutral.
     stray = [f for f in os.listdir(ROOT) if ' (' in f and f.endswith('.sublime-settings')]
     check('no stray platform settings variants', not stray, '; '.join(stray))
+
+    print('== build artifacts: the compiler does not always use the -o name ==')
+    artifacts = importlib.import_module(pkg + '.Modules.build_artifact')
+
+    check('quoted -o with spaces is parsed',
+          artifacts.output_path_from_compile_cmd(
+              'g++ "a b.cpp" -o "A  中文.exe" -DLOCAL') == 'A  中文.exe')
+    check('unquoted -o is parsed',
+          artifacts.output_path_from_compile_cmd('g++ x.cpp -o out.exe') == 'out.exe')
+    check('a command without -o yields nothing',
+          artifacts.output_path_from_compile_cmd('javac -d . A.java') is None)
+
+    # A Chinese name written through GBK and read back as latin-1.
+    mangled = '中文.exe'.encode('cp936').decode('latin-1')
+    check('mangled name is recognised', artifacts.names_match(mangled, '中文.exe'),
+          repr(mangled))
+    check('unrelated names do not match', not artifacts.names_match('a.exe', 'b.exe'))
+
+    tmp = tempfile.mkdtemp(prefix='cph_artifact_')
+    try:
+        wanted = os.path.join(tmp, 'A  中文.exe')
+        real = os.path.join(tmp, 'A  ' + mangled)
+        open(real, 'w').close()
+
+        check('the missing -o name resolves to the mangled file',
+              artifacts.resolve_artifact(wanted, tmp) == real)
+        check('an existing file is returned untouched',
+              artifacts.resolve_artifact(real, tmp) == real)
+        check('retarget_command points at the real binary',
+              artifacts.retarget_command(
+                  '"%s" -x' % wanted, tmp) == '"%s" -x' % real)
+        check('retarget_command leaves an existing path alone',
+              artifacts.retarget_command('"%s" ' % real, tmp) == '"%s" ' % real)
+        check('retarget_command leaves PATH commands alone',
+              artifacts.retarget_command('python "x.py"', tmp) == 'python "x.py"')
+        check('retarget_path points at the real binary',
+              artifacts.retarget_path(wanted, tmp) == real)
+        check('retarget_path leaves a foreign missing file alone',
+              artifacts.retarget_path(os.path.join(tmp, 'nope.py'), tmp)
+              == os.path.join(tmp, 'nope.py'))
+
+        os.remove(real)
+        check('nothing is invented when the binary is really gone',
+              artifacts.resolve_artifact(wanted, tmp) is None)
+        other = os.path.join(tmp, 'weird.exe')
+        open(other, 'w').close()
+        check('the newest file wins as a last resort',
+              artifacts.resolve_artifact(wanted, tmp, started_at=0) == other)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+    print('== the run command follows the real binary ==')
+    pm_mod = importlib.import_module(pkg + '.Modules.ProcessManager')
+    tmp2 = tempfile.mkdtemp(prefix='cph_run_')
+    try:
+        source = os.path.join(tmp2, '中文.cpp')
+        open(source, 'w').close()
+        exe_real = os.path.join(tmp2, mangled)
+        exe_wanted = os.path.join(tmp2, '中文.exe')
+        run_settings = [{
+            'name': 'C++', 'extensions': ['cpp'],
+            'compile_cmd': 'g++ "{source_file}" -o "{file_name}.exe"',
+            'run_cmd': '"{source_file_dir}/{file_name}.exe" {args}',
+        }]
+        manager = pm_mod.ProcessManager(source, 'source.c++',
+                                        run_settings=run_settings)
+        open(exe_real, 'w').close()
+        cmd = manager.get_run_cmd('')
+        check('get_run_cmd retargets a missing non-ASCII binary',
+              exe_real in cmd, cmd)
+        os.remove(exe_real)
+        open(exe_wanted, 'w').close()
+        cmd = manager.get_run_cmd('')
+        check('get_run_cmd keeps the command when the binary is there',
+              '中文.exe' in cmd and mangled not in cmd, cmd)
+    finally:
+        shutil.rmtree(tmp2, ignore_errors=True)
+
+    print('== stress loop: a timeout is not a failure ==')
+    i18n = importlib.import_module(pkg + '.core.cph_i18n')
+    stress = importlib.import_module(pkg + '.cph_stress')
+    fake_sublime = sys.modules['sublime']
+    chunks = []
+    saved = (fake_sublime.set_timeout, stress._append_stress,
+             stress._compile_program, stress._run_program, i18n.get_lang())
+    try:
+        fake_sublime.set_timeout = lambda fn, delay=0: fn()
+        stress._append_stress = lambda text: chunks.append(text)
+        stress._compile_program = lambda f, time_limit=30: (True, f, '')
+        i18n.set_lang('en')
+
+        def run_as(gen, user):
+            del chunks[:]
+            stress._stress_state['stop_requested'] = False
+            stress._stress_state['running'] = True
+
+            def fake_run(program, data, cwd=None, time_limit=2.0):
+                return gen if program.endswith('gen.cpp') else user
+
+            stress._run_program = fake_run
+            stress._run_stress_loop('u.cpp', 's.cpp', 'gen.cpp', 2.0, 3)
+            return ''.join(chunks)
+
+        text = run_as((-1, '', '', True), (0, '1', '', False))
+        check('a generator timeout is reported as a timeout',
+              'timed out' in text and 'Generator failed' not in text,
+              text.replace('\n', ' | ')[:200])
+        check('the generator timeout names the setting to change',
+              'stress_generator_time_limit_seconds' in text)
+
+        text = run_as((3, '', 'boom', False), (0, '1', '', False))
+        check('a generator crash shows the exit code and its stderr',
+              'exit code 3' in text and 'boom' in text,
+              text.replace('\n', ' | ')[:200])
+
+        text = run_as((0, '1', '', False), (-1, '', 'FileNotFoundError: nose.exe', False))
+        check('a program that cannot start is reported, not compared',
+              'cannot run' in text and 'mismatch' not in text,
+              text.replace('\n', ' | ')[:200])
+
+        text = run_as((0, '1', '', False), (-1, '', '', True))
+        check('a user TLE adds the debug-output hint',
+              'hint' in text and 'mismatch' not in text,
+              text.replace('\n', ' | ')[:200])
+    finally:
+        fake_sublime.set_timeout, stress._append_stress, \
+            stress._compile_program, stress._run_program = saved[:4]
+        i18n.set_lang(saved[4])
+        stress._stop_stress()
 
     print('')
     print('%d checks, %d failures' % (CHECKS[0], len(FAILURES)))

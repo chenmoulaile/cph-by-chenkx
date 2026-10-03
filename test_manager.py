@@ -672,17 +672,23 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 				)
 				watchdog.daemon = True
 				watchdog.start()
-			while proc.is_stopped() is None:
-				if self.sync_out:
-					s = proc.read(bfsize=1)
-				else:
-					s = proc.read()
-				self.__on_out(s)
 			try:
-				s = proc.read()
-				self.__on_out(s)
-			except:
-				pass
+				while proc.is_stopped() is None:
+					if self.sync_out:
+						s = proc.read(bfsize=1)
+					else:
+						s = proc.read()
+					self.__on_out(s)
+				try:
+					s = proc.read()
+					self.__on_out(s)
+				except Exception:
+					pass
+			except Exception as e:
+				# Draining the output must never skip the memory-sampler stop
+				# and on_stop below: an exception here used to leak a thread
+				# polling a dead pid and leave the status stuck on RUNNING.
+				print('[cph-by-chenkx] output listener error: %s' % e)
 			runtime = int((time() - start_time) * 1000)
 			# Freeze the peak memory reading before the process disappears
 			try:
@@ -875,7 +881,12 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 		v = self.view
 		if not self.tester:
 			return
-		s = sublime.get_clipboard()
+		# Sublime prints "Unable to open clipboard" and returns '' when
+		# another process holds the clipboard; just do nothing then.
+		try:
+			s = sublime.get_clipboard()
+		except Exception:
+			s = ''
 		if not s:
 			return
 		# Insert the paste in one go. The old loop dispatched one command per
@@ -1896,7 +1907,14 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 		self.test_phantoms[0].update([phantom])
 
 	def get_view_by_id(self, id):
-		for view in self.view.window().views():
+		# The panel view can already be detached from its window while a
+		# callback is in flight; asking for it used to raise
+		# AttributeError: 'NoneType' object has no attribute 'views'
+		# and left an empty -run tab behind.
+		window = self.view.window()
+		if window is None:
+			return None
+		for view in window.views():
 			if view.id() == id:
 				return view
 
@@ -1912,6 +1930,14 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 		run_all=False, run_failed=False, force_compile=False):
 
 		v = self.view
+
+		# A view that is no longer attached to a window (the tab was closed
+		# while a callback was queued) cannot host the run panel: bailing out
+		# here avoids an AttributeError half way through the setup, which
+		# left an empty -run tab behind.
+		if v.window() is None:
+			print('[cph-by-chenkx] the run view has no window any more, ignoring')
+			return
 
 		# Re-entry guard: only block while a compile is genuinely in flight.
 		# A stale 'COMPILING' status left behind by an older crashed compile

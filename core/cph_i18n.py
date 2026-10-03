@@ -326,6 +326,32 @@ STRINGS = {
         'zh': '标准输出',
         'en': 'Standard Output',
     },
+    'stress_generator_tle': {
+        'zh': '生成器超时（第 {round} 轮，上限 {limit}s），跳过该轮',
+        'en': 'generator timed out at round {round} (limit {limit}s), round skipped',
+    },
+    'stress_generator_limit_hint': {
+        'zh': '生成器连续超时，已停止；可调大 stress_generator_time_limit_seconds'
+              '（当前 {limit}s）或让 gen.cpp 更快',
+        'en': 'the generator keeps timing out, stopped; raise'
+              ' stress_generator_time_limit_seconds (now {limit}s) or make gen.cpp faster',
+    },
+    'stress_generator_failed': {
+        'zh': '生成器运行失败（第 {round} 轮，退出码 {code}）',
+        'en': 'generator failed at round {round} (exit code {code})',
+    },
+    'stress_cannot_run': {
+        'zh': '无法运行 {program}: {reason}',
+        'en': 'cannot run {program}: {reason}',
+    },
+    'stress_tle_hint': {
+        'zh': '提示: 若编译命令里定义了 LOCAL 之类的调试宏，程序里留在循环内的'
+              'debug 输出会非常慢（stderr 不缓冲），本地很容易超时；'
+              '去掉该行或删掉编译命令里的 -DLOCAL 再试',
+        'en': 'hint: if the compile command defines a debug macro such as LOCAL,'
+              ' a debug() call left inside a loop is extremely slow (stderr is'
+              ' unbuffered) and times out locally; remove it or drop -DLOCAL',
+    },
     'stress_choose_std': {
         'zh': '请先选择 std 文件',
         'en': 'Please choose the standard (std) file first',

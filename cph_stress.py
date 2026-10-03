@@ -18,6 +18,8 @@ from .core.cph_state import set_stress_running
 from .core.cph_i18n import t
 from .core.cph_verdict import normalize_lines
 from .Highlight.test_interface import get_test_styles
+from .Modules.build_artifact import (output_path_from_compile_cmd,
+                                     resolve_artifact, retarget_path)
 
 
 _stress_state = {
@@ -36,6 +38,13 @@ _stress_state = {
 class CphStartStressTestCommand(sublime_plugin.TextCommand):
     def run(self, edit):
         user_file = self.view.file_name()
+        if not user_file:
+            # The stress panel is a scratch view and it takes focus when a
+            # run starts, so pressing the key again used to answer "save the
+            # file first" instead of restarting the test.
+            last = _stress_state.get('user_file')
+            if last and os.path.exists(last):
+                user_file = last
         if not user_file:
             sublime.error_message(t('save_file_first'))
             return
@@ -202,37 +211,55 @@ def _compile_program(file, time_limit=30):
 
     Previously this was hardcoded to `g++ -std=c++11 -O2`, so the stress
     binary could differ from what the judge-like runner actually builds.
+
+    Returns (ok, path, reason): `reason` is a short explanation for the
+    panel when the build failed, instead of a bare "failed to compile".
     """
     entry = _lang_entry(file)
     if entry is None:
         print('[cph-by-chenkx] stress: no run_settings entry for %s' % file)
-        return False, None
+        return False, None, 'no run_settings entry for this file type'
 
     src_dir = os.path.dirname(file)
     base = os.path.splitext(os.path.basename(file))[0]
     template = entry.get('compile_cmd')
     if not template:
         # interpreted language (python/java handled by its own run_cmd)
-        return True, file
+        return True, file, ''
 
     cmd = _format_cmd(template, file)
-    m = re.search(r'-o\s+"?([^"\s]+)"?', cmd)
-    if m:
-        out_name = m.group(1)
-        exe_path = out_name if os.path.isabs(out_name) else os.path.join(src_dir, out_name)
+    exe_path = output_path_from_compile_cmd(cmd)
+    if exe_path:
+        if not os.path.isabs(exe_path):
+            exe_path = os.path.join(src_dir, exe_path)
     else:
         exe_path = os.path.join(
             src_dir, base + ('.exe' if sublime.platform() == 'windows' else ''))
 
+    started_at = time.time()
     try:
         rc, out, err = _popen_capture(cmd, src_dir, shell=True, timeout=time_limit)
         if rc != 0:
             print('[cph-by-chenkx] Compile error in %s:\n%s' % (file, err))
-            return False, None
-        return True, exe_path
+            detail = (err or out or '').strip().splitlines()
+            return False, None, ('compiler exit code %s%s'
+                                 % (rc, (': ' + detail[0][:200]) if detail else ''))
+        # A successful compile that wrote nothing (or wrote a different name
+        # than the one asked for) used to fail later as "cannot run"; check
+        # now so the message points at the real problem.
+        real = resolve_artifact(exe_path, src_dir, started_at)
+        if real is None:
+            print('[cph-by-chenkx] stress: %s compiled but %r is missing'
+                  % (file, os.path.basename(exe_path)))
+            return False, None, ('the compiler produced no %s'
+                                 % os.path.basename(exe_path))
+        if real != exe_path:
+            print('[cph-by-chenkx] stress: binary of %s is %r on disk'
+                  % (base, os.path.basename(real)))
+        return True, real, ''
     except Exception as e:
         print('[cph-by-chenkx] Compile error: %s' % str(e))
-        return False, None
+        return False, None, str(e)[:200]
 
 
 def _popen_capture(cmd, cwd, input_text=None, shell=False, timeout=30):
@@ -289,6 +316,11 @@ def _program_argv(file):
                 p = p[1:-1]
             cleaned.append(p)
         parts = cleaned
+    if parts:
+        # The compiler may have written the binary under a different name
+        # (non-ASCII -o names go through the ANSI codepage on Windows), which
+        # used to make every round fail with "cannot run".
+        parts[0] = retarget_path(parts[0], os.path.dirname(file))
     return parts
 
 
@@ -314,38 +346,57 @@ def _run_stress_loop(user_file, std_file, gen_file, time_limit, max_rounds):
         sublime.set_timeout(
             lambda: _append_stress('[cph-by-chenkx] Compiling programs...\n'), 0)
 
-        ok1, user_exe = _compile_program(user_file)
+        ok1, user_exe, why1 = _compile_program(user_file)
         if not ok1:
             sublime.set_timeout(
-                lambda: _append_stress('[cph-by-chenkx] Failed to compile user program: ' + user_file + '\n'), 0)
+                lambda w=why1: _append_stress(
+                    '[cph-by-chenkx] Failed to compile user program: '
+                    + os.path.basename(user_file) + (': ' + w if w else '') + '\n'), 0)
             _stop_stress()
             return
 
-        ok2, std_exe = _compile_program(std_file)
+        ok2, std_exe, why2 = _compile_program(std_file)
         if not ok2:
             sublime.set_timeout(
-                lambda: _append_stress('[cph-by-chenkx] Failed to compile std: ' + std_file + '\n'), 0)
+                lambda w=why2: _append_stress(
+                    '[cph-by-chenkx] Failed to compile std: '
+                    + os.path.basename(std_file) + (': ' + w if w else '') + '\n'), 0)
             _stop_stress()
             return
 
-        ok3, gen_exe = _compile_program(gen_file)
+        ok3, gen_exe, why3 = _compile_program(gen_file)
         if not ok3:
             sublime.set_timeout(
-                lambda: _append_stress('[cph-by-chenkx] Failed to compile generator: ' + gen_file + '\n'), 0)
+                lambda w=why3: _append_stress(
+                    '[cph-by-chenkx] Failed to compile generator: '
+                    + os.path.basename(gen_file) + (': ' + w if w else '') + '\n'), 0)
             _stop_stress()
             return
+
+        # The generator is allowed to take longer than the program under
+        # test: producing a large sample is not the same as solving it.
+        try:
+            generator_limit = float(
+                get_settings().get('stress_generator_time_limit_seconds', 10) or 10)
+        except (TypeError, ValueError):
+            generator_limit = 10.0
+        if generator_limit <= 0:
+            generator_limit = 10.0
 
         sublime.set_timeout(
             lambda: _append_stress(
                 '[cph-by-chenkx] Stress test started\n'
                 '  user: %s\n  std:  %s\n  gen:  %s\n'
-                '  time limit: %ss/round, max rounds: %d\n\n'
+                '  time limit: %ss/round, generator limit: %ss, max rounds: %d\n\n'
                 % (os.path.basename(user_file), os.path.basename(std_file),
-                   os.path.basename(gen_file), time_limit, max_rounds)
+                   os.path.basename(gen_file), time_limit, generator_limit,
+                   max_rounds)
             ), 0)
 
         round_count = 0
         compared = 0
+        gen_timeouts = 0
+        tle_hint_shown = False
         for round_count in range(1, max_rounds + 1):
             if _stress_state['stop_requested']:
                 sublime.set_timeout(
@@ -354,26 +405,70 @@ def _run_stress_loop(user_file, std_file, gen_file, time_limit, max_rounds):
 
             _stress_state['current_round'] = round_count
 
-            ret, inp, _, _ = _run_program(gen_file, '', time_limit=time_limit)
-            if ret != 0:
+            # The generator gets its own, larger budget. Generating the test
+            # is legitimately slower than solving it, and measuring it with
+            # the program's limit made a correct setup stop at
+            # "Generator failed at round 1" (a timeout was reported as a
+            # failure because the TLE flag was dropped here).
+            ret, inp, gen_err, gen_tle = _run_program(
+                gen_file, '', time_limit=generator_limit)
+            if gen_tle:
+                gen_timeouts += 1
                 sublime.set_timeout(
-                    lambda r=round_count: _append_stress(
-                        '[cph-by-chenkx] Generator failed at round %d\n' % r), 0)
+                    lambda r=round_count, l=generator_limit: _append_stress(
+                        '[cph-by-chenkx] ' + t('stress_generator_tle', round=r, limit=l) + '\n'), 0)
+                if gen_timeouts >= 3:
+                    sublime.set_timeout(
+                        lambda l=generator_limit: _append_stress(
+                            '[cph-by-chenkx] ' + t('stress_generator_limit_hint', limit=l) + '\n'), 0)
+                    break
+                continue
+            if ret != 0:
+                # Say *why*: exit code plus whatever the generator printed.
+                sublime.set_timeout(
+                    lambda r=round_count, rc=ret, e=gen_err: _append_stress(
+                        '[cph-by-chenkx] ' + t('stress_generator_failed', round=r, code=rc)
+                        + ('\n  ' + e.strip()[:500] if e.strip() else '') + '\n'), 0)
                 break
 
-            ret1, user_out, _, tle1 = _run_program(user_file, inp, time_limit=time_limit)
+            ret1, user_out, user_err, tle1 = _run_program(user_file, inp, time_limit=time_limit)
             if tle1:
                 sublime.set_timeout(
                     lambda r=round_count: _append_stress(
                         '[cph-by-chenkx] Round %d: user program TLE\n' % r), 0)
+                if not tle_hint_shown:
+                    # By far the most common cause on a correct solution: the
+                    # compile command defines LOCAL, so a debug macro left
+                    # inside the main loop prints O(n^2) of stderr. Saying it
+                    # once saves a long hunt (and a stderr dump would be huge).
+                    tle_hint_shown = True
+                    sublime.set_timeout(
+                        lambda: _append_stress(
+                            '[cph-by-chenkx] ' + t('stress_tle_hint') + '\n'), 0)
                 continue
+            if ret1 < 0 and user_err:
+                # The program never started (missing binary, bad command):
+                # comparing its empty output as a wrong answer hid this.
+                sublime.set_timeout(
+                    lambda e=user_err: _append_stress(
+                        '[cph-by-chenkx] ' + t('stress_cannot_run',
+                                               program=os.path.basename(user_file),
+                                               reason=e.strip()[:300]) + '\n'), 0)
+                break
 
-            ret2, std_out, _, tle2 = _run_program(std_file, inp, time_limit=time_limit)
+            ret2, std_out, std_err, tle2 = _run_program(std_file, inp, time_limit=time_limit)
             if tle2:
                 sublime.set_timeout(
                     lambda r=round_count: _append_stress(
                         '[cph-by-chenkx] Round %d: std program TLE\n' % r), 0)
                 continue
+            if ret2 < 0 and std_err:
+                sublime.set_timeout(
+                    lambda e=std_err: _append_stress(
+                        '[cph-by-chenkx] ' + t('stress_cannot_run',
+                                               program=os.path.basename(std_file),
+                                               reason=e.strip()[:300]) + '\n'), 0)
+                break
 
             compared += 1
             # Same comparison rules as the judge-like runner (ignore trailing

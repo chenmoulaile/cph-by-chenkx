@@ -76,7 +76,10 @@ class CphAddTestFromClipboardCommand(sublime_plugin.TextCommand):
 			sublime.status_message(t('save_file_first'))
 			return
 
-		content = sublime.get_clipboard()
+		try:
+			content = sublime.get_clipboard()
+		except Exception:
+			content = ''
 		if not content or not content.strip():
 			sublime.status_message(t('clipboard_empty'))
 			return

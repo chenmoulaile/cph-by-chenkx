@@ -134,6 +134,10 @@
 - **`sync_output`（逐字符同步输出）默认关闭**：开启后一个字符刷新一次视图，只适合交互式程序。
 - **`PE`（Presentation Error）**：只有「token 完全相同但空白/换行不同」才算 PE，默认与 WA 分别显示；若你的 OJ 把 PE 也算通过，把 `regard_pe_as_ac` 设为 `true`。
 - 输出超过 `max_output_bytes`（默认 8MB）时超出部分会被丢弃，并插入一行截断提示。
+- **非 ASCII 文件名靠自动识别**：Windows 上编译器按 ANSI 代码页写出的 `中文.exe`
+  在磁盘上会变成另一个名字（GBK 字节被当成 latin-1 读），插件编译后会核对产物、
+  按真实的文件名去运行，并在控制台说明（`the binary is ... on disk, not ...`）。
+  如果你的编译命令把 `-o` 写到别处，请保证输出名用引号包起来。
 
 ## 快捷键
 
@@ -207,6 +211,13 @@ int main() {
 - 三个程序都从 stdin 读、往 stdout 写，调试信息请用 `cerr`（配合 `"ignore_stderr": true`）
 - Python 文件也可以直接作为你的程序 / std / gen 参与对拍
 - 对拍会使用 `run_settings` 里的编译命令；失败的反例可自动存为正式测试点
+- **生成器有独立的时间上限**：`stress_generator_time_limit_seconds`（默认 10 秒）。
+  造数据通常比解题慢，用程序本身的时限（`stress_time_limit_seconds`）卡生成器会把
+  「生成器超时」误判成「生成器失败」。生成器超时会跳过该轮，连续 3 次才停止并提示。
+- **`-DLOCAL` + 循环里的 `debug()` 会让本地运行超时**：`std::cerr` 默认不缓冲，把整个
+  数组丢给 `cerr` 的调试语句放在主循环里时，输出量是 O(n²)，本地 n=2000 就要 20 秒以上
+  （实测同一份代码不加 `-DLOCAL` 只要 0.02 秒）。提交前记得删掉这类调试输出，或把编译
+  命令里的 `-DLOCAL` 去掉。
 
 ## 致谢
 

@@ -79,8 +79,11 @@
 	"show_summary_bar": true,
 
 	// ================= 对拍 (Stress Test) =================
-	// 对拍时每轮给生成器/用户程序/std 的单轮时间限制(秒)
+	// 对拍时每轮给用户程序/std 的单轮时间限制(秒)
 	"stress_time_limit_seconds": 2,
+	// 生成器的单轮时间限制(秒)。造数据比解题慢，所以单独放宽；
+	// 太小会把"生成器超时"误报成"生成器失败"。
+	"stress_generator_time_limit_seconds": 10,
 	// 上次使用的 std 程序 / 数据生成器路径（对拍命令会自动记住）
 	"stress_std_file": "",
 	"stress_generator_file": "",
