@@ -12,6 +12,7 @@ cph-by-chenkx - 环境自检 (doctor)
 """
 
 import os
+import re
 import shutil
 import socket
 import sys

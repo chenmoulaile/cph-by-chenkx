@@ -1,8 +1,22 @@
 # cph-by-chenkx — Package Control Submission Notes
 
-Package version: v1.4.7
+Package version: v1.4.8
 Repository: https://github.com/chenmoulaile/cph-by-chenkx
 Channel entry file: `repository/c/cph-by-chenkx.json` (see snippet at the bottom)
+
+## v1.4.8 notes
+
+- **doctor was unusable**: `cph_doctor.py` ran its placeholder check without
+  importing `re`, so opening "Check environment (doctor)" raised `NameError` on
+  the first language entry and the report view was never created. The import is
+  restored; `tests/run_tests.py` now both checks `_unknown_placeholders` and
+  executes the full `run()` path, so a "feature totally dead" regression of this
+  kind is caught locally.
+- **Memory chip no longer wraps**: `get_nice_memory()` used a plain space, which
+  minihtml broke onto two lines on a narrow panel; it now uses `&nbsp;` (the
+  plain-text detail view converts it back).
+- Trailing newline added to `repository-cph-by-chenkx.json` and
+  `Main.sublime-menu`; regression checks 62 -> 66.
 
 ## v1.4.7 notes (Package Control review round)
 

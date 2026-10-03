@@ -366,10 +366,12 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 				memory = float(self.memory)
 			except (ValueError, TypeError):
 				return '-'
+			# &nbsp; keeps "1 MB" on one line: minihtml breaks on a plain
+			# space, and on a narrow panel the chip wrapped to "1" / "MB".
 			if memory < 1024:
-				return str(int(memory)) + ' MB'
+				return str(int(memory)) + '&nbsp;MB'
 			else:
-				return '%.2f GB' % (memory / 1024.0)
+				return '%.2f&nbsp;GB' % (memory / 1024.0)
 
 		def get_verdict_class(self):
 			if not self.verdict:
@@ -1178,7 +1180,8 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 		header = '%s %d  |  %s  |  %s: %s' % (t('test_label').capitalize(), i + 1,
 			verdict_short, t('time'), runtime_str)
 		if test.memory not in ('-', None):
-			header += '  |  %s: %s' % (t('memory'), test.get_nice_memory())
+			header += '  |  %s: %s' % (t('memory'),
+				test.get_nice_memory().replace('&nbsp;', ' '))
 		lines = [header, '=' * max(len(header), 40), '']
 
 		# sample input

@@ -1,0 +1,16 @@
+cph-by-chenkx 1.4.8
+===================
+
+Fixed:
+
+* "Check environment (doctor)" crashed the moment it opened: the placeholder
+  check used the `re` module without importing it, so any language entry with
+  a compile command raised NameError and the report view never appeared. The
+  import is back, and a regression test now runs the whole command end to end.
+* The memory chip wrapped onto two lines ("1" / "MB") on a narrow panel; it now
+  uses a non-breaking space.
+
+Notes:
+
+* Trailing newline added to repository-cph-by-chenkx.json and Main.sublime-menu.
+* Regression checks: 62 -> 66.

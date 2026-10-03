@@ -98,6 +98,12 @@ def _install_fake_sublime():
         def set_status(self, key, value):
             self._status[key] = value
 
+        def set_name(self, name):
+            self._name = name
+
+        def set_scratch(self, scratch):
+            self._scratch = scratch
+
         def execute_command(self, *args, **kwargs):
             pass
 
@@ -106,6 +112,32 @@ def _install_fake_sublime():
 
         def sel(self):
             return [Region(0)]
+
+        def window(self):
+            return Window()
+
+    class Window(object):
+        """Minimal stand-in so doctor.run() can open its report view."""
+
+        def __init__(self):
+            self._views = []
+
+        def new_file(self):
+            view = View()
+            self._views.append(view)
+            return view
+
+        def focus_view(self, view):
+            pass
+
+        def active_view(self):
+            return self._views[-1] if self._views else None
+
+        def run_command(self, *args, **kwargs):
+            pass
+
+        def status_message(self, *args, **kwargs):
+            pass
 
     sublime.Region = Region
     sublime.Phantom = Phantom
@@ -491,6 +523,34 @@ def main():
     check('run_cmd template is not reported as missing', ok is True, detail)
     ok2, _ = doc._check_command('g++ -O2 -o x')
     check('plain compiler command is looked up', ok2 is not None)
+
+    # v1.4.6 shipped doctor without `import re`: the first language entry made
+    # _unknown_placeholders raise NameError and the report view was never
+    # created - doctor was unusable, not merely wrong. Pin both the helper and
+    # the whole run() path so this class of "feature totally dead" regression
+    # cannot slip through again.
+    check('known placeholders are accepted',
+          doc._unknown_placeholders('g++ {file} -o {file_name}') == [],
+          repr(doc._unknown_placeholders('g++ {file} -o {file_name}')))
+    check('a typo in a placeholder is flagged',
+          doc._unknown_placeholders('g++ {file_nmae}') == ['file_nmae'],
+          repr(doc._unknown_placeholders('g++ {file_nmae}')))
+    check('an empty command has no placeholders',
+          doc._unknown_placeholders('') == [])
+
+    real_get_settings = doc.get_settings
+    doc.get_settings = lambda: {'run_settings': [
+        {'name': 'C++', 'extensions': ['cpp'],
+         'compile_cmd': 'g++ {file_nmae} -o x', 'run_cmd': 'x'}]}
+    try:
+        cmd = doc.CphDoctorCommand(sys.modules['sublime'].View())
+        cmd.run(None)
+        check('doctor run() survives a language entry', True)
+    except Exception as e:
+        check('doctor run() survives a language entry', False,
+              '%s: %s' % (type(e).__name__, e))
+    finally:
+        doc.get_settings = real_get_settings
 
     print('== companion: merge keyed by input ==')
     comp = importlib.import_module(pkg + '.cph_companion')
