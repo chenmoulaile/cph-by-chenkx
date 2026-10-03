@@ -13,6 +13,7 @@ Exit code 0 = all good, 1 = failures (used by .github/workflows/tests.yml).
 """
 
 import ast
+import contextlib
 import importlib
 import importlib.util
 import io
@@ -544,7 +545,13 @@ def main():
          'compile_cmd': 'g++ {file_nmae} -o x', 'run_cmd': 'x'}]}
     try:
         cmd = doc.CphDoctorCommand(sys.modules['sublime'].View())
-        cmd.run(None)
+        # doctor also prints the report to the console; capture it so the
+        # check does not depend on the console encoding (a cp1252 Windows
+        # console cannot encode the Chinese report text and raised
+        # UnicodeEncodeError, which is a test-host artefact - inside Sublime
+        # the console is UTF-8 and the report view is created before the print).
+        with contextlib.redirect_stdout(io.StringIO()):
+            cmd.run(None)
         check('doctor run() survives a language entry', True)
     except Exception as e:
         check('doctor run() survives a language entry', False,
