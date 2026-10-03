@@ -5,6 +5,13 @@ on:
   pull_request:
   workflow_dispatch:
 
+# One run per commit: publishing a release pushes both the branch and the tag,
+# which used to start two identical runs and email every failure twice. The
+# cancelled duplicate is grey, not red.
+concurrency:
+  group: tests-${{ github.sha }}
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: ${{ matrix.os }}
@@ -23,9 +30,12 @@ jobs:
           - os: macos-latest
             python-version: '3.12'
     steps:
-      - uses: actions/checkout@v4
+      # checkout@v4 / setup-python@v5 target Node.js 20, which GitHub now forces
+      # onto Node 24 and reports as a deprecation warning on every run.
+      # The first majors that target Node 24 are v5 and v6.
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
 
