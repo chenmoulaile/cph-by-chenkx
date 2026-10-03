@@ -140,8 +140,8 @@
 								"caption": "Key Bindings",
 								"command": "edit_settings",
 								"args": {
-									"base_file": "${packages}/Default/Default ($platform).sublime-keymap",
-									"default": "[\n\t// 本插件默认不添加任何快捷键。想启用建议的绑定，\n\t// 把 Packages/cph-by-chenkx/Example ($platform).sublime-keymap\n\t// 里的条目复制到这里即可（macOS 用 super+alt，其它平台用 ctrl+alt）。\n\t// This package adds no key bindings by default: copy what you want from\n\t// Packages/cph-by-chenkx/Example ($platform).sublime-keymap.\n\t$0\n]\n"
+									"base_file": "${packages}/cph-by-chenkx/Default ($platform).sublime-keymap",
+									"default": "[\n\t// cph-by-chenkx ships no key bindings by default.\n\t// Suggested bindings live in Packages/cph-by-chenkx/Example ($platform).sublime-keymap;\n\t// copy the ones you want here, e.g.\n\t// { \"keys\": [\"ctrl+alt+b\"], \"command\": \"cph_view_tester\", \"args\": {\"action\": \"make_opd\"} },\n\t// { \"keys\": [\"ctrl+alt+s\"], \"command\": \"cph_start_stress_test\" },\n\t$0\n]\n"
 								}
 							},
 							{

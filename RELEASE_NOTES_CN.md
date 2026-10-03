@@ -5,6 +5,24 @@
 
 ---
 
+# v1.4.13
+
+## 修复
+
+- **「Key Bindings」菜单项引用到了别的包目录**：上一版照着 ST 自带菜单的写法用了
+  `${packages}/Default/Default ($platform).sublime-keymap`，而 Package Control 的审查要求
+  `base_file` 必须指向**本包**目录（装好之后包名是 `${packages}/cph-by-chenkx/`）。
+  现已改为引用本包的 `Default ($platform).sublime-keymap`：分屏左侧显示本包默认绑定，
+  右侧编辑的仍然是你自己的 `Packages/User/Default ($platform).sublime-keymap`，
+  首次打开时还会提示建议绑定可以从 `Example ($platform).sublime-keymap` 复制。
+
+## 说明
+
+- 回归测试 115 → **116 项**：新增「菜单项只能引用本包目录或 User 目录」的静态检查，
+  避免以后再写出跨包引用。
+
+---
+
 # v1.4.12
 
 ## 改动（为通过 Package Control 收录审查）

@@ -1,8 +1,17 @@
 # cph-by-chenkx — Package Control Submission Notes
 
-Package version: v1.4.12
+Package version: v1.4.13
 Repository: https://github.com/chenmoulaile/cph-by-chenkx
 Channel entry file: `repository/c/cph-by-chenkx.json` (see snippet at the bottom)
+
+## v1.4.13 notes
+
+- The "Key Bindings" menu entry pointed at `${packages}/Default/Default ($platform).sublime-keymap`;
+  the reviewer requires `base_file` to live inside the submitted package, so it now
+  references this package's own `Default ($platform).sublime-keymap` (the split view
+  still edits `Packages/User/Default ($platform).sublime-keymap`). `tests/run_tests.py`
+  gained a check that menu entries never reference another package's directory.
+- Regression checks: 115 -> 116.
 
 ## v1.4.12 notes (Package Control review guidelines)
 

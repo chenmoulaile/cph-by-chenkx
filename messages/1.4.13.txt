@@ -1,0 +1,11 @@
+cph-by-chenkx 1.4.13
+====================
+
+Fixed:
+
+* The "Key Bindings" menu entry used ${packages}/Default/Default ($platform).sublime-keymap.
+  Package Control requires base_file to point into the package itself, so it now
+  references this package's own Default ($platform).sublime-keymap: the left pane
+  of the split view shows the package defaults, the right pane still edits your
+  own Packages/User/Default ($platform).sublime-keymap, and the initial content
+  points at Example ($platform).sublime-keymap for the suggested bindings.

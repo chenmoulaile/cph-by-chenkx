@@ -889,6 +889,7 @@ def main():
     with open(os.path.join(ROOT, 'Main.sublime-menu'), encoding='utf-8') as f:
         main_menu = json.load(f)
     wrong = []
+    outside = []
 
     def walk_menu(items):
         for item in items:
@@ -897,12 +898,22 @@ def main():
                     'settings' in caption.lower() or 'key binding' in caption.lower()
                     or '.sublime-keymap' in str(item.get('args'))):
                 wrong.append(caption)
+            args = item.get('args') or {}
+            ref = args.get('base_file') or args.get('file') or ''
+            # A package must reference its own files: the reviewer rejects
+            # `${packages}/Default/...` in a Key Bindings entry (only User/ and
+            # our own directory are fine).
+            if ref.startswith('${packages}/') and not ref.startswith(
+                    ('${packages}/cph-by-chenkx/', '${packages}/User/')):
+                outside.append('%s -> %s' % (caption, ref))
             for child in item.get('children') or []:
                 walk_menu([child])
 
     walk_menu(main_menu)
     check('settings/keybindings use edit_settings (split view)', not wrong,
           '; '.join(wrong))
+    check('menu entries only reference this package or User/', not outside,
+          '; '.join(outside))
 
     # 6. The context menu switch is documented in the shipped settings.
     with open(os.path.join(ROOT, 'cph-by-chenkx.sublime-settings'), encoding='utf-8') as f:
