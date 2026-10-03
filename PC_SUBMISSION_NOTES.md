@@ -1,8 +1,26 @@
 # cph-by-chenkx — Package Control Submission Notes
 
-Package version: v1.4.13
+Package version: v1.4.14
 Repository: https://github.com/chenmoulaile/cph-by-chenkx
 Channel entry file: `repository/c/cph-by-chenkx.json` (see snippet at the bottom)
+
+## v1.4.14 notes
+
+- No new files or settings surface changes for the review; the changes are runtime
+  fixes plus template/UI cleanups:
+  - the stderr badge was dropped from the test card (detail view keeps it),
+  - a pristine placeholder test (no input, no answer) is no longer persisted by
+    `save_tests()` (`is_meaningful_test()`), which fixed problems keeping a
+    `[{"test": ""}]` entry forever,
+  - `Ctrl+D` deletes tests that were never run,
+  - crashes are judged RE (crash exit codes and crash signatures), including when
+    the watchdog fired,
+  - each run has a generation so a stale watchdog / listener thread from the
+    previous test cannot kill or corrupt the next one,
+  - the run clock and the TLE watchdog stay paused until the sample is pasted,
+  - the accept/decline decision now ignores whitespace exactly like the judge,
+  - reopening an edit tab replaces its content instead of appending it again.
+- Regression checks: 116 -> 138.
 
 ## v1.4.13 notes
 

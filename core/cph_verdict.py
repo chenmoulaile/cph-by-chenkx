@@ -229,17 +229,24 @@ def get_verdict_by_code(rtcode, runtime, time_limit_ms, memory_limit_mb,
     if rtcode is None:
         return get_verdict('unknown_error')
 
-    if rtcode < 0:
-        return get_verdict('runtime_error')
-
-    if rtcode != 0:
+    # A signal / NTSTATUS exit code is always a crash: it must be RE even
+    # when the runtime also happens to be over the limit (previously a
+    # program that died on an access violation at 2.1s was reported TLE).
+    if rtcode != 0 and not is_crash_exit_code(rtcode):
         if rtcode == 137 or rtcode == 9:
             return get_verdict('memory_limit_exceed')
-        elif rtcode == 124 or rtcode == 142:
+        if rtcode == 124 or rtcode == 142:
             return get_verdict('time_limit_exceed')
+
+    if rtcode != 0:
         return get_verdict('runtime_error')
 
     if time_limit_ms and runtime and runtime > time_limit_ms:
+        # ...unless the error stream shows a crash: the watchdog kill and
+        # the crash happened at (nearly) the same moment, and RE is the
+        # honest verdict.
+        if looks_like_crash(stderr):
+            return get_verdict('runtime_error')
         return get_verdict('time_limit_exceed')
 
     # Real MLE: only reachable once the peak memory was actually measured
@@ -281,6 +288,84 @@ def get_verdict_by_code(rtcode, runtime, time_limit_ms, memory_limit_mb,
         return get_verdict('presentation_error')
 
     return get_verdict('accepted')
+
+
+# ---------------------------------------------------------------------------
+# Runtime error detection
+#
+# A crashed program does not always announce itself with a nice exit code:
+# the watchdog may have killed it a moment later, or the process may exit 0
+# after printing the failure to stderr. These two helpers let the judge say
+# RE instead of a misleading TLE / WA.
+# ---------------------------------------------------------------------------
+
+#: Windows NTSTATUS exception codes (access violation, divide by zero,
+#: stack overflow, ...) start here.
+_WINDOWS_EXCEPTION_BASE = 0xC0000000
+#: A shell reports "died from signal N" as 128 + N.
+_POSIX_SIGNAL_BASE = 128
+_POSIX_SIGNAL_MAX = 192
+
+_CRASH_TEXT = (
+    # Python
+    re.compile(r'Traceback \(most recent call last\)'),
+    re.compile(r'\b(?:IndexError|KeyError|ValueError|ZeroDivisionError|'
+               r'RecursionError|MemoryError|NameError|TypeError|'
+               r'AttributeError|OverflowError|ArithmeticError|AssertionError|'
+               r'RuntimeError|StopIteration|UnboundLocalError)\b'),
+    # C/C++ runtimes and tools
+    re.compile(r'\bterminate called after throwing\b'),
+    re.compile(r'\bstd::(?:bad_alloc|bad_cast|out_of_range|length_error|'
+               r'invalid_argument|logic_error|runtime_error|domain_error|'
+               r'range_error|overflow_error|underflow_error)\b'),
+    re.compile(r'(?:Address|UndefinedBehavior|Thread|Leak)Sanitizer'),
+    re.compile(r'\bruntime error:'),
+    re.compile(r'Assertion .* failed'),
+    re.compile(r'\b(?:Segmentation fault|Bus error|Floating point exception|'
+               r'core dumped|stack smashing)\b'),
+    re.compile(r'\bstack overflow\b', re.I),
+    # Java / JVM
+    re.compile(r'Exception in thread "'),
+    re.compile(r'\bjava\.lang\.[A-Za-z]*(?:Exception|Error)\b'),
+    re.compile(r'\b(?:StackOverflowError|OutOfMemoryError|NullPointerException)\b'),
+)
+
+
+def is_crash_exit_code(rtcode):
+    """True when an exit code means 'the program died', not 'it finished'.
+
+    POSIX signals are reported as negative codes by Python, Windows reports
+    an NTSTATUS value such as 0xC0000005 (access violation), and a shell
+    wrapper uses 128 + signal number.
+    """
+    if rtcode is None:
+        return False
+    try:
+        code = int(rtcode)
+    except (TypeError, ValueError):
+        return False
+    if code < 0:
+        return True
+    if code >= _WINDOWS_EXCEPTION_BASE:
+        return True
+    if _POSIX_SIGNAL_BASE < code <= _POSIX_SIGNAL_MAX:
+        return True
+    return False
+
+
+def looks_like_crash(text):
+    """True when an error stream carries a runtime-error signature.
+
+    Deliberately narrow: plain `cerr` debug output must never turn a run
+    into RE, only text that a crash handler / sanitizer / interpreter
+    traceback actually produces.
+    """
+    if not text:
+        return False
+    for pattern in _CRASH_TEXT:
+        if pattern.search(text):
+            return True
+    return False
 
 
 def normalize_lines(s):

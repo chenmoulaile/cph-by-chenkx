@@ -1,0 +1,30 @@
+cph-by-chenkx 1.4.14
+====================
+
+Fixed:
+
+* The stderr badge is gone from the test cards; with any cerr output the card
+  became bulky. The error stream is still shown in the detail view.
+* The empty placeholder sample the panel starts with is no longer written to
+  the tests file, so a problem could keep a "[{"test": ""}]" entry that came
+  back on every reload and could not be deleted for good.
+* A run watchdog left over from the previous test could kill the next test and
+  report it as TLE (it saw the reused process object still alive with the old
+  start time). Every run now has its own generation, and stale watchdogs /
+  listeners simply stop.
+* Crashes are reported as RE instead of TLE: crash exit codes (access
+  violation, SIGSEGV, abort, stack overflow) always win, and a crash signature
+  in the error stream turns a timeout into RE. Plain cerr debug output does not.
+* The runtime no longer includes the time spent copying the sample: the clock
+  and the TLE watchdog stay paused until you paste input or the program prints
+  something.
+* A sample that is already correct no longer keeps offering "accept" and stays
+  expanded: the accept/decline check now ignores whitespace exactly like the
+  judge does, and setting a matching answer collapses the card.
+* Reopening "test N -edit" / "-answer" no longer duplicates the content, and
+  the pair is matched per window.
+
+Notes:
+
+* Ctrl+D (delete tests) also deletes tests that were never run.
+* The edit card no longer has a blank line at the top.

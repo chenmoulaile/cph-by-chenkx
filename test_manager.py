@@ -21,7 +21,7 @@ from .core.cph_settings import base_name, get_settings, root_dir, get_tests_file
 from .core.cph_target import visible as context_menu_visible
 from .core.cph_resources import read_resource
 from .Highlight.test_interface import get_test_styles
-from .core.cph_verdict import get_verdict, get_verdict_by_code, get_verdict_by_name, build_line_diff, outputs_equal, VERDICTS, find_crash_location
+from .core.cph_verdict import get_verdict, get_verdict_by_code, get_verdict_by_name, build_line_diff, outputs_equal, VERDICTS, find_crash_location, looks_like_crash
 from .core.cph_i18n import t, set_lang, get_lang, LANG_ZH, LANG_EN
 
 
@@ -141,6 +141,19 @@ def _clean_newlines(s):
 	if not isinstance(s, str):
 		return s
 	return s.replace('\r\n', '\n').replace('\r', '\n')
+
+
+def _squash_ws(s):
+	"""Drop every whitespace character, like the judge's answer comparison.
+
+	`get_verdict_by_code` compares outputs with all whitespace removed, so
+	the "is this answer already accepted?" check must not be stricter than
+	the verdict: byte comparison made an AC sample keep offering 'accept'
+	and refuse to collapse.
+	"""
+	if not s:
+		return ''
+	return ''.join(s.split())
 
 
 def _count_text_units(s):
@@ -311,6 +324,18 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 				for correct in self.correct_answers:
 					if outputs_equal(answer, correct, float_tolerance):
 						return True
+			# Whitespace-only differences are AC for the judge, so they must
+			# count as correct here too. Otherwise a sample that was judged
+			# AC still showed an 'accept' button and never collapsed (the
+			# user had to click accept on an answer they had just set).
+			squashed = _squash_ws(answer)
+			if squashed:
+				for correct in self.correct_answers:
+					if _squash_ws(correct) == squashed:
+						return True
+				for wrong in self.uncorrect_answers:
+					if _squash_ws(wrong) == squashed:
+						return False
 			return None
 
 		def append_string(self, s):
@@ -419,8 +444,9 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 					memory_display = 'inline'
 					memory_str = self.get_nice_memory()
 
-				stderr_display = 'inline-block' if self.stderr and self.stderr.strip() else 'none'
-
+				# stderr is deliberately NOT shown on the card any more: the
+				# chip made every card with debug output too wide / too tall.
+				# It stays in the detail view ('Error output' section).
 				content = content.format(
 					test_id=i + 1,
 					runtime=self.get_nice_runtime(),
@@ -430,8 +456,6 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 					test_type=test_type,
 					memory_display=memory_display,
 					memory=memory_str,
-					stderr_display=stderr_display,
-					stderr_label=t('has_stderr'),
 					edit_label=t('edit'),
 					run_label=t('run'),
 					detail_label=t('detail'),
@@ -612,10 +636,36 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 			# Set by the TLE watchdog when it kills the process for
 			# exceeding the time limit, so on_stop can judge TLE
 			self.tle_killed = False
+			# Generation of the current run. Every insert_test() bumps it
+			# and the listener / watchdog threads of the previous run stop
+			# touching the state: a leftover watchdog used to observe the
+			# *next* test still running with the old start_time and kill it
+			# immediately, which was reported as a bogus TLE.
+			self._active_gen = 0
+			# The program's clock. It stays None while the plugin is still
+			# waiting for the sample to be pasted into the panel, so neither
+			# the displayed runtime nor the TLE watchdog counts the time the
+			# user spends copying the sample from the statement.
+			self._clock_start = None
+			# True for a test that was just created interactively (its input
+			# is not known yet).
+			self.awaiting_input = False
 			if type(self.process_manager) != ProcessManager:
 				self.process_manager.set_calls(self.__on_out, self.__on_stop, on_status_change)
 
-		def __on_stop(self, rtcode, runtime=-1, crash_line=None):
+		def note_activity(self):
+			"""Start the program clock: it has input, or produced output."""
+			if self._clock_start is None:
+				self._clock_start = time()
+
+		def run_generation(self):
+			return self._active_gen
+
+		def __on_stop(self, rtcode, runtime=-1, crash_line=None, gen=None):
+			if gen is not None and gen != self._active_gen:
+				# Thread of an older run (its process was replaced): its
+				# result belongs to a test that no longer exists.
+				return
 			self.prog_out[self.running_test] = self.prog_out[self.running_test].rstrip()
 			self.proc_run = False
 
@@ -635,8 +685,14 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 
 			self.on_stop(rtcode, runtime, crash_line=crash_line, epoch=self.epoch)
 
-		def __on_out(self, s):
+		def __on_out(self, s, gen=None):
+			if gen is not None and gen != self._active_gen:
+				return
 			n = self.running_test
+			if s and s.strip():
+				# The program is doing something: the run clock is running
+				# even if it never reads the input we sent.
+				self.note_activity()
 			limit = get_settings().get('max_output_bytes', 0) or 0
 			if limit > 0 and len(self.prog_out[n]) >= limit:
 				# Drop the rest of the output but keep draining the pipe so
@@ -657,7 +713,11 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 
 		def __process_listener(self):
 			proc = self.process_manager
-			start_time = time()
+			# This thread belongs to one run only. insert_test() bumps the
+			# generation; a stale thread must stop reading (the shared
+			# ProcessManager object has been replaced by then, so it would
+			# else consume the new program's output twice).
+			gen = self._active_gen
 			# Hard TLE: kill the process once it exceeds the time limit
 			# (cph-ng style). The blocking stdout read below would never
 			# unblock for silent infinite loops, hence the watchdog thread.
@@ -669,20 +729,22 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 			if limit_ms:
 				watchdog = threading.Thread(
 					target=self.__tle_watchdog,
-					args=(proc, start_time, limit_ms)
+					args=(gen, limit_ms)
 				)
 				watchdog.daemon = True
 				watchdog.start()
 			try:
 				while proc.is_stopped() is None:
+					if gen != self._active_gen:
+						return
 					if self.sync_out:
 						s = proc.read(bfsize=1)
 					else:
 						s = proc.read()
-					self.__on_out(s)
+					self.__on_out(s, gen)
 				try:
 					s = proc.read()
-					self.__on_out(s)
+					self.__on_out(s, gen)
 				except Exception:
 					pass
 			except Exception as e:
@@ -690,19 +752,32 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 				# and on_stop below: an exception here used to leak a thread
 				# polling a dead pid and leave the status stuck on RUNNING.
 				print('[cph-by-chenkx] output listener error: %s' % e)
-			runtime = int((time() - start_time) * 1000)
+			if gen != self._active_gen:
+				return
+			# Only the time the program was actually working with its input
+			# counts: while the plugin was still waiting for the sample to
+			# be pasted, the clock never started.
+			start_time = self._clock_start
+			runtime = int((time() - start_time) * 1000) if start_time else 0
 			# Freeze the peak memory reading before the process disappears
 			try:
 				if type(proc) == ProcessManager:
 					proc.finish_memory_sampling()
 			except Exception:
 				pass
-			self.__on_stop(proc.is_stopped(), runtime)
+			self.__on_stop(proc.is_stopped(), runtime, gen=gen)
 
-		def __tle_watchdog(self, proc, start_time, limit_ms):
+		def __tle_watchdog(self, gen, limit_ms):
 			limit_s = float(limit_ms) / 1000.0
-			while proc.is_stopped() is None:
-				if time() - start_time >= limit_s:
+			proc = self.process_manager
+			while True:
+				if gen != self._active_gen:
+					# a newer run replaced this one: never touch it
+					return
+				if proc.is_stopped() is not None:
+					return
+				start_time = self._clock_start
+				if start_time is not None and time() - start_time >= limit_s:
 					self.tle_killed = True
 					try:
 						proc.terminate()
@@ -716,6 +791,10 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 			if self.proc_run:
 				self.tests[n].append_string(s)
 				self.process_manager.write(s)
+				if s and s.strip():
+					# The user just fed the program: from here on the clock
+					# runs and the time limit is enforced.
+					self.note_activity()
 				if call_on_insert:
 					self.on_insert(s)
 
@@ -730,9 +809,21 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 			self.proc_run = True
 			self.tle_killed = False
 			self.output_truncated = False
+			# New generation: listeners / watchdogs of the previous run stop
+			# here, and this run's threads can be told apart from theirs.
+			self._active_gen += 1
+			# A test whose input is not known yet (freshly created with
+			# Ctrl+Enter / 'next test') starts with the clock paused: the
+			# user still has to paste the sample, and that wait must not
+			# count as runtime or trip the TLE watchdog.
+			self._clock_start = None if self.awaiting_input else time()
+
+			input_text = tests[id].test_string
 			self.process_manager.run()
-			self.process_manager.write(tests[id].test_string)
-			self.on_insert(tests[id].test_string)
+			self.process_manager.write(input_text)
+			if self._clock_start is None and input_text and input_text.strip():
+				self._clock_start = time()
+			self.on_insert(input_text)
 
 		def next_test(self, tie_pos, cb):
 			n = self.test_iter
@@ -752,6 +843,11 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 				else:
 					sublime.status_message(t('process_already_running'))
 					return
+
+			# A test that does not exist yet is the interactive placeholder:
+			# its input comes from the clipboard, so the run clock may not
+			# start until the user provides something.
+			self.awaiting_input = n >= len(tests)
 
 			# Pad up to n: 'Run failed tests' can jump the iterator past
 			# accepted tests, so a single append is not enough (it used to
@@ -804,6 +900,9 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 						return
 					self.running_test = id
 					self.running_new = False
+					# Re-running a test whose input is on file: the clock
+					# starts with the process, no interactive wait.
+					self.awaiting_input = False
 					self.prog_out[id] = ''
 					self.insert_test(id)
 					if type(self.process_manager) == ProcessManager:
@@ -1443,12 +1542,17 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 	def set_test_input(self, test=None, id=None):
 		v = self.view
 		tester = self.tester
+		if test is None or id is None:
+			return
 		unfold = False
 		if not tester.tests[id].fold:
 			self.toggle_fold(id)
 			unfold = True
 
-		tester.tests[id].test_string = test
+		# A whitespace-only buffer (the empty placeholder the panel starts
+		# with) is not an input: keeping it as '\n' made an "empty sample"
+		# that could never be told apart from a real one.
+		tester.tests[id].test_string = test if test.strip() else ''
 
 		if unfold:
 			self.toggle_fold(id)
@@ -1458,6 +1562,8 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 	def set_correct_answer(self, data=None, id=None):
 		"""Set the correct answer for a test. Re-judges existing output."""
 		if id is None or data is None:
+			return
+		if id >= len(self.tester.tests):
 			return
 		tester = self.tester
 		test = tester.tests[id]
@@ -1473,6 +1579,7 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 			out = tester.prog_out[id].rstrip()
 			if out and str(getattr(test, 'rtcode', '0')) == '0':
 				pm = tester.process_manager
+				float_tolerance = get_settings().get('float_tolerance', 0) or 0
 				verdict = get_verdict_by_code(
 					rtcode=0,
 					runtime=int(test.runtime) if test.runtime not in ('-', None) else 0,
@@ -1482,9 +1589,18 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 					stdout=out,
 					expected_output=answer,
 					ignore_error=True,
-					regard_pe_as_ac=bool(get_settings().get('regard_pe_as_ac', False))
+					regard_pe_as_ac=bool(get_settings().get('regard_pe_as_ac', False)),
+					float_tolerance=float_tolerance
 				)
 				test.set_verdict(verdict)
+				# The answer matches what the program printed -> the sample
+				# is accepted, so collapse it exactly like an automatic AC
+				# run does. Leaving it expanded showed an 'accept' button
+				# for an answer that was already correct.
+				if (verdict['name'] == 'AC'
+						and test.is_correct_answer(out, float_tolerance)
+						and not test.fold):
+					self.toggle_fold(id)
 
 		self.memorize_tests()
 		# Re-render to update the display
@@ -1735,8 +1851,15 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 			expected_output = self.tester.tests[test_id].expected_output
 
 		if getattr(tester, 'tle_killed', False):
-			# watchdog killed the process at the time limit -> TLE
-			verdict = get_verdict('time_limit_exceed')
+			# The watchdog killed the process at the time limit. Unless the
+			# error stream carries a crash signature: then the program died
+			# on its own and the kill was collateral, so RE is the honest
+			# verdict (the exit code is the one our own kill produced and
+			# must not be used here).
+			if looks_like_crash(stderr or _outp):
+				verdict = get_verdict('runtime_error')
+			else:
+				verdict = get_verdict('time_limit_exceed')
 		elif getattr(pm, 'terminated', False):
 			# stopped manually by the user -> not a real judge result
 			verdict = get_verdict('skipped')
@@ -2206,7 +2329,7 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 			sublime.status_message(t('stop_before_delete'))
 			return
 
-		k = tester.test_iter
+		k = len(tester.tests)
 
 		to_del = []
 		for i in range(k):
@@ -2219,6 +2342,7 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 			for sel in v.sel():
 				if sel.intersects(r):
 					to_del.append(i)
+					break
 
 		sublime.status_message(t('deleted_tests', ids=', '.join(map(lambda x: str(x + 1), to_del))))
 		for test in reversed(to_del):

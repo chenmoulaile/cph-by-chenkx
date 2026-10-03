@@ -38,6 +38,12 @@ class CphTestEditCommand(sublime_plugin.TextCommand):
 		name = self._sibling_name()
 		for wv in window.views():
 			if wv.name() == name:
+				# Same test number opened from another source view must not
+				# be mistaken for this test's sibling: saving would then
+				# copy that other test's input / answer over here.
+				source = wv.settings().get('cph_edit_source')
+				if source is not None and source != self.source_view_id:
+					continue
 				return wv
 		return None
 
@@ -162,10 +168,17 @@ class CphTestEditCommand(sublime_plugin.TextCommand):
 		# so there is no empty first line. Anchor drift of the phantom is
 		# handled by re-pinning it on every buffer modification.
 		if self.mode == 'input':
-			initial_content = test.rstrip('\n') + '\n'
+			# An empty sample must not become a single blank line: the old
+			# code unconditionally appended '\n'.
+			initial_content = test.rstrip('\n') + '\n' if test.strip() else ''
 		else:
-			initial_content = (correct_answer or '')
-		v.insert(edit, 0, initial_content)
+			initial_content = (correct_answer or '').lstrip('\n')
+		# replace(), not insert(): init() also runs when an existing edit
+		# tab is reopened (e.g. the user closed only the -answer tab), and
+		# inserting the content a second time duplicated it.
+		v.replace(edit, Region(0, v.size()), initial_content)
+		v.sel().clear()
+		v.sel().add(Region(v.size()))
 		self.update_config()
 
 	def sync_read_only(self):

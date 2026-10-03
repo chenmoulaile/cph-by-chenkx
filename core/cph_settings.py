@@ -188,9 +188,33 @@ def load_all_tests(file):
 	return merged
 
 
+def is_meaningful_test(test):
+	"""False for the empty placeholder the run panel starts with.
+
+	`new_test` creates a test with no input and starts the program so the
+	user can paste the sample into the panel. That placeholder was saved
+	too, so every problem ended up with a `[{"test": ""}]` entry that came
+	back on every reload and could never be deleted for good.
+	A test is worth keeping as soon as it has an input, an answer or an
+	expected output - a verdict alone does not count, because a run with no
+	input only proves the program started.
+	"""
+	if not isinstance(test, dict):
+		return False
+	if (test.get('test') or '').strip():
+		return True
+	for key in ('correct_answers', 'uncorrect_answers'):
+		if test.get(key):
+			return True
+	return bool((test.get('expected_output') or '').strip())
+
+
 def save_tests(file, tests):
 	if not file:
 		return False
+
+	# Never persist an empty placeholder (see is_meaningful_test).
+	tests = [t for t in (tests or []) if is_meaningful_test(t)]
 
 	dirname = os.path.dirname(file)
 	filename = os.path.basename(file)

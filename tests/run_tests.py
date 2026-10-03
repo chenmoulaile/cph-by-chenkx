@@ -23,6 +23,7 @@ import re
 import shutil
 import sys
 import tempfile
+import time
 import types
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -170,7 +171,17 @@ def _install_fake_sublime():
     sublime.save_settings = lambda name: None
     sublime.load_resource = lambda path: '<div class="panel"></div>'
     sublime.decode_value = json.loads
-    sublime.encode_value = json.dumps
+
+    def _encode_value(value, pretty=False):
+        # The real API is encode_value(value, pretty): json.dumps' second
+        # positional argument is `skipkeys`, so the plain alias blew up with
+        # "dumps() takes 1 positional argument but 2 were given" and save_tests
+        # was never actually exercised by the suite.
+        if pretty:
+            return json.dumps(value, indent='\t', sort_keys=True)
+        return json.dumps(value)
+
+    sublime.encode_value = _encode_value
     sublime.expand_variables = lambda s, v: s
     sublime.version = lambda: '4213'
     sys.modules['sublime'] = sublime
@@ -438,9 +449,9 @@ def main():
             return 256
 
     def make_tester(tests):
+        noop = lambda *a, **k: None
         return tm.CphTestManagerCommand.Tester(
-            FakeProcess(), lambda *a: None, lambda *a: None,
-            lambda *a: None, lambda *a: None,
+            FakeProcess(), noop, noop, noop, noop,
             sync_out=False, tests=tests, epoch=1)
 
     cmd = tm.CphTestManagerCommand.__new__(tm.CphTestManagerCommand)
@@ -650,11 +661,16 @@ def main():
     check('output_at() returns the stored output',
           tester.output_at(0) == 'abc' and tester.output_at(9) == '')
 
-    # the card template must actually surface a captured stderr
+    # The card must stay narrow: stderr belongs to the detail view only
+    # (a chip per card made every card with debug output bulky).
     with open(os.path.join(ROOT, 'Highlight', 'test_config.html'), encoding='utf-8') as f:
         card_tpl = f.read()
-    check('card template surfaces captured stderr',
-          '{stderr_display}' in card_tpl and '{stderr_label}' in card_tpl)
+    check('the card template no longer renders stderr',
+          '{stderr_display}' not in card_tpl and '{stderr_label}' not in card_tpl)
+    with open(os.path.join(ROOT, 'Highlight', 'test_detail.html'), encoding='utf-8') as f:
+        detail_tpl = f.read()
+    check('the detail template still shows stderr',
+          '{stderr}' in detail_tpl and '{error_output_label}' in detail_tpl)
 
     # A leaked MemorySampler used to poll a dead pid for the whole session.
     # Use an impossible pid plus a tiny interval and a hard cap on how long a
@@ -1099,6 +1115,119 @@ def main():
             stress._compile_program, stress._run_program = saved[:4]
         i18n.set_lang(saved[4])
         stress._stop_stress()
+
+    print('== round 5: answer matching, empty placeholder, RE vs TLE, run clock ==')
+
+    # The judge compares answers with every whitespace character removed, so
+    # the accept/decline decision must not be stricter: byte comparison left
+    # an already-AC sample expanded with an 'accept' button.
+    card = tm.CphTestManagerCommand.Test({'test': '1\n', 'correct_answers': ['1 2 3']})
+    check('is_correct_answer ignores whitespace like the judge',
+          card.is_correct_answer('1 2 3') is True
+          and card.is_correct_answer('1  2\n3\n') is True
+          and card.is_correct_answer('1 2 4') is None)
+    declined = tm.CphTestManagerCommand.Test({'test': '', 'uncorrect_answers': ['7']})
+    check('a declined answer stays declined', declined.is_correct_answer('7') is False)
+    floats = tm.CphTestManagerCommand.Test({'test': '', 'correct_answers': ['0.30000000000000004']})
+    check('float tolerance still matches', floats.is_correct_answer('0.3', 1e-6) is True)
+
+    # The interactive placeholder (no input, no answer) must never reach the
+    # tests file: it came back on every reload and could not be deleted.
+    check('a pristine placeholder is not worth saving',
+          not settings.is_meaningful_test({'test': ''})
+          and not settings.is_meaningful_test({'test': '\n'})
+          and not settings.is_meaningful_test({'test': '', 'verdict': 'AC',
+                                               'stdout': '42'}))
+    check('real test points are kept',
+          settings.is_meaningful_test({'test': '1 2\n'})
+          and settings.is_meaningful_test({'test': '', 'correct_answers': ['42\n']})
+          and settings.is_meaningful_test({'test': '', 'expected_output': '42'}))
+    tmpdir = tempfile.mkdtemp()
+    tpath = os.path.join(tmpdir, 'x.cpp')
+    with open(tpath, 'w'):
+        pass
+    settings.save_tests(tpath, [{'test': ''}, {'test': '1 2\n'}])
+    stored = None
+    for candidate in settings.get_tests_paths(tpath):
+        if os.path.exists(candidate):
+            with open(candidate, encoding='utf-8') as f:
+                stored = json.load(f)
+            break
+    check('save_tests drops the placeholder and keeps the real test',
+          stored is not None and len(stored) == 1 and stored[0]['test'] == '1 2\n',
+          str(stored))
+
+    # RE vs TLE
+    check('crash exit codes are recognised',
+          verdict.is_crash_exit_code(-11) and verdict.is_crash_exit_code(0xC0000005)
+          and verdict.is_crash_exit_code(139) and not verdict.is_crash_exit_code(0)
+          and not verdict.is_crash_exit_code(1) and not verdict.is_crash_exit_code(None))
+    check('crash signatures are recognised, debug output is not',
+          verdict.looks_like_crash('terminate called after throwing an instance of std::bad_alloc')
+          and verdict.looks_like_crash('Traceback (most recent call last):')
+          and verdict.looks_like_crash('AddressSanitizer: SEGV on unknown address')
+          and not verdict.looks_like_crash('debug: i=3 fa=1\n'))
+    check('a crash exit code beats the time limit',
+          verdict.get_verdict_by_code(-11, 3000, 2000, 256, '', '', 'x\n')['name'] == 'RE')
+    check('a crash signature turns a timeout into RE',
+          verdict.get_verdict_by_code(
+              0, 3000, 2000, 256,
+              'terminate called after throwing an instance of std::bad_alloc',
+              '', 'x\n')['name'] == 'RE')
+    check('a genuine timeout is still TLE',
+          verdict.get_verdict_by_code(0, 3000, 2000, 256, '', '', 'x\n')['name'] == 'TLE')
+
+    # Run clock: it must stay paused while the sample is still being pasted
+    tester = make_tester([tm.CphTestManagerCommand.Test('')])
+    tester.awaiting_input = True
+    tester.insert_test(0)
+    check('a fresh placeholder starts with the clock paused',
+          tester._clock_start is None, repr(tester._clock_start))
+    tester.note_activity()
+    check('the clock starts on the first activity',
+          tester._clock_start is not None)
+    tester.awaiting_input = False
+    tester.insert_test(0)
+    check('a test with a known input starts the clock immediately',
+          tester._clock_start is not None)
+
+    gen = tester.run_generation()
+    tester.insert_test(0)
+    check('insert_test bumps the run generation',
+          tester.run_generation() == gen + 1)
+
+    tester = make_tester([tm.CphTestManagerCommand.Test('a')])
+    tester.running_test = 0
+    tester.prog_out = ['kept']
+    tester.proc_run = True
+    tester._active_gen = 7
+    tester._Tester__on_stop(0, 10, gen=6)          # thread of an older run
+    check('a stale on_stop cannot touch the new run',
+          tester.prog_out[0] == 'kept' and tester.proc_run is True)
+    tester._Tester__on_stop(0, 10, gen=7)
+    check('the current on_stop still runs', tester.proc_run is False)
+
+    tester = make_tester([tm.CphTestManagerCommand.Test('a')])
+    tester.process_manager.is_stopped = lambda: None       # pretend running
+    tester._active_gen = 2
+    tester._clock_start = time.time() - 10                 # limit long passed
+    tester._Tester__tle_watchdog(1, 1)                     # thread of run #1
+    check('a stale watchdog cannot kill the next run', tester.tle_killed is False)
+    tester._Tester__tle_watchdog(2, 1)
+    check('the current watchdog still enforces the limit', tester.tle_killed is True)
+
+    # Deleting must also cover tests that were never run (they have a card).
+    tm_src = open(os.path.join(ROOT, 'test_manager.py'), encoding='utf-8').read()
+    body = tm_src[tm_src.find('def delete_tests'):]
+    body = body[:body.find('\n\tdef ', 10)]
+    check('delete_tests covers un-run tests too',
+          'len(tester.tests)' in body, body.strip().split('\n')[0])
+
+    # The edit card must not start with a blank line.
+    with open(os.path.join(ROOT, 'Highlight', 'test_edit.html'), encoding='utf-8') as f:
+        edit_tpl = f.read()
+    check('the edit card has no blank line at its top',
+          edit_tpl.startswith('<div class="panel"><a'), edit_tpl[:60])
 
     print('')
     print('%d checks, %d failures' % (CHECKS[0], len(FAILURES)))

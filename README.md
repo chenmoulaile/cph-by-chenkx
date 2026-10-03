@@ -168,6 +168,15 @@ packages not to claim keys by default). Ready-to-use suggestions are in
 - **macOS 内存占用**是单进程实时采样（`libproc.proc_pid_rusage`）的峰值，不是内核严格意义上的峰值 RSS，可能比 Activity Monitor 略低；已不再使用 `RUSAGE_CHILDREN`（所有子进程累计峰值）那种错误口径。
 - **裸段错误（C++）不带行号**：RE 位置只在程序输出包含位置信息时才有（Python 回溯 / Java 栈 / `-fsanitize` 诊断）；纯 C++ 段错误需要自行加 `-fsanitize` 编译。
 - **`sync_output`（逐字符同步输出）默认关闭**：开启后一个字符刷新一次视图，只适合交互式程序。
+- **stderr（`cerr` 调试输出）只显示在详情视图里**，不再挂在卡片上（卡片会变得又挤又长）。
+- **"还没粘贴样例"的时间不计时**：新建测试点后如果输入还是空的，程序虽然已经启动，
+  但运行计时与 TLE 看门狗都在等你输入——从你粘贴/输入的第一个字符、或程序第一次输出开始才算。
+  因此不会出现"样本还没粘完就已经 TLE"。
+- **RE 优先于 TLE**：程序崩溃时看判定退出码（访问越界 / 除零 / 栈溢出 / `abort`）和错误输出里的
+  崩溃特征（`terminate called after throwing`、`Traceback`、`AddressSanitizer` …），
+  即使恰好超时被杀也判 RE；普通的 `cerr` 调试输出不会被误判。
+- **空样例不会保存**：没有任何输入也没有答案的空白测试点只存在于当前面板（它是用来接收
+  你粘贴样例的占位），不会写进测试文件。
 - **`PE`（Presentation Error）**：只有「token 完全相同但空白/换行不同」才算 PE，默认与 WA 分别显示；若你的 OJ 把 PE 也算通过，把 `regard_pe_as_ac` 设为 `true`。
 - 输出超过 `max_output_bytes`（默认 8MB）时超出部分会被丢弃，并插入一行截断提示。
 - **非 ASCII 文件名靠自动识别**：Windows 上编译器按 ANSI 代码页写出的 `中文.exe`
