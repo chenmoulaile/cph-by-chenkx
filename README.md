@@ -8,6 +8,42 @@
 
 ---
 
+## English
+
+**cph-by-chenkx** is a competitive-programming test runner for **Sublime Text 4** (build 4095+).
+It is a rework of [FastOlympicCoding](https://github.com/Jatana/FastOlympicCoding) (Jatana), with the
+verdict display rebuilt after VSCode's [cph-ng](https://github.com/langningchen/cph-ng), and
+[Competitive Companion](https://github.com/jmerle/competitive-companion) support inspired by
+[FastOlympicCodingHook](https://github.com/DrSchwad/FastOlympicCodingHook).
+
+- Run the samples of the file you are editing and get a per-test verdict (AC / WA / TLE / MLE / RE /
+  PE / CE) as coloured cards in a panel next to the code.
+- **Real memory limit**: the peak memory of the child process is sampled per platform (Windows
+  `GetProcessMemoryInfo`, Linux `/proc/<pid>/status`, macOS `libproc`), so MLE is an actual verdict
+  instead of an unused setting. A watchdog kills the whole process tree on a timeout.
+- Detail tab with input / expected / actual / stderr and a line-by-line diff; configurable float
+  tolerance and output size cap; compile cache; multi-file builds (`extra_sources`, `include_dirs`).
+- Import test data from `.in`/`.out` pairs, a folder, the clipboard, or the **Competitive Companion**
+  browser extension (built-in persistent listener, port 12345 by default).
+- **Stress test** against a generator and a reference solution; a counterexample is saved as a test.
+- Chinese / English UI (`language` setting).
+
+**Getting started**: open a source file, then use `Ctrl+Shift+P` → `cph` (every command is in the
+command palette) or the `View → cph-by-chenkx` menu. The default `run_settings` cover C++ (`g++`,
+`-std=c++23`), Python and Java — edit them under
+`Preferences → Package Settings → cph-by-chenkx → Settings` to match your toolchain (the compiler has
+to be on `PATH`; the *Check environment (doctor)* command reports anything that is missing).
+
+**Key bindings**: this package deliberately ships **no active key bindings** (Package Control asks
+packages not to claim keys by default). Ready-to-use suggestions are in
+`Example (Windows|Linux|OSX).sublime-keymap` — copy the entries you want into your own keymap via
+`Preferences → Key Bindings`. The table further down lists them all.
+
+**Context menu**: entries only appear for the file types listed in `run_settings`; set
+`"context_menu": false` to hide them completely. Nothing is added to other menus.
+
+---
+
 ## 相比原版 FastOlympicCoding，多了什么
 
 | 能力 | FastOlympicCoding | cph-by-chenkx |
@@ -140,6 +176,16 @@
   如果你的编译命令把 `-o` 写到别处，请保证输出名用引号包起来。
 
 ## 快捷键
+
+> **默认不添加任何快捷键。** Package Control 明确建议包不要默认占用按键（键位不够分，还容易和别的包打架），
+> 所以这里的绑定都放在 `Example (Windows|Linux|OSX).sublime-keymap` 里作为**建议**。
+>
+> 启用方法二选一：
+> 1. `Preferences → Key Bindings`，把 `Example (<你的平台>).sublime-keymap` 里的条目复制进去（推荐）；
+> 2. 直接用整份 Example 文件覆盖 `Packages/User/Default (<你的平台>).sublime-keymap`。
+>
+> 下表里的按键就是 Example 文件里的建议（macOS 上 `Ctrl+Alt` 对应 `Cmd+Alt`）。
+> 面板内的 `Enter / Ctrl+V / Ctrl+D …` 只在本插件的测试编辑/详情视图里生效，随包默认启用。
 
 | 按键 | 功能 |
 | --- | --- |

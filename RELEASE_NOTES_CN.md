@@ -5,6 +5,36 @@
 
 ---
 
+# v1.4.12
+
+## 改动（为通过 Package Control 收录审查）
+
+Package Control 的[审查规范](https://docs.sublimetext.io/reference/package-control/reviewing.html)
+里有几条硬要求，之前没做到，这一版全部对齐：
+
+- **默认不再占用任何快捷键。** 官方明确建议包不要默认绑定按键（键位有限，容易和别的包打架）。
+  原来随包的 14 条"在代码文件里生效"的绑定移到了 `Example (Windows|Linux|OSX).sublime-keymap`
+  作为**建议**：想用就把它们复制进你自己的 keymap（`Preferences → Key Bindings`），README 里有说明。
+  面板内部的 `Enter` / `Ctrl+V` / `Ctrl+D` / `Ctrl+Shift+↑↓` 只在插件自己的测试编辑/详情视图里生效，
+  不影响其它包，所以保持默认可用。
+- **右键菜单项改为按上下文条件显示**，并精简到 6 项（Run / Import tests / Pick import file /
+  Listen to Companion / Start、Stop stress test）。只有本插件能处理的文件（`run_settings` 里的扩展名）
+  才会出现；新增 `context_menu` 设置可以完全关掉。`.sublime-menu` 的菜单项并不支持 `context` 字段，
+  所以改用命令的 `is_visible()` 实现——和 ST 自带的 `open_context_url` 同一机制。
+- **设置 / 快捷键入口改用 `edit_settings` 打开**（分屏编辑），不再用 `open_file`。这是官方审查的明确要求。
+- **README 增加英文说明**（用途、安装、上手步骤、快捷键、右键菜单），方便非中文用户与审查者阅读。
+
+## 说明
+
+- 升级后如果需要原来那些快捷键，请从 `Example (<你的平台>).sublime-keymap` 里复制到自己的 keymap。
+- 本插件需要 Sublime Text 4（卡片样式用了 ST4 的 minihtml CSS 变量），
+  频道条目里的 `sublime_text` 同步改为 `>=4095`。
+- 回归测试 108 → **115 项**，新增 10 条"Package Control 审查规则"断言：默认绑定不得侵占代码编辑按键、
+  建议绑定必须带 context、右键菜单命令必须实现 `is_visible`、设置/快捷键必须用 `edit_settings`、
+  `context_menu` 设置必须随包提供等。
+
+---
+
 # v1.4.11
 
 ## 修复

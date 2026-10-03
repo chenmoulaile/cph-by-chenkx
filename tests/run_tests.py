@@ -787,23 +787,63 @@ def main():
           '"regard_pe_as_ac": false' in settings_text)
 
     print('== Package Control review rules ==')
-    # 1. Every shipped binding needs a concrete context (selector, setting.*
-    #    or a custom context key). Bare bindings are a review failure.
-    bare = []
-    for name in ('Default (Windows).sublime-keymap', 'Default (Linux).sublime-keymap',
-                 'Default (OSX).sublime-keymap'):
+    DEFAULTS = ('Default (Windows).sublime-keymap', 'Default (Linux).sublime-keymap',
+                'Default (OSX).sublime-keymap')
+    EXAMPLES = ('Example (Windows).sublime-keymap', 'Example (Linux).sublime-keymap',
+                'Example (OSX).sublime-keymap')
+
+    # 1. A package should not claim keys while the user is editing their own
+    #    code (Package Control: "we strongly advice against adding keybindings
+    #    by default"). Our shipped defaults may only fire inside the package's
+    #    own syntax or behind a custom state key.
+    claims = []
+    every_binding_scoped = True
+    for name in DEFAULTS:
         with open(os.path.join(ROOT, name), encoding='utf-8') as f:
             for entry in json.load(f):
-                if not entry.get('context'):
-                    bare.append('%s %s' % (name, entry.get('keys')))
-    check('every shipped key binding has a context', not bare, '; '.join(bare))
+                contexts = entry.get('context') or []
+                if not contexts:
+                    every_binding_scoped = False
+                    claims.append('%s %s (no context)' % (name, entry.get('keys')))
+                    continue
+                own_view = any(
+                    item.get('key') == 'selector' and item.get('operator') == 'equal'
+                    and str(item.get('operand', '')).strip() == 'source.TestSyntax'
+                    for item in contexts)
+                stateful = any(str(item.get('key', '')).startswith('cph_')
+                               for item in contexts)
+                if not (own_view or stateful):
+                    claims.append('%s %s' % (name, '+'.join(entry.get('keys') or [])))
+    check('shipped bindings never claim keys while editing code', not claims,
+          '; '.join(claims))
+    check('every shipped binding still carries a context', every_binding_scoped)
 
-    # 2. Custom context keys used in keymaps must be answered by the listener.
+    # 2. The suggestions users copy must be valid JSON and scoped as well.
+    suggestion_problems = []
+    suggestion_count = 0
+    for name in EXAMPLES:
+        path = os.path.join(ROOT, name)
+        if not os.path.isfile(path):
+            suggestion_problems.append('%s missing' % name)
+            continue
+        with open(path, encoding='utf-8') as f:
+            entries = json.load(f)
+        suggestion_count += len(entries)
+        for entry in entries:
+            if not entry.get('context'):
+                suggestion_problems.append('%s %s' % (name, entry.get('keys')))
+    check('per-platform example keymaps exist and are scoped',
+          not suggestion_problems and suggestion_count > 0,
+          '; '.join(suggestion_problems) or 'no suggestions')
+    check('no active key binding ships by default',
+          not os.path.isfile(os.path.join(ROOT, 'Example.sublime-keymap')),
+          'the old single Example.sublime-keymap is back')
+
+    # 3. Custom context keys used anywhere must be answered by the listener.
     with open(os.path.join(ROOT, 'cph_context.py'), encoding='utf-8') as f:
         ctx_src = f.read()
     used_keys = set()
-    for name in ('Default (Windows).sublime-keymap', 'Default (Linux).sublime-keymap',
-                 'Default (OSX).sublime-keymap'):
+    for name in DEFAULTS + EXAMPLES:
         with open(os.path.join(ROOT, name), encoding='utf-8') as f:
             for entry in json.load(f):
                 for item in entry.get('context') or []:
@@ -815,6 +855,60 @@ def main():
           '; '.join(unanswered))
     check('at least one custom context key is exercised', bool(used_keys),
           'none found')
+
+    # 4. Context menu entries: .sublime-menu has no `context` key, so the
+    #    command's is_visible() is the only way to make an entry conditional.
+    #    Every command we put in that menu must implement it.
+    def class_defines(pkg_rel_dir, class_name, method):
+        for rel in _plugin_py_files():
+            if pkg_rel_dir and not rel.startswith(pkg_rel_dir):
+                continue
+            with open(os.path.join(ROOT, rel), encoding='utf-8') as f:
+                tree = ast.parse(f.read())
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ClassDef) and node.name == class_name:
+                    return any(isinstance(b, ast.FunctionDef) and b.name == method
+                               for b in node.body)
+        return False
+
+    def command_class(command):
+        return ''.join(part.capitalize() for part in command.split('_')) + 'Command'
+
+    with open(os.path.join(ROOT, 'Context.sublime-menu'), encoding='utf-8') as f:
+        menu = json.load(f)
+    unconditional = [item['command'] for item in menu
+                     if not class_defines('', command_class(item['command']), 'is_visible')]
+    check('every context menu command implements is_visible()', not unconditional,
+          '; '.join(unconditional))
+    menu_bare_context = [item['command'] for item in menu if 'context' in item]
+    check('context menu items do not fake an unsupported context key',
+          not menu_bare_context, '; '.join(menu_bare_context))
+
+    # 5. Settings and key bindings must open in split view: `edit_settings`,
+    #    not `open_file`.
+    with open(os.path.join(ROOT, 'Main.sublime-menu'), encoding='utf-8') as f:
+        main_menu = json.load(f)
+    wrong = []
+
+    def walk_menu(items):
+        for item in items:
+            caption = str(item.get('caption') or '')
+            if item.get('command') == 'open_file' and (
+                    'settings' in caption.lower() or 'key binding' in caption.lower()
+                    or '.sublime-keymap' in str(item.get('args'))):
+                wrong.append(caption)
+            for child in item.get('children') or []:
+                walk_menu([child])
+
+    walk_menu(main_menu)
+    check('settings/keybindings use edit_settings (split view)', not wrong,
+          '; '.join(wrong))
+
+    # 6. The context menu switch is documented in the shipped settings.
+    with open(os.path.join(ROOT, 'cph-by-chenkx.sublime-settings'), encoding='utf-8') as f:
+        settings_text = f.read()
+    check('context_menu setting is shipped',
+          '"context_menu"' in settings_text)
 
     # 3. Root level plugin modules must not be imported from each other
     #    (Sublime loads every root level .py as an independent plugin).

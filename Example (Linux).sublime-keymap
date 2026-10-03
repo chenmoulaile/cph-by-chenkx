@@ -15,142 +15,6 @@
 	},
 	{
 		"keys": [
-			"enter"
-		],
-		"command": "cph_test_manager",
-		"args": {
-			"action": "insert_line"
-		},
-		"context": [
-			{
-				"operand": "source.TestSyntax",
-				"operator": "equal",
-				"match_all": true,
-				"key": "selector"
-			},
-			{
-				"key": "setting.edit_mode",
-				"operator": "equal",
-				"operand": false
-			}
-		]
-	},
-	{
-		"keys": [
-			"ctrl+enter"
-		],
-		"command": "cph_test_manager",
-		"args": {
-			"action": "new_test"
-		},
-		"context": [
-			{
-				"operand": "source.TestSyntax",
-				"operator": "equal",
-				"match_all": true,
-				"key": "selector"
-			},
-			{
-				"key": "setting.edit_mode",
-				"operator": "equal",
-				"operand": false
-			}
-		]
-	},
-	{
-		"keys": [
-			"ctrl+v"
-		],
-		"command": "cph_test_manager",
-		"args": {
-			"action": "insert_cb"
-		},
-		"context": [
-			{
-				"operand": "source.TestSyntax",
-				"operator": "equal",
-				"match_all": true,
-				"key": "selector"
-			},
-			{
-				"key": "setting.edit_mode",
-				"operator": "equal",
-				"operand": false
-			}
-		]
-	},
-	{
-		"keys": [
-			"ctrl+x"
-		],
-		"command": "cph_test_manager",
-		"args": {
-			"action": "kill_proc"
-		},
-		"context": [
-			{
-				"operand": "source.TestSyntax",
-				"operator": "equal",
-				"match_all": true,
-				"key": "selector"
-			}
-		]
-	},
-	{
-		"keys": [
-			"ctrl+d"
-		],
-		"command": "cph_test_manager",
-		"args": {
-			"action": "delete_tests"
-		},
-		"context": [
-			{
-				"operand": "source.TestSyntax",
-				"operator": "equal",
-				"match_all": true,
-				"key": "selector"
-			}
-		]
-	},
-	{
-		"keys": [
-			"ctrl+shift+up"
-		],
-		"command": "cph_test_manager",
-		"args": {
-			"action": "swap_tests",
-			"dir": -1
-		},
-		"context": [
-			{
-				"operand": "source.TestSyntax",
-				"operator": "equal",
-				"match_all": true,
-				"key": "selector"
-			}
-		]
-	},
-	{
-		"keys": [
-			"ctrl+shift+down"
-		],
-		"command": "cph_test_manager",
-		"args": {
-			"action": "swap_tests",
-			"dir": 1
-		},
-		"context": [
-			{
-				"operand": "source.TestSyntax",
-				"operator": "equal",
-				"match_all": true,
-				"key": "selector"
-			}
-		]
-	},
-	{
-		"keys": [
 			"ctrl+alt+b"
 		],
 		"command": "cph_view_tester",
@@ -163,57 +27,6 @@
 				"operator": "not_equal",
 				"match_all": true,
 				"key": "selector"
-			}
-		]
-	},
-	{
-		"keys": [
-			"ctrl+alt+b"
-		],
-		"command": "cph_test_manager",
-		"args": {
-			"action": "make_opd",
-			"load_session": true
-		},
-		"context": [
-			{
-				"operand": "source.TestSyntax",
-				"operator": "equal",
-				"match_all": true,
-				"key": "selector"
-			}
-		]
-	},
-	{
-		"keys": [
-			"ctrl+alt+p"
-		],
-		"command": "cph_view_tester",
-		"args": {
-			"action": "sync_opdebugs"
-		},
-		"context": [
-			{
-				"key": "cph_has_run_panel",
-				"operator": "equal",
-				"operand": true
-			}
-		]
-	},
-	{
-		"keys": [
-			"ctrl+k",
-			"ctrl+p"
-		],
-		"command": "cph_view_tester",
-		"args": {
-			"action": "sync_opdebugs"
-		},
-		"context": [
-			{
-				"key": "cph_has_run_panel",
-				"operator": "equal",
-				"operand": true
 			}
 		]
 	},
@@ -247,19 +60,6 @@
 	},
 	{
 		"keys": [
-			"ctrl+alt+shift+s"
-		],
-		"command": "cph_stop_stress_test",
-		"context": [
-			{
-				"key": "cph_stress_running",
-				"operator": "equal",
-				"operand": true
-			}
-		]
-	},
-	{
-		"keys": [
 			"ctrl+alt+l"
 		],
 		"command": "cph_companion_listener",
@@ -269,19 +69,6 @@
 				"operator": "not_equal",
 				"match_all": true,
 				"key": "selector"
-			}
-		]
-	},
-	{
-		"keys": [
-			"ctrl+alt+shift+l"
-		],
-		"command": "cph_companion_stop_listener",
-		"context": [
-			{
-				"key": "cph_listener_running",
-				"operator": "equal",
-				"operand": true
 			}
 		]
 	},

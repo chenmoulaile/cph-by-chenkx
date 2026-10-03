@@ -130,7 +130,7 @@
 								}
 							},
 							{
-								"caption": "README（使用说明）",
+								"caption": "README / 使用说明",
 								"command": "open_file",
 								"args": {
 									"file": "${packages}/cph-by-chenkx/README.md"
@@ -138,9 +138,10 @@
 							},
 							{
 								"caption": "Key Bindings",
-								"command": "open_file",
+								"command": "edit_settings",
 								"args": {
-									"file": "${packages}/cph-by-chenkx/Example.sublime-keymap"
+									"base_file": "${packages}/Default/Default ($platform).sublime-keymap",
+									"default": "[\n\t// 本插件默认不添加任何快捷键。想启用建议的绑定，\n\t// 把 Packages/cph-by-chenkx/Example ($platform).sublime-keymap\n\t// 里的条目复制到这里即可（macOS 用 super+alt，其它平台用 ctrl+alt）。\n\t// This package adds no key bindings by default: copy what you want from\n\t// Packages/cph-by-chenkx/Example ($platform).sublime-keymap.\n\t$0\n]\n"
 								}
 							},
 							{

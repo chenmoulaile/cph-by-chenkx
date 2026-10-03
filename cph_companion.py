@@ -237,8 +237,19 @@ def _stop_listener():
     sublime.status_message(t('listener_stopped'))
 
 
+from .core.cph_target import visible as context_menu_visible
+
+
 class CphCompanionListenerCommand(sublime_plugin.TextCommand):
     """Listen to Competitive Companion: 启动/切换目标文件 (幂等, 可反复点击)."""
+
+    def is_visible(self, event=None, **kwargs):
+        """Context menu: only offered where this package applies.
+
+        A .sublime-menu item has no `context` key in Sublime Text, so the
+        command decides (Default's own `open_context_url` does the same).
+        """
+        return context_menu_visible(self.view, event)
 
     def run(self, edit):
         _start_listener(self.view)

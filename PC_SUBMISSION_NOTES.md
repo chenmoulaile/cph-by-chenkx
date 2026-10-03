@@ -1,8 +1,33 @@
 # cph-by-chenkx — Package Control Submission Notes
 
-Package version: v1.4.11
+Package version: v1.4.12
 Repository: https://github.com/chenmoulaile/cph-by-chenkx
 Channel entry file: `repository/c/cph-by-chenkx.json` (see snippet at the bottom)
+
+## v1.4.12 notes (Package Control review guidelines)
+
+- **No key bindings ship by default.** The 14 bindings that used to fire while
+  editing source code moved to `Example (Windows|Linux|OSX).sublime-keymap` as
+  suggestions (the review guide asks packages not to claim keys; users copy what
+  they want into their own keymap). Bindings scoped to `source.TestSyntax` (our
+  own test edit / detail views) and bindings behind a custom state context key
+  (`cph_has_run_panel`, `cph_stress_running`, `cph_listener_running`) still ship,
+  because they cannot affect editing in other packages' files.
+- **The context menu is conditional** and reduced to six entries. A
+  `.sublime-menu` item supports no `context` key, so visibility is decided by the
+  commands' `is_visible()` - the mechanism Default's own `open_context_url` uses.
+  `core/cph_target.py` answers "is this a file this package can run?" from
+  `run_settings`, and the new `context_menu` setting turns the entries off.
+- **`edit_settings` instead of `open_file`** for Settings and Key Bindings, so
+  they open in a split view as the guide requires.
+- **README now has an English section** (purpose, installation, getting started,
+  key bindings, context menu).
+- Requires Sublime Text 4 (`>=4095`): the minihtml card styling uses ST4 CSS
+  variables (`color(var(--foreground) alpha(...))`).
+- Regression checks: 108 -> 115. Ten of them encode these rules: shipped bindings
+  must never claim keys used for editing, suggestion keymaps must be scoped,
+  context menu commands must implement `is_visible()`, settings/key bindings must
+  use `edit_settings`, `context_menu` must be shipped in the default settings.
 
 ## v1.4.11 notes
 

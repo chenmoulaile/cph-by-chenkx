@@ -1,0 +1,24 @@
+cph-by-chenkx 1.4.12
+====================
+
+This release aligns the package with the Package Control review guidelines.
+
+Changed:
+
+* No key bindings are added by default any more. The 14 bindings that used to
+  fire while editing code are now suggestions in
+  Example (Windows|Linux|OSX).sublime-keymap - copy the ones you want into your
+  own keymap (Preferences -> Key Bindings). Bindings that only apply inside the
+  package's own test edit/detail views (Enter, Ctrl+V, Ctrl+D, Ctrl+Shift+Up/Down)
+  still work out of the box.
+* The context menu is now conditional and down to six entries: they only appear
+  for the file types listed in run_settings, and a new `context_menu` setting
+  hides them completely. (A .sublime-menu item has no `context` key, so the
+  commands' is_visible() decides - the same mechanism Default's
+  open_context_url uses.)
+* Settings and key bindings open through `edit_settings` (split view) instead of
+  `open_file`, as the review guidelines require.
+* The README has an English section covering purpose, installation, getting
+  started, key bindings and the context menu.
+
+Note: the package requires Sublime Text 4.

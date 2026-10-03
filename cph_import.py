@@ -58,7 +58,18 @@ def _strip_input_suffix(stem):
     return re.sub(r'(?i)\.in$', '', stem)
 
 
+from .core.cph_target import visible as context_menu_visible
+
+
 class CphImportTestsCommand(sublime_plugin.TextCommand):
+    def is_visible(self, event=None, **kwargs):
+        """Context menu: only offered where this package applies.
+
+        A .sublime-menu item has no `context` key in Sublime Text, so the
+        command decides (Default's own `open_context_url` does the same).
+        """
+        return context_menu_visible(self.view, event)
+
     def run(self, edit):
         window = self.view.window()
         if not window:
@@ -333,6 +344,14 @@ class CphImportTestsCommand(sublime_plugin.TextCommand):
 
 
 class CphPickImportFileCommand(sublime_plugin.TextCommand):
+    def is_visible(self, event=None, **kwargs):
+        """Context menu: only offered where this package applies.
+
+        A .sublime-menu item has no `context` key in Sublime Text, so the
+        command decides (Default's own `open_context_url` does the same).
+        """
+        return context_menu_visible(self.view, event)
+
     def run(self, edit):
         window = self.view.window()
         if not window:

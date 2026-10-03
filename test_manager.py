@@ -18,6 +18,7 @@ import threading
 
 from .Modules.ProcessManager import ProcessManager
 from .core.cph_settings import base_name, get_settings, root_dir, get_tests_file_path, get_tests_paths, load_all_tests, save_tests, is_run_supported_ext, get_problem_limits
+from .core.cph_target import visible as context_menu_visible
 from .core.cph_resources import read_resource
 from .Highlight.test_interface import get_test_styles
 from .core.cph_verdict import get_verdict, get_verdict_by_code, get_verdict_by_name, build_line_diff, outputs_equal, VERDICTS, find_crash_location
@@ -2568,6 +2569,14 @@ class CphViewTesterCommand(sublime_plugin.TextCommand):
 			return False
 		ext = path.splitext(file_name)[1][1:]
 		return bool(ext) and is_run_supported_ext(ext)
+
+	def is_visible(self, action=None, event=None, **kwargs):
+		"""Context menu entry: only offered where Run can do something.
+
+		A .sublime-menu item has no `context` key in Sublime Text; the command
+		decides instead (Default's own `open_context_url` does the same).
+		"""
+		return context_menu_visible(self.view, event)
 
 	def close_opds(self):
 		"""Close the run view paired with THIS source file only.

@@ -15,6 +15,7 @@ from os import path
 from .core.cph_settings import base_name, get_settings, root_dir, load_all_tests, save_tests
 from .core.cph_tests_merge import merge_tests
 from .core.cph_state import set_stress_running
+from .core.cph_target import context_menu_enabled, visible as context_menu_visible
 from .core.cph_i18n import t
 from .core.cph_verdict import normalize_lines
 from .Highlight.test_interface import get_test_styles
@@ -37,6 +38,10 @@ _stress_state = {
 
 
 class CphStartStressTestCommand(sublime_plugin.TextCommand):
+    def is_visible(self, event=None, **kwargs):
+        """Context menu: only offered where stress testing makes sense."""
+        return context_menu_visible(self.view, event)
+
     def run(self, edit):
         user_file = self.view.file_name()
         if not user_file:
@@ -169,6 +174,16 @@ class CphStartStressTestCommand(sublime_plugin.TextCommand):
 
 
 class CphStopStressTestCommand(sublime_plugin.TextCommand):
+    def is_visible(self, event=None, **kwargs):
+        """Only offer 'Stop stress test' while a stress test is running.
+
+        This one is a state gate rather than a file-context gate, so it stays
+        correctly hidden in the View menu and the command palette too.
+        """
+        if event is not None and not context_menu_enabled():
+            return False
+        return bool(_stress_state.get('running'))
+
     def run(self, edit):
         if _stress_state['running']:
             _stress_state['stop_requested'] = True
