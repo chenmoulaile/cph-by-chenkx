@@ -176,6 +176,13 @@ def load_all_tests(file):
 			if not isinstance(data, list):
 				continue
 			for test in data:
+				# Skip the empty placeholder here as well as in save_tests().
+				# Older versions wrote it, and it is enough for ONE stale copy
+				# to live in one of the other candidate files for the entry to
+				# be merged back on every reload - which is why an empty
+				# sample could not be deleted for good.
+				if not is_meaningful_test(test):
+					continue
 				key = (test.get('test', ''),
 					   tuple(sorted(test.get('correct_answers', []))))
 				if key in seen:
@@ -245,10 +252,23 @@ def save_tests(file, tests):
 	if target_path is None:
 		return False
 
-	try:
-		with open(target_path, 'w', encoding='utf-8') as f:
-			f.write(sublime.encode_value(tests, True))
-		return True
-	except Exception as e:
-		print('[cph-by-chenkx] Failed to save tests to %s: %s' % (target_path, e))
-		return False
+	# load_all_tests() merges EVERY candidate file, so writing only one of
+	# them is not symmetric: a test the user deleted came straight back from
+	# a stale copy in another one. They all belong to the same source file
+	# (the two storage layouts plus cph-ng's tests/<name>.json), so they are
+	# written together. Files that do not exist yet are left alone - only
+	# the primary target is ever created.
+	targets = [target_path]
+	for other in get_tests_paths(file):
+		if other and other != target_path and os.path.exists(other):
+			targets.append(other)
+
+	ok = False
+	for path_ in targets:
+		try:
+			with open(path_, 'w', encoding='utf-8') as f:
+				f.write(sublime.encode_value(tests, True))
+			ok = True
+		except Exception as e:
+			print('[cph-by-chenkx] Failed to save tests to %s: %s' % (path_, e))
+	return ok

@@ -1,8 +1,41 @@
 # cph-by-chenkx — Package Control Submission Notes
 
-Package version: v1.4.14
+Package version: v1.4.15
 Repository: https://github.com/chenmoulaile/cph-by-chenkx
 Channel entry file: `repository/c/cph-by-chenkx.json` (see snippet at the bottom)
+
+## v1.4.15 notes
+
+- No new files or settings surface changes; runtime/UI fixes plus one data-model
+  invariant:
+  - the edit view keeps a sentinel newline on line 0 again. A block phantom is
+    always drawn *below* the line it is anchored to (minihtml has no
+    LAYOUT_ABOVE, sublimehq/sublime_text#4469), so without the empty first line
+    the button card landed between the first and second line of the sample.
+    `_content()` saves from position 1 and `EditModifyListener` keeps the caret
+    at >= 1, so the sentinel never reaches the stored sample. This is the same
+    layout the `-run` panel has used all along (`erase_all` leaves a `'\n'`).
+  - `load_all_tests()` now filters with `is_meaningful_test()`, the same
+    predicate `save_tests()` uses: a stale `{"test": ""}` in *any* candidate
+    file used to be merged back on every reload.
+  - `save_tests()` writes every candidate path that already exists, so a test
+    deleted in the panel cannot come back from a stale copy (`load_all_tests()`
+    merges all of them).
+  - `Tester.prog_out` is kept as long as `Tester.tests`; `get_tie_pos()`,
+    `toggle_fold()` and `check_test()` use the bounds-safe `output_at()`.
+    IndexError there made "delete test" fail silently for a test the session
+    had not run yet.
+  - `test_edit` only pushes back the side whose buffer it actually read: closing
+    `-answer` and saving from `-edit` used to clear the stored answer.
+  - `cph_stress` uses the same placeholder set and the same lenient formatter as
+    `ProcessManager.format_command()` (`{file}` raised `KeyError`).
+  - `Test.__init__` tolerates a missing `test` key and non-string answers.
+  - A central `ACTIONS_NEEDING_TESTER` guard covers the actions that index the
+    test model, so a panel whose compile failed (no tester) no longer raises
+    `AttributeError` from Ctrl+D / swap / the test menu.
+  - `get_verdict_by_code()`: the 137/9 -> MLE and 124/142 -> TLE branches were
+    unreachable behind `is_crash_exit_code()` (128..192); reordered.
+- Regression checks: 138 -> 155.
 
 ## v1.4.14 notes
 

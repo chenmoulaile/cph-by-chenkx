@@ -94,6 +94,14 @@ STRINGS = {
         'zh': '保存输入和答案',
         'en': 'saves input + answer',
     },
+    'test_gone': {
+        'zh': '该测试点已被删除，编辑内容未保存',
+        'en': 'that test no longer exists, nothing was saved',
+    },
+    'panel_not_ready': {
+        'zh': '测试面板还没准备好（编译失败或尚未编译）',
+        'en': 'the test panel is not ready yet (nothing compiled)',
+    },
     'diff': {
         'zh': '差异',
         'en': 'Diff',

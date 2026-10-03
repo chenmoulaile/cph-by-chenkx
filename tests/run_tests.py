@@ -1116,6 +1116,18 @@ def main():
         i18n.set_lang(saved[4])
         stress._stop_stress()
 
+    # Stress builds its commands with the same placeholders as the main Run
+    # path, and must be just as lenient: {file} is documented, and a
+    # misspelled name only warns (doctor reports it) - it used to abort with
+    # KeyError: 'file' / KeyError: '<typo>'.
+    stress_cmd = stress._format_cmd('g++ {file} -o {file_name} {args}',
+                                    os.path.join('tmp', 'a b.cpp'))
+    check('stress accepts every documented placeholder',
+          'a b.cpp' in stress_cmd and stress_cmd.rstrip().endswith('a b'), stress_cmd)
+    stress_cmd = stress._format_cmd('g++ {typo} {file_name}', os.path.join('tmp', 'a.cpp'))
+    check('stress ignores an unknown placeholder',
+          '{typo}' not in stress_cmd and stress_cmd.rstrip().endswith('a'), stress_cmd)
+
     print('== round 5: answer matching, empty placeholder, RE vs TLE, run clock ==')
 
     # The judge compares answers with every whitespace character removed, so
@@ -1130,6 +1142,15 @@ def main():
     check('a declined answer stays declined', declined.is_correct_answer('7') is False)
     floats = tm.CphTestManagerCommand.Test({'test': '', 'correct_answers': ['0.30000000000000004']})
     check('float tolerance still matches', floats.is_correct_answer('0.3', 1e-6) is True)
+
+    # load_all_tests()/is_meaningful_test() accept an entry without a 'test'
+    # key (an answer-only sample) and a hand-edited file may hold null or a
+    # number; both used to abort the whole run with KeyError/AttributeError.
+    check('a stored test without a "test" key still loads',
+          tm.CphTestManagerCommand.Test({'correct_answers': ['42']}).test_string == '')
+    check('non-string stored answers do not crash the load',
+          tm.CphTestManagerCommand.Test(
+              {'test': '', 'correct_answers': [None, 7]}).correct_answers == set(['', '7']))
 
     # The interactive placeholder (no input, no answer) must never reach the
     # tests file: it came back on every reload and could not be deleted.
@@ -1156,6 +1177,29 @@ def main():
     check('save_tests drops the placeholder and keeps the real test',
           stored is not None and len(stored) == 1 and stored[0]['test'] == '1 2\n',
           str(stored))
+
+    # A stale placeholder in ANY of the candidate files used to be merged
+    # back on every reload, which is why an empty sample could never be
+    # deleted for good.
+    existing = [p for p in settings.get_tests_paths(tpath) if os.path.exists(p)]
+    check('save_tests writes exactly one file', len(existing) == 1, str(existing))
+    stale = [p for p in settings.get_tests_paths(tpath) if not os.path.exists(p)][0]
+    with open(stale, 'w', encoding='utf-8') as f:
+        f.write('[{"test": ""}]')
+    loaded = settings.load_all_tests(tpath)
+    check('load_all_tests ignores a stale placeholder',
+          all(settings.is_meaningful_test(t) for t in loaded), str(loaded))
+
+    # ...and saving keeps every file the problem is loaded from in sync, so
+    # a deleted real test cannot come back from a stale copy either.
+    with open(stale, 'w', encoding='utf-8') as f:
+        f.write('[{"test": "1 2\\n"}, {"test": "9 9\\n"}]')
+    settings.save_tests(tpath, [{'test': '1 2\n'}])
+    for candidate in (stale, existing[0]):
+        with open(candidate, encoding='utf-8') as f:
+            data = json.load(f)
+        check('save_tests syncs %s' % os.path.basename(os.path.dirname(candidate)),
+              len(data) == 1 and data[0]['test'] == '1 2\n', str(data))
 
     # RE vs TLE
     check('crash exit codes are recognised',
@@ -1223,11 +1267,69 @@ def main():
     check('delete_tests covers un-run tests too',
           'len(tester.tests)' in body, body.strip().split('\n')[0])
 
-    # The edit card must not start with a blank line.
+    # prog_out must be as long as tests: get_tie_pos()/toggle_fold() index it
+    # directly and an IndexError there made 'delete test' silently do
+    # nothing for a test this session never ran (typically an empty sample).
+    restored = make_tester([tm.CphTestManagerCommand.Test('1 2\n'),
+                            tm.CphTestManagerCommand.Test('')])
+    check('a session-restored tester keeps prog_out as long as tests',
+          len(restored.prog_out) == len(restored.tests) == 2,
+          'prog_out=%s tests=%s' % (restored.prog_out, len(restored.tests)))
+    restored.prog_out = restored.prog_out[:1]        # force the short case
+    pos_cmd = tm.CphTestManagerCommand.__new__(tm.CphTestManagerCommand)
+    pos_cmd.view = sys.modules['sublime'].View()
+    pos_cmd.tester = restored
+    try:
+        pos_cmd.get_tie_pos(2)
+        ok = True
+    except Exception as e:
+        ok = '%s: %s' % (type(e).__name__, e)
+    check('get_tie_pos survives a short prog_out', ok is True, str(ok))
+    check('get_tie_pos/toggle_fold use the bounds-safe accessor',
+          'out_len = len(tester.output_at(j))' in tm_src
+          and '_outp = self.tester.output_at(i)' in tm_src)
+
+    # The edit view keeps a sentinel newline at position 0. A block phantom
+    # is always drawn BELOW the line it is anchored to (minihtml has no
+    # LAYOUT_ABOVE, sublimehq/sublime_text#4469), so without the empty first
+    # line the card landed between the first and second line of the sample.
+    edit_src = open(os.path.join(ROOT, 'test_edit.py'), encoding='utf-8').read()
+    check('the edit view inserts a position-0 sentinel',
+          "v.replace(edit, Region(0, v.size()), '\\n' + initial_content)" in edit_src)
+    check('saving skips the sentinel',
+          "start = 1 if v.substr(Region(0, 1)) == '\\n' else 0" in edit_src)
+    check('the caret cannot enter the sentinel line',
+          'self._clamp_caret(view)' in edit_src
+          and 'def _clamp_caret' in edit_src)
+
+    # Closing only one of the two edit tabs must not wipe the other half of
+    # the sample: the old save pushed an empty answer, and
+    # set_correct_answer() clears the answer set before setting it.
+    check('saving from one edit tab never wipes the other side',
+          'if test_input is not None:' in edit_src
+          and 'if answer is not None:' in edit_src
+          and 'if answer is None:' not in edit_src)
+
+    # A failed compile leaves the -run panel open with tester = None while
+    # the bindings scoped to source.TestSyntax still fire there.
+    check('a tester-less panel ignores test-model actions',
+          'ACTIONS_NEEDING_TESTER' in tm_src
+          and 'self.tester is None and action in self.ACTIONS_NEEDING_TESTER' in tm_src)
+
+    # The edit card must not start with a blank line of its own.
     with open(os.path.join(ROOT, 'Highlight', 'test_edit.html'), encoding='utf-8') as f:
         edit_tpl = f.read()
     check('the edit card has no blank line at its top',
           edit_tpl.startswith('<div class="panel"><a'), edit_tpl[:60])
+
+    # An exit code that names how the process was killed must keep its
+    # verdict: is_crash_exit_code() covers 128..192, so checking it first
+    # made the MLE/TLE branches unreachable.
+    check('the killed-by-signal exit codes keep their verdict',
+          verdict.get_verdict_by_code(137, 10, 2000, 256, '', '', 'x\n')['name'] == 'MLE'
+          and verdict.get_verdict_by_code(9, 10, 2000, 256, '', '', 'x\n')['name'] == 'MLE'
+          and verdict.get_verdict_by_code(124, 10, 2000, 256, '', '', 'x\n')['name'] == 'TLE'
+          and verdict.get_verdict_by_code(1, 10, 2000, 256, '', '', 'x\n')['name'] == 'RE')
 
     print('')
     print('%d checks, %d failures' % (CHECKS[0], len(FAILURES)))

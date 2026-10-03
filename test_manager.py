@@ -229,6 +229,16 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 					sublime.DRAW_NO_OUTLINE | sublime.DRAW_EMPTY_AS_OVERWRITE]
 	REGION_END_PROP = ['variable.c++', 'Packages/cph-by-chenkx/icons/arrow_left.png', sublime.HIDDEN]
 
+	# Dispatched actions that index the test model. A failed compile leaves
+	# the -run panel open with tester = None, yet the bindings scoped to
+	# source.TestSyntax still fire there (Ctrl+D, swap, the test menu), which
+	# used to raise AttributeError: 'NoneType' object has no attribute ...
+	ACTIONS_NEEDING_TESTER = frozenset((
+		'insert_line', 'new_test', 'delete_test', 'delete_tests',
+		'swap_tests', 'show_test_menu', 'show_test_action_menu',
+		'apply_edit_changes', 'accept_test', 'decline_test', 'toggle_fold',
+	))
+
 	def __init__(self, view):
 		self.view = view
 		# Deferred attributes: the run view can be restored by Sublime's
@@ -252,13 +262,18 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 				self.correct_answers = set()
 				self.uncorrect_answers = set()
 			else:
-				self.test_string = _clean_newlines(prop['test'])
+				# .get(): load_all_tests()/is_meaningful_test() accept a dict
+				# without a 'test' key (an answer-only entry), and the missing
+				# key used to abort the whole run with KeyError.
+				self.test_string = _clean_newlines(str(prop.get('test') or ''))
 				# Normalise exactly like add_correct_answer() (strip), or a
 				# stored answer such as '3\n' never matched the program's '3'
 				# in is_correct_answer() and the card kept offering accept.
-				self.correct_answers = set(_clean_newlines(x).strip()
+				# str(... or ''): a hand-edited tests file can hold null or
+				# a number, and .strip() on those raised AttributeError.
+				self.correct_answers = set(str(_clean_newlines(x) or '').strip()
 										   for x in prop.get('correct_answers', ()))
-				self.uncorrect_answers = set(_clean_newlines(x).strip()
+				self.uncorrect_answers = set(str(_clean_newlines(x) or '').strip()
 											 for x in prop.get('uncorrect_answers', ()))
 
 			self.start = start
@@ -627,6 +642,13 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 			self.on_stop = on_stop
 			self.proc_run = False
 			self.prog_out = []
+			# Keep prog_out exactly as long as tests. Session-restored tests
+			# have no output yet, and get_tie_pos() / toggle_fold() index it
+			# directly: a short list raised IndexError, which made "delete
+			# test" (Ctrl+D and the test menu) fail silently for every test
+			# this session had not run yet - typically an empty sample.
+			while len(self.prog_out) < len(self.tests):
+				self.prog_out.append('')
 			self.on_status_change = on_status_change
 			# Epoch of this tester within the owning CphTestManagerCommand.
 			# Stale listener threads of a killed process may still fire
@@ -925,6 +947,10 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 			self.tests.clear()
 			for test in tests:
 				self.tests.append(CphTestManagerCommand.Test(test))
+			# Same invariant as __init__: prog_out must be as long as tests,
+			# or get_tie_pos()/toggle_fold() raise IndexError.
+			while len(self.prog_out) < len(self.tests):
+				self.prog_out.append('')
 
 		def output_at(self, i):
 			"""Output of test i; '' when it was never materialised.
@@ -954,7 +980,7 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 			tests[nth].add_uncorrect_answer(outs[nth].rstrip().lstrip())
 
 		def check_test(self, nth):
-			return self.tests[nth].is_correct_answer(self.prog_out[nth])
+			return self.tests[nth].is_correct_answer(self.output_at(nth))
 
 		def terminate(self):
 			self.process_manager.terminate()
@@ -999,7 +1025,9 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 		tester = self.tester
 
 		_inp = self.tester.tests[i].test_string
-		_outp = self.tester.prog_out[i]
+		# output_at(): a test that was never run has no prog_out entry yet
+		# (delete_test() calls this first, so a direct index crashed).
+		_outp = self.tester.output_at(i)
 		text = _inp + '\n' + _outp.rstrip() + '\n' + '\n'
 		tie_pos = self.get_tie_pos(i)
 
@@ -1254,12 +1282,18 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 		tester = self.tester
 		pt = 0
 		for j in range(i):
+			if j >= len(tester.tests):
+				break
+			# output_at(): prog_out can be shorter than tests (a test this
+			# session never ran). Indexing it directly raised IndexError
+			# inside the Ctrl+D handler, so the delete silently did nothing.
+			out_len = len(tester.output_at(j))
 			running = tester.proc_run and j == tester.running_test
 
 			if running:
-				pt += len(tester.tests[j].test_string) + len(tester.prog_out[j]) + 1
+				pt += len(tester.tests[j].test_string) + out_len + 1
 			elif not tester.tests[j].fold:
-				pt += len(tester.tests[j].test_string) + len(tester.prog_out[j]) + 1
+				pt += len(tester.tests[j].test_string) + out_len + 1
 
 			if not tester.tests[j].fold:
 				pt += 2
@@ -1542,7 +1576,13 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 	def set_test_input(self, test=None, id=None):
 		v = self.view
 		tester = self.tester
-		if test is None or id is None:
+		# The edit tabs can outlive their test (it was deleted, or the run
+		# panel was rebuilt): saving then used to raise IndexError and the
+		# edit was silently dropped.
+		if test is None or id is None or tester is None:
+			return
+		if not (0 <= id < len(tester.tests)):
+			sublime.status_message(t('test_gone'))
 			return
 		unfold = False
 		if not tester.tests[id].fold:
@@ -1563,9 +1603,10 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 		"""Set the correct answer for a test. Re-judges existing output."""
 		if id is None or data is None:
 			return
-		if id >= len(self.tester.tests):
-			return
 		tester = self.tester
+		if tester is None or not (0 <= id < len(tester.tests)):
+			sublime.status_message(t('test_gone'))
+			return
 		test = tester.tests[id]
 		# Clear and set new correct answer
 		test.correct_answers = set()
@@ -2469,6 +2510,10 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 			pass
 
 		v.set_read_only(False)
+
+		if self.tester is None and action in self.ACTIONS_NEEDING_TESTER:
+			sublime.status_message(t('panel_not_ready'))
+			return
 
 		if action == 'insert_line':
 			self.insert_text(edit)

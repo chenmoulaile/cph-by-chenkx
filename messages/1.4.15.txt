@@ -1,0 +1,36 @@
+cph-by-chenkx 1.4.15
+====================
+
+Fixed:
+
+* The edit card landed between the first and the second line of the sample.
+  Sublime's phantom API has no "draw above this line" layout (a block phantom
+  is always drawn below the line it is anchored to), so the edit view keeps a
+  sentinel newline on line 0 - exactly what the -run panel does - and the card
+  is back on top. Saving skips the sentinel and the caret cannot enter it, so
+  it can never become part of the sample.
+* An empty sample could not be deleted for good:
+  - loading now drops the empty placeholder just like saving already did (a
+    stale copy in any of the candidate files used to be merged back),
+  - saving keeps every tests file the problem is loaded from in sync, so a
+    deleted test no longer comes back from a stale copy,
+  - deleting no longer raises IndexError for a test this session never ran
+    (prog_out could be shorter than the test list).
+* Closing only the "-answer" tab and then saving from "-edit" wiped the stored
+  answer.
+* Stress tests rejected the documented {file} placeholder with
+  "KeyError: 'file'"; they now accept the same placeholders as the main run and
+  ignore a misspelled one instead of aborting.
+* A stored test without a "test" key, or with null / numeric answers, aborted
+  the whole run with KeyError / AttributeError.
+* Ctrl+D, swapping and the test menu raised AttributeError in a panel whose
+  compile had failed (no tester yet).
+* The "killed by signal" exit codes (137/9 -> MLE, 124/142 -> TLE) had become
+  unreachable after the crash-first change.
+
+Notes:
+
+* Regression checks: 138 -> 155.
+* The edit view keeps a thin empty first line. That is the only way to keep a
+  phantom card above the text - see sublimehq/sublime_text#4469; the -run
+  panel's cards use the very same trick.

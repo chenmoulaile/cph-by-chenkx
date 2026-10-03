@@ -229,16 +229,19 @@ def get_verdict_by_code(rtcode, runtime, time_limit_ms, memory_limit_mb,
     if rtcode is None:
         return get_verdict('unknown_error')
 
-    # A signal / NTSTATUS exit code is always a crash: it must be RE even
-    # when the runtime also happens to be over the limit (previously a
-    # program that died on an access violation at 2.1s was reported TLE).
-    if rtcode != 0 and not is_crash_exit_code(rtcode):
+    # An exit code that names *how* the process was killed is more specific
+    # than the generic crash rule, so it is tested first: 137/9 (SIGKILL) is
+    # what an OOM killer or the OS reports, 124/142 is what timeout(1) and
+    # SIGALRM produce. is_crash_exit_code() covers 128..192, so testing it
+    # first made both branches below unreachable (dead code).
+    if rtcode != 0:
         if rtcode == 137 or rtcode == 9:
             return get_verdict('memory_limit_exceed')
         if rtcode == 124 or rtcode == 142:
             return get_verdict('time_limit_exceed')
-
-    if rtcode != 0:
+        # Anything else non-zero is a crash, including a signal (negative on
+        # POSIX) or an NTSTATUS value: RE even when the runtime is also over
+        # the limit, because dying on an access violation at 2.1s is an RE.
         return get_verdict('runtime_error')
 
     if time_limit_ms and runtime and runtime > time_limit_ms:

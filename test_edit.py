@@ -56,6 +56,19 @@ class CphTestEditCommand(sublime_plugin.TextCommand):
 				return wv
 		return None
 
+	# ---------- buffer helpers ----------
+
+	def _content(self):
+		"""The editable text, without the position-0 sentinel newline.
+
+		See init() for why the buffer starts with a '\n'. Saving the whole
+		buffer used to be harmless while there was no sentinel, but it must
+		never end up inside the stored sample.
+		"""
+		v = self.view
+		start = 1 if v.substr(Region(0, 1)) == '\n' else 0
+		return v.substr(Region(start, v.size()))
+
 	# ---------- phantom actions ----------
 
 	def cb_action(self, event):
@@ -66,7 +79,7 @@ class CphTestEditCommand(sublime_plugin.TextCommand):
 				sublime.status_message('[cph-by-chenkx] source run view is gone')
 				return
 
-			content = v.substr(Region(0, v.size()))
+			content = self._content()
 			test_input, answer = None, None
 			if self.mode == 'input':
 				test_input = content
@@ -76,28 +89,31 @@ class CphTestEditCommand(sublime_plugin.TextCommand):
 			sibling = self._find_sibling()
 			if sibling is not None:
 				sibling_content = sibling.substr(Region(0, sibling.size()))
+				if sibling_content[:1] == '\n':
+					sibling_content = sibling_content[1:]
 				if self.mode == 'input':
 					answer = sibling_content
 				else:
 					test_input = sibling_content
 
-			if test_input is None:
-				test_input = ''
-			if test_input.strip():
-				test_input = test_input.rstrip('\n') + '\n'
-			if answer is None:
-				answer = ''
-
-			source.run_command('cph_test_manager', {
-				'action': 'set_test_input',
-				'data': test_input,
-				'id': self.test_id
-			})
-			source.run_command('cph_test_manager', {
-				'action': 'set_correct_answer',
-				'data': answer,
-				'id': self.test_id
-			})
+			# Only push back what actually has a source. The sibling tab may
+			# be closed (the user closed '-answer' and kept '-edit'): sending
+			# an empty answer then wiped the stored one, because
+			# set_correct_answer() clears the answer set before setting it.
+			if test_input is not None:
+				if test_input.strip():
+					test_input = test_input.rstrip('\n') + '\n'
+				source.run_command('cph_test_manager', {
+					'action': 'set_test_input',
+					'data': test_input,
+					'id': self.test_id
+				})
+			if answer is not None:
+				source.run_command('cph_test_manager', {
+					'action': 'set_correct_answer',
+					'data': answer,
+					'id': self.test_id
+				})
 
 			# close both edit views
 			if sibling is not None:
@@ -164,19 +180,25 @@ class CphTestEditCommand(sublime_plugin.TextCommand):
 		v.settings().set('cph_edit_source', source_view_id)
 		v.settings().set('edit_mode', True)
 		v.set_syntax_file('Packages/%s/TestSyntax.sublime-syntax' % base_name)
-		# No leading sentinel '\n' any more: content starts at position 0
-		# so there is no empty first line. Anchor drift of the phantom is
-		# handled by re-pinning it on every buffer modification.
+		# Position 0 holds a sentinel '\n' and the button phantom is anchored
+		# at Region(0). minihtml has no "draw above this line" layout
+		# (sublimehq/sublime_text#4469): a block phantom always renders
+		# BELOW the line it is anchored to. With the sample starting at
+		# position 0 the card therefore landed between the first and the
+		# second line of the sample - the empty first line is what keeps it
+		# on top, exactly like the -run panel does (see 'erase_all', which
+		# leaves a single '\n' behind for the very same reason).
+		# Position 0 is reserved: EditModifyListener keeps the caret at
+		# >= 1 and _content() saves from position 1, so the sentinel can
+		# never leak into the stored sample.
 		if self.mode == 'input':
-			# An empty sample must not become a single blank line: the old
-			# code unconditionally appended '\n'.
 			initial_content = test.rstrip('\n') + '\n' if test.strip() else ''
 		else:
 			initial_content = (correct_answer or '').lstrip('\n')
 		# replace(), not insert(): init() also runs when an existing edit
 		# tab is reopened (e.g. the user closed only the -answer tab), and
 		# inserting the content a second time duplicated it.
-		v.replace(edit, Region(0, v.size()), initial_content)
+		v.replace(edit, Region(0, v.size()), '\n' + initial_content)
 		v.sel().clear()
 		v.sel().add(Region(v.size()))
 		self.update_config()
@@ -211,10 +233,38 @@ class CphTestEditCommand(sublime_plugin.TextCommand):
 
 
 class EditModifyListener(sublime_plugin.EventListener):
+	@staticmethod
+	def _clamp_caret(view):
+		"""Keep the caret out of the position-0 sentinel line.
+
+		Typing there would insert text *before* the sentinel, which pushes
+		the button phantom down into the sample - the exact bug this
+		sentinel exists to prevent.
+		"""
+		mod = []
+		change = False
+		for reg in view.sel():
+			if reg.a < 1 or reg.b < 1:
+				change = True
+			mod.append(Region(max(reg.a, 1), max(reg.b, 1)))
+		if change:
+			view.sel().clear()
+			view.sel().add_all(mod)
+
 	def on_selection_modified(self, view):
 		if view.settings().get('cph_edit_view'):
-			# 'test N -edit' / '-answer' tabs have no position-0 sentinel
-			# any more, so the cursor is allowed everywhere.
+			# The 'test N -edit' / '-answer' tabs keep a sentinel newline at
+			# position 0 (see CphTestEditCommand.init). Select-all + delete
+			# can wipe it, so put it back; otherwise the card would end up
+			# in the middle of the sample again.
+			if view.size() == 0:
+				view.run_command('cph_test_edit', {
+					'action': 'replace',
+					'region': [0, 0],
+					'text': '\n'
+				})
+				return
+			self._clamp_caret(view)
 			return
 		if view.settings().get('edit_mode'):
 			if view.size() == 0:
@@ -223,17 +273,7 @@ class EditModifyListener(sublime_plugin.EventListener):
 					'region': [0, view.size()],
 					'text': '\n'
 				})
-
-			mod = []
-			change = False
-			for reg in view.sel():
-				if reg.a == 0:
-					change = True
-				mod.append(Region(max(reg.a, 1), max(reg.b, 1)))
-
-			if change:
-				view.sel().clear()
-				view.sel().add_all(mod)
+			self._clamp_caret(view)
 
 	def on_modified(self, view):
 		# Keep the save/delete buttons pinned to the top of the edit tabs:

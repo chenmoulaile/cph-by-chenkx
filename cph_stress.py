@@ -19,6 +19,7 @@ from .core.cph_target import context_menu_enabled, visible as context_menu_visib
 from .core.cph_i18n import t
 from .core.cph_verdict import normalize_lines
 from .Highlight.test_interface import get_test_styles
+from .Modules.ProcessManager import _LenientFormat
 from .Modules.build_artifact import (output_path_from_compile_cmd,
                                      resolve_artifact, retarget_path,
                                      print_safe)
@@ -219,7 +220,19 @@ def _format_cmd(template, file, drop_args=True):
     cmd = cmd.replace('{extra_sources}', '').replace('{include_dirs}', '')
     if drop_args:
         cmd = cmd.replace('{args}', '')
-    return cmd.format(source_file=file, source_file_dir=src_dir, file_name=base, args='')
+    # Exactly the placeholders ProcessManager.format_command() knows, and
+    # just as lenient. {file} is a documented placeholder, and the main Run
+    # path accepts it, while stress used to abort with KeyError: 'file'; a
+    # misspelled name must only warn (doctor reports it) instead of killing
+    # the run.
+    values = _LenientFormat({
+        'file': os.path.basename(file),
+        'source_file': file,
+        'source_file_dir': src_dir,
+        'file_name': base,
+        'args': '',
+    })
+    return cmd.format_map(values)
 
 
 def _compile_program(file, time_limit=30):
