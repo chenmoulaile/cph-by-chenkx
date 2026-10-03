@@ -1316,11 +1316,27 @@ def main():
           'ACTIONS_NEEDING_TESTER' in tm_src
           and 'self.tester is None and action in self.ACTIONS_NEEDING_TESTER' in tm_src)
 
-    # The edit card must not start with a blank line of its own.
+    # The edit card template must stay byte-identical to the v1.4.13 one. The
+    # whitespace inside each <a> is what gives the chips their inner padding:
+    # minihtml collapses it to a single space, so the coloured background is
+    # not flush against the label. v1.4.14 packed the markup onto one line,
+    # which made every chip look cramped - that is the regression to avoid.
     with open(os.path.join(ROOT, 'Highlight', 'test_edit.html'), encoding='utf-8') as f:
         edit_tpl = f.read()
     check('the edit card has no blank line at its top',
-          edit_tpl.startswith('<div class="panel"><a'), edit_tpl[:60])
+          edit_tpl.startswith('<div class="panel">\n\t<a'), repr(edit_tpl[:40]))
+    check('the edit card keeps the chip inner padding',
+          '\n\t\t{test_label} {test_id}\n' in edit_tpl
+          and '\n\t\t{save_label}\n' in edit_tpl
+          and '\n\t\t{delete_label}\t\n' in edit_tpl, repr(edit_tpl[:80]))
+    check('no chip label sits flush against its tag',
+          '>{test_label}' not in edit_tpl and '{test_id}</a>' not in edit_tpl
+          and '>{save_label}' not in edit_tpl and '{save_label}</a>' not in edit_tpl
+          and '>{delete_label}' not in edit_tpl and '{delete_label}</a>' not in edit_tpl)
+    check('the edit card markup is the v1.4.13 template',
+          edit_tpl.count('\n') == 15 and edit_tpl.endswith('</div>\n')
+          and '<span class="edit-hint">{hint}</span>' in edit_tpl,
+          repr(edit_tpl[-40:]))
 
     # An exit code that names how the process was killed must keep its
     # verdict: is_crash_exit_code() covers 128..192, so checking it first

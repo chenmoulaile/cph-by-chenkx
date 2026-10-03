@@ -1,0 +1,30 @@
+cph-by-chenkx 1.4.16
+====================
+
+Fixed:
+
+* The edit card looks like v1.4.13 again. Diffing the whole file tree of
+  v1.4.13 against v1.4.14 shows that only two files under Highlight/ changed,
+  and the card stylesheet (test_styles.css) is byte-identical. The only
+  difference in the edit card was whitespace in test_edit.html:
+
+  - in v1.4.13 each <a> tag had whitespace around its label. minihtml
+    collapses it to one space, and that space is what gives the chip its inner
+    padding, so the coloured background is not flush against the text;
+  - v1.4.14 packed the whole template onto a single line, which removed the
+    padding and made every chip look cramped.
+
+  Highlight/test_edit.html is restored to the v1.4.13 content and is now
+  byte-identical to the file at tag v1.4.13 (blob sha
+  dc7b0ad1cd034270b97719d56109e54cdb256786).
+
+Notes:
+
+* One correction to an earlier assumption: the newline after
+  <div class="panel"> does NOT produce a blank line. The -run panel's card
+  template (test_config.html) has always had that same newline and its cards
+  are single-line, which shows minihtml collapses whitespace to a space rather
+  than a line break. The blank line above the card came from the missing
+  position-0 sentinel in the edit view (fixed in v1.4.15), not from the
+  template.
+* Regression checks: 155 -> 158.

@@ -1,8 +1,21 @@
 # cph-by-chenkx — Package Control Submission Notes
 
-Package version: v1.4.15
+Package version: v1.4.16
 Repository: https://github.com/chenmoulaile/cph-by-chenkx
 Channel entry file: `repository/c/cph-by-chenkx.json` (see snippet at the bottom)
+
+## v1.4.16 notes
+
+- `Highlight/test_edit.html` is restored to the v1.4.13 content (byte-identical
+  to the file at tag v1.4.13, blob sha
+  `dc7b0ad1cd034270b97719d56109e54cdb256786`). v1.4.14 had packed the template
+  onto one line; the whitespace inside each `<a>` is what minihtml collapses
+  into the chip's inner padding, so removing it made the card look cramped.
+  No CSS changed between v1.4.13 and v1.4.14 (`test_styles.css` is
+  byte-identical in both).
+- `tests/run_tests.py` pins that template shape now: the card must not start
+  with a blank line, the chip inner padding must stay, and no label may sit
+  flush against its tag. Regression checks: 155 -> 158.
 
 ## v1.4.15 notes
 
