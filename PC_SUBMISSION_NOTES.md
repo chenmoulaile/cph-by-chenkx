@@ -1,8 +1,21 @@
 # cph-by-chenkx — Package Control Submission Notes
 
-Package version: v1.4.10
+Package version: v1.4.11
 Repository: https://github.com/chenmoulaile/cph-by-chenkx
 Channel entry file: `repository/c/cph-by-chenkx.json` (see snippet at the bottom)
+
+## v1.4.11 notes
+
+- `Modules/build_artifact.print_safe()`: a console message naming a mangled
+  non-ASCII binary raised `UnicodeEncodeError` on the cp1252 Windows CI runner
+  and aborted the test job. It now retries with an ASCII-escaped rendering.
+  `cph_stress.py` uses it for every message that embeds a file name.
+- `MemorySampler` also stops after `max_silence` (2s) without a single
+  successful sample, not only after 20 consecutive misses: sampling a
+  non-existent pid is slow on macOS and the thread outlived the join window
+  there.
+- Regression checks: 107 -> 108 (the new one reproduces the cp1252 failure by
+  redirecting stdout to a cp1252 encoder).
 
 ## v1.4.10 notes
 

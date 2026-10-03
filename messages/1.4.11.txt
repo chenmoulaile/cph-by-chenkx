@@ -1,0 +1,14 @@
+cph-by-chenkx 1.4.11
+====================
+
+Fixed:
+
+* Console messages that mention a mangled or non-ASCII binary name raised
+  UnicodeEncodeError on a console that is not UTF-8 (the cp1252 Windows CI
+  runner), which aborted a whole test run. Those messages now fall back to an
+  escaped ASCII rendering; Sublime's own UTF-8 console still shows the real
+  names.
+* The memory sampler now also stops after two seconds without a single
+  successful sample, in addition to twenty consecutive misses. Sampling a
+  non-existent pid can be slow on macOS, and the thread could outlive the
+  expected join window there.

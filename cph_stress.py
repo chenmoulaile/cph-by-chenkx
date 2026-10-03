@@ -19,7 +19,8 @@ from .core.cph_i18n import t
 from .core.cph_verdict import normalize_lines
 from .Highlight.test_interface import get_test_styles
 from .Modules.build_artifact import (output_path_from_compile_cmd,
-                                     resolve_artifact, retarget_path)
+                                     resolve_artifact, retarget_path,
+                                     print_safe)
 
 
 _stress_state = {
@@ -217,7 +218,7 @@ def _compile_program(file, time_limit=30):
     """
     entry = _lang_entry(file)
     if entry is None:
-        print('[cph-by-chenkx] stress: no run_settings entry for %s' % file)
+        print_safe('[cph-by-chenkx] stress: no run_settings entry for %s' % file)
         return False, None, 'no run_settings entry for this file type'
 
     src_dir = os.path.dirname(file)
@@ -240,7 +241,7 @@ def _compile_program(file, time_limit=30):
     try:
         rc, out, err = _popen_capture(cmd, src_dir, shell=True, timeout=time_limit)
         if rc != 0:
-            print('[cph-by-chenkx] Compile error in %s:\n%s' % (file, err))
+            print_safe('[cph-by-chenkx] Compile error in %s:\n%s' % (file, err))
             detail = (err or out or '').strip().splitlines()
             return False, None, ('compiler exit code %s%s'
                                  % (rc, (': ' + detail[0][:200]) if detail else ''))
@@ -249,16 +250,16 @@ def _compile_program(file, time_limit=30):
         # now so the message points at the real problem.
         real = resolve_artifact(exe_path, src_dir, started_at)
         if real is None:
-            print('[cph-by-chenkx] stress: %s compiled but %r is missing'
-                  % (file, os.path.basename(exe_path)))
+            print_safe('[cph-by-chenkx] stress: %s compiled but %r is missing'
+                       % (file, os.path.basename(exe_path)))
             return False, None, ('the compiler produced no %s'
                                  % os.path.basename(exe_path))
         if real != exe_path:
-            print('[cph-by-chenkx] stress: binary of %s is %r on disk'
-                  % (base, os.path.basename(real)))
+            print_safe('[cph-by-chenkx] stress: binary of %s is %r on disk'
+                       % (base, os.path.basename(real)))
         return True, real, ''
     except Exception as e:
-        print('[cph-by-chenkx] Compile error: %s' % str(e))
+        print_safe('[cph-by-chenkx] Compile error: %s' % str(e))
         return False, None, str(e)[:200]
 
 
@@ -569,7 +570,7 @@ def _on_stress_failed(round_count, inp, user_out, std_out):
                     text += '\n[cph-by-chenkx] ' + \
                         t('stress_counterexample_added', total=len(merged)) + '\n'
     except Exception as e:
-        print('[cph-by-chenkx] failed to save counterexample: %s' % e)
+        print_safe('[cph-by-chenkx] failed to save counterexample: %s' % e)
 
     _append_stress(text)
     _stop_stress()

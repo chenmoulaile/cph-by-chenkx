@@ -130,14 +130,33 @@ def _exists(path, src_dir):
 _ANNOUNCED = set()
 
 
+def print_safe(text):
+    """print() that survives a narrow console.
+
+    Sublime's console is UTF-8, but a redirected one is not: the Windows CI
+    runner is cp1252, and printing the name of a mangled binary there raised
+    UnicodeEncodeError and failed the whole test run (v1.4.10). Fall back to
+    an escaped ASCII rendering, which is more readable for these names anyway.
+    """
+    try:
+        print(text)
+    except UnicodeEncodeError:
+        try:
+            print(text.encode('ascii', 'backslashreplace').decode('ascii'))
+        except Exception:
+            pass
+    except Exception:
+        pass
+
+
 def _announce(actual, wanted):
     """Say it once per binary: a run happens once per test otherwise."""
     key = (actual, wanted)
     if key in _ANNOUNCED:
         return
     _ANNOUNCED.add(key)
-    print('[cph-by-chenkx] the binary is %r on disk, not %r'
-          % (os.path.basename(actual), os.path.basename(wanted)))
+    print_safe('[cph-by-chenkx] the binary is %r on disk, not %r'
+               % (os.path.basename(actual), os.path.basename(wanted)))
 
 
 def _looks_like_path(token):

@@ -179,9 +179,11 @@ def _sample_darwin(pid):
 class MemorySampler(object):
 	"""Poll a running process and remember its peak memory usage."""
 
-	def __init__(self, pid, interval=0.025):
+	def __init__(self, pid, interval=0.025, max_silence=2.0):
 		self.pid = pid
 		self.interval = interval
+		#: Give up after this many seconds without a single successful sample.
+		self.max_silence = max_silence
 		self.peak = 0
 		self._stop = threading.Event()
 		self._thread = None
@@ -197,16 +199,29 @@ class MemorySampler(object):
 		# Stop on our own once the child is gone. The sampler is a daemon
 		# thread, but if the owning listener raised before stop() ran, a leaked
 		# thread would poll a dead pid every 25 ms for the rest of the session.
+		#
+		# Two exit conditions, because one is not enough: 20 consecutive
+		# misses covers the normal case, and `silence_until` bounds the total
+		# time when a single sample is slow (proc_pid_rusage on macOS takes
+		# noticeably longer for a pid that does not exist, which made a
+		# sampler thread outlive an 8s join on a loaded runner).
 		misses = 0
+		silence_until = None
 		while not self._stop.is_set():
 			value = sample_memory_bytes(self.pid)
 			if value:
 				misses = 0
+				silence_until = None
 				if value > self.peak:
 					self.peak = value
 			else:
 				misses += 1
 				if misses >= 20:
+					break
+				now = time.time()
+				if silence_until is None:
+					silence_until = now + self.max_silence
+				elif now > silence_until:
 					break
 			time.sleep(self.interval)
 

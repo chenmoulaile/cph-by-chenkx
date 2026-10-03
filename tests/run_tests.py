@@ -657,12 +657,13 @@ def main():
           '{stderr_display}' in card_tpl and '{stderr_label}' in card_tpl)
 
     # A leaked MemorySampler used to poll a dead pid for the whole session.
-    # Use an impossible pid and join() rather than a wall-clock sleep (a fixed
-    # sleep was too tight on a slow macOS runner).
+    # Use an impossible pid plus a tiny interval and a hard cap on how long a
+    # single sample may take, so the check cannot depend on runner speed (a
+    # fixed sleep here was too tight on a loaded macOS runner).
     mp = importlib.import_module(pkg + '.Modules.memprobe')
-    sampler = mp.MemorySampler(99999999)
+    sampler = mp.MemorySampler(99999999, interval=0.001, max_silence=1.0)
     sampler.start()
-    sampler._thread.join(timeout=8.0)
+    sampler._thread.join(timeout=10.0)
     still_alive = sampler._thread.is_alive()
     sampler.stop()
     check('memory sampler stops polling a dead pid', not still_alive)
@@ -891,6 +892,29 @@ def main():
               artifacts.resolve_artifact(wanted, tmp, started_at=0) == other)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
+
+    # print() must survive a narrow console: the Windows CI runner is cp1252
+    # and printing a mangled non-ASCII binary name there raised
+    # UnicodeEncodeError and failed the whole job.
+    class _NarrowStdout(object):
+        def write(self, text):
+            text.encode('cp1252')
+            return len(text)
+
+        def flush(self):
+            pass
+
+    try:
+        with contextlib.redirect_stdout(_NarrowStdout()):
+            # '中文' and the mangled latin-1 lookalike are both unprintable
+            # on cp1252; this is the exact message that broke the CI job.
+            artifacts.print_safe(
+                '[cph-by-chenkx] the binary is %r on disk, not %r'
+                % ('ÖÐÎÄ.exe', '中文.exe'))
+        narrow_ok = True
+    except Exception as e:
+        narrow_ok = '%s: %s' % (type(e).__name__, e)
+    check('console output survives a cp1252 stdout', narrow_ok is True, narrow_ok)
 
     print('== the run command follows the real binary ==')
     pm_mod = importlib.import_module(pkg + '.Modules.ProcessManager')
