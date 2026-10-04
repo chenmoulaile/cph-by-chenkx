@@ -1359,9 +1359,54 @@ def main():
           and restored_card.stdout == '' and restored_card.test_string == '1\n')
     check('a fresh run clears the verdicts and remembers the AC ones',
           'previously_accepted = set(' in tm_src
-          and 't.reset_run_state()' in tm_src
+          and 'card.reset_run_state()' in tm_src
           and 'self.tester.previously_accepted = previously_accepted' in tm_src
           and "getattr(self.tester, 'previously_accepted', ())" in tm_src)
+
+    # A local variable that shadows a module-level name AND is called in the
+    # same function is a landmine: Python makes the name local for the WHOLE
+    # function, so `for t in tests:` turned the later t('compiling') into
+    # UnboundLocalError and v1.4.17 could not compile anything at all.
+    # (pyflakes reports this as "import ... shadowed by loop variable".)
+    import ast as _ast
+    shadow = []
+    for fname in sorted(os.listdir(ROOT)):
+        if not fname.endswith('.py'):
+            continue
+        fpath = os.path.join(ROOT, fname)
+        with open(fpath, encoding='utf-8') as f:
+            tree = _ast.parse(f.read(), fpath)
+        module_names = set()
+        for node in tree.body:
+            if isinstance(node, (_ast.Import, _ast.ImportFrom)):
+                for alias in node.names:
+                    module_names.add(alias.asname or alias.name.split('.')[0])
+            elif isinstance(node, _ast.FunctionDef):
+                module_names.add(node.name)
+            elif isinstance(node, _ast.Assign):
+                for target in node.targets:
+                    if isinstance(target, _ast.Name):
+                        module_names.add(target.id)
+        for node in _ast.walk(tree):
+            if not isinstance(node, _ast.FunctionDef):
+                continue
+            local = set()
+            for sub in _ast.walk(node):
+                if isinstance(sub, _ast.arg):
+                    local.add(sub.arg)
+                elif isinstance(sub, _ast.Name) and isinstance(sub.ctx, _ast.Store):
+                    local.add(sub.id)
+            called = set(sub.func.id for sub in _ast.walk(node)
+                         if isinstance(sub, _ast.Call) and isinstance(sub.func, _ast.Name))
+            for name in sorted(local & module_names & called):
+                shadow.append('%s:%d %s()' % (fname, node.lineno, name))
+    check('no local variable shadows a called module-level name',
+          not shadow, '; '.join(shadow[:6]))
+    # The exact reported failure, pinned: make_opd must not have a local 't'
+    # (it is the i18n helper imported at module level).
+    check('make_opd does not shadow the i18n helper t()',
+          't' not in tm.CphTestManagerCommand.make_opd.__code__.co_varnames,
+          str(tm.CphTestManagerCommand.make_opd.__code__.co_varnames[:8]))
 
     # Closing xxx.cpp must close 'xxx.cpp -run' (and the paired edit tabs):
     # otherwise the user closes the panel by hand every single time.

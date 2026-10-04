@@ -5,6 +5,33 @@
 
 ---
 
+# v1.4.18
+
+## 修复
+
+- **上一版会让插件完全无法编译/运行**（`UnboundLocalError: local variable 't' referenced
+  before assignment`）：v1.4.17 在 `make_opd` 里用 `for t in tests:` 遍历测试点，而 `t` 是模块级
+  导入的 i18n 函数——Python 只要函数里出现过赋值，就把该名字当作**整个函数的局部变量**，
+  于是同一函数后面的 `self.set_compile_bar(t('compiling'))` 直接抛异常，按 Run 就崩。
+  循环变量已改名，并顺手消除了同类隐患（`_source_fingerprint` 里用 `path` 做循环变量会遮蔽
+  `from os import path`）。
+
+## 新增与改进
+
+- **新增静态守卫，专防这一类崩溃**：`tests/run_tests.py` 现在用 AST 扫描全部插件文件，
+  只要某个函数**既给某个名字赋值、又把它当函数调用**，而这个名字同时是模块级导入/定义，
+  就直接判失败（用注入法验证过：把 `for card in tests` 改回 `for t in tests` 能被精确抓到）。
+  另外钉住 `make_opd` 的字节码里不得出现局部变量 `t`。
+- 清理了一批无用导入/死变量（`test_manager.py` 的 `sys` / `subprocess` / `shlex` / `VERDICTS`
+  / `set_lang` 等，`cph_stress.py`、`cph_language.py`、`cph_tests_io.py`、`test_edit.py`），
+  略微降低插件加载开销。
+
+## 说明
+
+- 回归测试 166 → **168 项**。pyflakes 对本次改动涉及的文件不再报任何遮蔽/未定义问题。
+
+---
+
 # v1.4.17
 
 ## 修复

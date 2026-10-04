@@ -1,0 +1,31 @@
+cph-by-chenkx 1.4.18
+====================
+
+Fixed:
+
+* v1.4.17 broke compiling/running completely with
+
+      UnboundLocalError: local variable 't' referenced before assignment
+
+  make_opd() iterated the tests with `for t in tests:`, and `t` is the i18n
+  helper imported at module level. Python treats a name as local for the WHOLE
+  function as soon as it is assigned anywhere in it, so the later
+  self.set_compile_bar(t('compiling')) raised. The loop variable is renamed,
+  and the same latent pattern in _source_fingerprint (a loop variable named
+  `path` shadowing `from os import path`) is gone as well.
+
+Improvements:
+
+* A static guard for exactly this class of crash: tests/run_tests.py now walks
+  every plugin file with the AST and fails if a function both assigns to a name
+  and calls it, while that name is also a module-level import or definition.
+  Verified by injection (renaming the loop variable back to `t` is caught).
+  make_opd's bytecode is also pinned to have no local named `t`.
+* Removed a batch of unused imports and dead locals (sys / subprocess / shlex /
+  VERDICTS / set_lang ... in test_manager.py, plus cph_stress.py,
+  cph_language.py, cph_tests_io.py and test_edit.py), which trims a little off
+  the plugin load.
+
+Notes:
+
+* Regression checks: 166 -> 168.

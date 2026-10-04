@@ -14,7 +14,7 @@ import sublime
 import sublime_plugin
 
 from .core.cph_i18n import t
-from .core.cph_settings import load_all_tests, save_tests
+from .core.cph_settings import load_all_tests
 from .core.cph_tests_merge import merge_into_file
 
 

@@ -5,24 +5,18 @@ cph-by-chenkx - 主测试管理器
 import sublime, sublime_plugin
 import os
 import re
-from os.path import dirname
-import sys
-from subprocess import Popen, PIPE
-import subprocess
-import shlex
 from sublime import Region, Phantom, PhantomSet
 from os import path
-from importlib import import_module
 from time import time, sleep
 import threading
 
 from .Modules.ProcessManager import ProcessManager
-from .core.cph_settings import base_name, get_settings, root_dir, get_tests_file_path, get_tests_paths, load_all_tests, save_tests, is_run_supported_ext, get_problem_limits
+from .core.cph_settings import base_name, get_settings, get_tests_paths, load_all_tests, save_tests, is_run_supported_ext, get_problem_limits
 from .core.cph_target import visible as context_menu_visible
 from .core.cph_resources import read_resource
 from .Highlight.test_interface import get_test_styles
-from .core.cph_verdict import get_verdict, get_verdict_by_code, get_verdict_by_name, build_line_diff, outputs_equal, VERDICTS, find_crash_location, looks_like_crash
-from .core.cph_i18n import t, set_lang, get_lang, LANG_ZH, LANG_EN
+from .core.cph_verdict import get_verdict, get_verdict_by_code, get_verdict_by_name, build_line_diff, outputs_equal, find_crash_location, looks_like_crash
+from .core.cph_i18n import t
 
 
 # --------------------------------------------------------------- compile cache
@@ -69,9 +63,11 @@ def _source_fingerprint(process_manager):
 
 	expanded = []
 	for f in inputs:
-		for path in sorted(_iter_local_includes(f)):
-			if path not in expanded:
-				expanded.append(path)
+		# not named 'path': that shadows `from os import path` for the whole
+		# function and would break any path.join() added here later.
+		for include in sorted(_iter_local_includes(f)):
+			if include not in expanded:
+				expanded.append(include)
 
 	for f in expanded:
 		try:
@@ -2312,12 +2308,18 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 			# just failed, and kept green badges on the tests this run never
 			# reached. 'Run failed tests' still has to know what was AC, so
 			# remember that before wiping.
+			# NOTE: the loop variable must not be called 't' - that shadows the
+			# i18n helper t() imported at module level, and since Python treats
+			# any assignment as making the name local for the WHOLE function,
+			# the later self.set_compile_bar(t('compiling')) blew up with
+			# UnboundLocalError: local variable 't' referenced before
+			# assignment. tests/run_tests.py guards against this now.
 			previously_accepted = set(
-				i for i, t in enumerate(tests)
-				if isinstance(getattr(t, 'verdict', None), dict)
-				and t.verdict.get('name') == 'AC')
-			for t in tests:
-				t.reset_run_state()
+				index for index, card in enumerate(tests)
+				if isinstance(getattr(card, 'verdict', None), dict)
+				and card.verdict.get('name') == 'AC')
+			for card in tests:
+				card.reset_run_state()
 		file_ext = path.splitext(run_file)[1][1:]
 
 		self.change_process_status('COMPILING')

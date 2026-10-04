@@ -5,20 +5,17 @@ cph-by-chenkx - 对拍 (Stress Test) 功能
 import sublime
 import sublime_plugin
 import os
-import re
 import shlex
 import subprocess
 import threading
 import time
-from os import path
 
-from .core.cph_settings import base_name, get_settings, root_dir, load_all_tests, save_tests
+from .core.cph_settings import get_settings, load_all_tests, save_tests
 from .core.cph_tests_merge import merge_tests
 from .core.cph_state import set_stress_running
 from .core.cph_target import context_menu_enabled, visible as context_menu_visible
 from .core.cph_i18n import t
 from .core.cph_verdict import normalize_lines
-from .Highlight.test_interface import get_test_styles
 from .Modules.ProcessManager import _LenientFormat
 from .Modules.build_artifact import (output_path_from_compile_cmd,
                                      resolve_artifact, retarget_path,

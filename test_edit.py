@@ -9,7 +9,7 @@ save 按钮同时保存两者; 相比旧的 "------ answer ------" 分隔行,
 import sublime, sublime_plugin
 from sublime import Region, Phantom, PhantomSet
 
-from .core.cph_settings import base_name, root_dir
+from .core.cph_settings import base_name
 from .core.cph_resources import read_resource
 from .core.cph_i18n import t as _i18n_t
 from .Highlight.test_interface import get_test_styles
