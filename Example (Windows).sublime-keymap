@@ -235,5 +235,81 @@
 				"operand": true
 			}
 		]
+	},
+	{
+		"keys": [
+			"ctrl+alt+shift+f"
+		],
+		"command": "cph_fetch_problem",
+		"context": [
+			{
+				"key": "selector",
+				"operator": "not_equal",
+				"operand": "source.TestSyntax",
+				"match_all": true
+			},
+			{
+				"key": "cph_keybindings_enabled",
+				"operator": "equal",
+				"operand": true
+			}
+		]
+	},
+	{
+		"keys": [
+			"ctrl+alt+shift+v"
+		],
+		"command": "cph_view_statement",
+		"context": [
+			{
+				"key": "selector",
+				"operator": "not_equal",
+				"operand": "source.TestSyntax",
+				"match_all": true
+			},
+			{
+				"key": "cph_keybindings_enabled",
+				"operator": "equal",
+				"operand": true
+			}
+		]
+	},
+	{
+		"keys": [
+			"ctrl+alt+shift+k"
+		],
+		"command": "cph_benchmark",
+		"context": [
+			{
+				"key": "selector",
+				"operator": "not_equal",
+				"operand": "source.TestSyntax",
+				"match_all": true
+			},
+			{
+				"key": "cph_keybindings_enabled",
+				"operator": "equal",
+				"operand": true
+			}
+		]
+	},
+	{
+		"keys": [
+			"ctrl+alt+shift+t"
+		],
+		"command": "cph_contest_timer",
+		"context": [
+			{
+				"key": "selector",
+				"operator": "not_equal",
+				"operand": "source.TestSyntax",
+				"match_all": true
+			},
+			{
+				"key": "cph_keybindings_enabled",
+				"operator": "equal",
+				"operand": true
+			}
+		]
 	}
 ]

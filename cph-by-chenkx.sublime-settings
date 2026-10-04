@@ -36,7 +36,32 @@
 			// 多文件题目：把同目录其它源文件一起编译（glob 通配，可留空）
 			"extra_sources": [],
 			// 额外头文件目录（可留空）
-			"include_dirs": []
+			"include_dirs": [],
+
+			// ===== 自定义判定器（SPJ，多解题必备）=====
+			// 填 checker 源文件（或已编译好的可执行文件）路径即可启用；留空则
+			// 仍按逐 token 比较。相对路径按源文件所在目录解析。
+			"checker": "",
+			// testlib（默认）：checker <输入文件> <用户输出文件> <标准答案文件>
+			//   —— 和 testlib 的 argv[1..3] 完全一致，现成 checker 直接用；
+			// stdin：把「输入 / 用户输出 / 标准答案」按顺序写到 stdin，
+			//   每段之间用一行 --- 分隔（方便写脚本 checker）。
+			"checker_style": "testlib",
+			// checker 的编译命令（只编译一次，之后复用；已有 .exe 则直接使用）
+			"checker_compile_cmd": "g++ -O2 -std=c++17 -I \"{checker_dir}\" \"{checker}\" -o \"{checker}.exe\"",
+			// checker 自己的时间限制（毫秒）
+			"checker_time_limit_ms": 10000,
+
+			// ===== 交互题（Interactor）=====
+			// 填 interactor 源文件（或已编译好的可执行文件）路径即可启用；留空则
+			// 按普通题跑。启用后该语言的运行会自动走交互流程（testlib 约定）：
+			//   interactor <输入文件> <输出文件> <标准答案文件>
+			// 它从 stdin 读选手输出、往 stdout 写要发给选手的内容，退出码即判决
+			// （0=AC 1=WA 2=PE 3=FAIL 7=PC）。交互题不并发跑（interactor 通常
+			// 不可重入）。
+			"interactor": "",
+			"interactor_compile_cmd": "g++ -O2 -std=c++17 -I \"{interactor_dir}\" \"{interactor}\" -o \"{interactor}.exe\"",
+			"interactor_time_limit_ms": 20000
 		},
 		{
 			"name": "Python",
@@ -53,6 +78,41 @@
 			"compile_cmd": "javac -J-Dfile.encoding=utf8 -d \"{source_file_dir}\" \"{source_file}\"",
 			"run_cmd": "java -classpath \"{source_file_dir}\" \"{file_name}\"",
 			"time_limit_ms": 5000,
+			"memory_limit_mb": 256
+		},
+		{
+			"name": "C",
+			"extensions": ["c"],
+			"compile_cmd": "gcc \"{source_file}\" {extra_sources} {include_dirs} -std=c17 -O2 -o \"{file_name}.exe\" -DLOCAL",
+			"run_cmd": "\"{source_file_dir}/{file_name}.exe\" {args}",
+			"time_limit_ms": 2000,
+			"memory_limit_mb": 256,
+			"extra_sources": [],
+			"include_dirs": []
+		},
+		{
+			"name": "Rust",
+			"extensions": ["rs"],
+			"compile_cmd": "rustc -O \"{source_file}\" -o \"{file_name}.exe\"",
+			"run_cmd": "\"{source_file_dir}/{file_name}.exe\" {args}",
+			"time_limit_ms": 2000,
+			"memory_limit_mb": 256
+		},
+		{
+			"name": "Go",
+			"extensions": ["go"],
+			// go build 会在当前目录生成可执行文件，-o 指定名字即可
+			"compile_cmd": "go build -o \"{file_name}.exe\" \"{source_file}\"",
+			"run_cmd": "\"{source_file_dir}/{file_name}.exe\" {args}",
+			"time_limit_ms": 2000,
+			"memory_limit_mb": 256
+		},
+		{
+			"name": "Pascal",
+			"extensions": ["pas", "pp"],
+			"compile_cmd": "fpc -O2 -o\"{file_name}.exe\" \"{source_file}\"",
+			"run_cmd": "\"{source_file_dir}/{file_name}.exe\" {args}",
+			"time_limit_ms": 2000,
 			"memory_limit_mb": 256
 		}
 	],
@@ -73,6 +133,44 @@
 	// 逐字符同步输出（只有交互式程序需要）。开启后输出量大时会明显变慢，
 	// 因为每个字符都要刷新一次视图。默认关闭。
 	"sync_output": false,
+
+	// ================= Benchmark（卡常对比） =================
+	// "Benchmark this test" 会把当前测试点跑几次，报告最快/平均/最慢。
+	// 单次测量被进程启动和调度噪声主导，跑多次才看得出常数差异。
+	"benchmark_runs": 5,
+
+	// ================= 保存后自动运行 / 自动格式化（默认关闭） =================
+	// 打开后保存源文件就会自动跑一次测试（带防抖，连续保存只跑最后一次）。
+	"auto_run_on_save": false,
+	"auto_run_debounce_seconds": 0.8,
+	// 保存后调用该语言的 format_cmd（见 run_settings，例如 clang-format），
+	// 文件真的被改了才重新载入视图。
+	"auto_format_on_save": false,
+
+	// ================= Competitive Companion 自动建文件 =================
+	// 收到题目时如果当前视图还没有文件（新建未保存），自动建
+	// <auto_create_dir>/<题目标题>.<auto_create_extension> 并打开。
+	"auto_create_file": true,
+	// 留空 = 用窗口第一个文件夹；也可以是绝对路径或相对当前文件的路径
+	"auto_create_dir": "",
+	"auto_create_extension": "cpp",
+	// 新建文件时写入的内容（可放你的模板；留空则是空文件）
+	"auto_create_template": "",
+
+	// ================= 练习统计 =================
+	// "Show practice statistics" 报告的默认天数
+	"stats_days": 7,
+
+	// ================= 比赛计时 =================
+	// 收到题目时自动开始倒计时（分钟）；0 = 关闭。也可手动 Ctrl+Alt+Shift+T。
+	"contest_duration_minutes": 0,
+
+	// ================= Subtask 分组 =================
+	// 测试点分组（NOI 系）：组内全部 AC 才算这组通过，汇总行显示部分分。
+	// 例：[{"name": "Sub1", "from": 1, "to": 3, "score": 30},
+	//      {"name": "Sub2", "from": 4, "to": 10, "score": 70}]
+	// from/to 是测试点序号（从 1 开始，含两端）。
+	"subtasks": [],
 
 	// ================= 并行运行测试点 =================
 	// "Run all tests in parallel"（Ctrl+Alt+Shift+P）用的 worker 数。

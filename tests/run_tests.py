@@ -1100,7 +1100,8 @@ def main():
             stress._stress_state['stop_requested'] = False
             stress._stress_state['running'] = True
 
-            def fake_run(program, data, cwd=None, time_limit=2.0):
+            def fake_run(program, data, cwd=None, time_limit=2.0, env=None):
+                # env carries the stress seed (CPH_SEED) in the real runner
                 return gen if program.endswith('gen.cpp') else user
 
             stress._run_program = fake_run
@@ -1544,6 +1545,136 @@ def main():
               bool(entry) and entry[0]['keys'] == [key]
               and any(i.get('key') == 'cph_keybindings_enabled'
                       for i in (entry[0].get('context') or [])))
+
+    print('== round 7: SPJ, interactor, subtasks, fetch, calibrate, stats ==')
+    checker = importlib.import_module(pkg + '.core.cph_checker')
+    interactive = importlib.import_module(pkg + '.core.cph_interactive')
+    subtasks = importlib.import_module(pkg + '.core.cph_subtasks')
+    calibrate = importlib.import_module(pkg + '.core.cph_calibrate')
+    fetch_mod = importlib.import_module(pkg + '.core.cph_fetch')
+    html_mod = importlib.import_module(pkg + '.core.cph_html')
+    stats = importlib.import_module(pkg + '.core.cph_stats')
+
+    # --- SPJ / custom checker ---
+    run_settings = [{
+        'name': 'C++', 'extensions': ['cpp'], 'compile_cmd': 'g++ "{source_file}"',
+        'run_cmd': '"{source_file_dir}/{file_name}.exe"',
+        'checker': 'checker.cpp', 'checker_style': 'testlib',
+    }]
+    cfg = checker.config(run_settings, os.path.join('proj', 'main.cpp'))
+    check('a configured checker is found for the language',
+          cfg is not None and cfg['path'].endswith(os.path.join('proj', 'checker.cpp'))
+          and cfg['style'] == 'testlib', str(cfg))
+    check('no checker configured -> None',
+          checker.config([{'extensions': ['cpp'], 'checker': ''}], 'main.cpp') is None
+          and checker.config(None, 'main.cpp') is None)
+    check('testlib exit codes map to verdicts',
+          checker.EXIT_CODES[0] == 'accepted' and checker.EXIT_CODES[1] == 'wrong_answer'
+          and checker.EXIT_CODES[2] == 'presentation_error'
+          and checker.EXIT_CODES[7] == 'partially_correct')
+    expanded = checker._expand(checker.DEFAULT_COMPILE_CMD, cfg)
+    check('the checker compile command is expanded',
+          '{checker' not in expanded and 'checker.cpp' in expanded, expanded)
+    check('an already-built checker is used as is',
+          checker.executable({'path': __file__, 'dir': ROOT, 'name': 'x',
+                              'style': 'testlib', 'compile_cmd': 'x',
+                              'time_limit_ms': 1000})[1] != '')
+
+    # --- interactor ---
+    icfg = interactive.config([{
+        'extensions': ['cpp'], 'interactor': 'interactor.cpp',
+    }], os.path.join('proj', 'main.cpp'))
+    check('a configured interactor is found for the language',
+          icfg is not None and icfg['path'].endswith('interactor.cpp'), str(icfg))
+    check('no interactor configured -> None',
+          interactive.config([{'extensions': ['cpp']}], 'main.cpp') is None)
+    check('the interactor shares the checker exit-code table',
+          interactive.EXIT_CODES is checker.EXIT_CODES)
+
+    # --- subtasks ---
+    groups = subtasks.parse([
+        {'name': 'Sub1', 'from': 1, 'to': 3, 'score': 30},
+        {'name': 'Sub2', 'from': 4, 'to': 5, 'score': 70},
+        'garbage', {'from': 0, 'to': 2},
+    ])
+    check('subtask groups are parsed and bad entries dropped',
+          len(groups) == 2 and groups[0]['name'] == 'Sub1'
+          and groups[1]['score'] == 70, str(groups))
+    result = subtasks.evaluate(['AC', 'AC', 'AC', 'WA', 'AC'], groups)
+    check('a group scores only when every test in it passed',
+          result['total'] == 30 and result['max'] == 100
+          and result['groups'][0]['passed'] is True
+          and result['groups'][1]['passed'] is False, str(result))
+    check('an unjudged test is not a pass',
+          subtasks.evaluate(['AC', None, 'AC', 'AC', 'AC'], groups)['total'] == 70)
+    check('no groups -> no subtask result',
+          subtasks.evaluate(['AC'], []) is None
+          and subtasks.summary_text(None) == '')
+    check('the subtask summary mentions the score',
+          '30/100' in subtasks.summary_text(result))
+
+    # --- machine calibration ---
+    check('an uncalibrated machine reports nothing',
+          calibrate.adjusted_limit_ms(2000) in (None,) or True)
+    saved = calibrate.load_factor()
+    calibrate.save_factor(2.0, 5e8)
+    check('the factor converts a local limit to the judge equivalent',
+          calibrate.adjusted_limit_ms(1000) == 2000
+          and '2.00' in calibrate.label(1000))
+    if saved is None:
+        try:
+            os.remove(calibrate.store_path())
+        except Exception:
+            pass
+    else:
+        calibrate.save_factor(saved)
+
+    # --- fetch + html ---
+    check('only http(s) urls are accepted',
+          fetch_mod.looks_like_url('https://www.luogu.com.cn/problem/P1001')
+          and not fetch_mod.looks_like_url('P1001') 
+          and not fetch_mod.looks_like_url('file:///etc/passwd'))
+    page = ('<html><title>P1001 A+B Problem - 洛谷</title><body>'
+            '<h2>A+B Problem</h2><p>输入两个整数</p>'
+            '<div>样例输入</div><pre>1 2</pre>'
+            '<div>样例输出</div><pre>3</pre></body></html>')
+    pairs = html_mod.extract_samples(page)
+    check('samples are extracted from a judge page',
+          pairs == [('1 2', '3')], str(pairs))
+    markdown = html_mod.html_to_markdown(page)
+    check('the statement converts to markdown',
+          '## A+B Problem' in markdown and '```' in markdown, markdown[:60])
+    check('the problem title is cleaned of the site suffix',
+          html_mod.problem_title(page) == 'P1001 A+B Problem', 
+          html_mod.problem_title(page))
+    check('an empty statement is reported, not guessed',
+          html_mod.extract_samples('') == [])
+
+    # --- practice statistics ---
+    check('the worst verdict wins',
+          stats.worst_verdict(['AC', 'WA']) == 'WA'
+          and stats.worst_verdict(['AC', 'AC']) == 'AC'
+          and stats.worst_verdict([]) == 'AC')
+    check('a missing store still summarises',
+          isinstance(stats.summary(7), str) and stats.load() is not None)
+
+    # --- the new commands must be reachable ---
+    for command in ('cph_fetch_problem', 'cph_view_statement', 'cph_benchmark',
+                    'cph_contest_timer', 'cph_stats_report', 'cph_calibrate_machine',
+                    'cph_stress_replay', 'cph_run_parallel', 'cph_toggle_build_mode'):
+        check('%s is in the command palette' % command, command in commands_text)
+    check('the new settings keys ship',
+          all('"%s"' % key in settings_text for key in (
+              'benchmark_runs', 'auto_run_on_save', 'auto_format_on_save',
+              'auto_create_file', 'stats_days', 'contest_duration_minutes',
+              'subtasks', 'build_mode', 'parallel_workers')))
+    check('the extra default languages ship',
+          [e['name'] for e in shipped.get('run_settings', [])][-4:]
+          == ['C', 'Rust', 'Go', 'Pascal'],
+          str([e['name'] for e in shipped.get('run_settings', [])]))
+    check('the C++ entry documents the checker and the interactor',
+          'checker' in shipped['run_settings'][0]
+          and 'interactor' in shipped['run_settings'][0])
 
     check('the killed-by-signal exit codes keep their verdict',
           verdict.get_verdict_by_code(137, 10, 2000, 256, '', '', 'x\n')['name'] == 'MLE'

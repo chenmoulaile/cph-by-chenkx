@@ -1,0 +1,233 @@
+"""cph-by-chenkx - 自定义判定器（Special Judge / SPJ）
+
+只有 token 比较 + 浮点容差时，"输出任意合法方案"的多解题根本没法测。这里支持
+挂一个 checker 程序来判定，兼容 testlib。
+
+两种调用约定（由 ``checker_style`` 选择）：
+
+- ``testlib``（默认）：``checker <input> <output> <answer>``，三个**文件路径**。
+  这正是 testlib 的 ``main`` 读 ``argv[1..3]`` 的方式，所以现成的 testlib
+  checker（含 ``quitf(_ok/_wa/_pe, ...)``）可以直接用。
+- ``stdin``：把「输入 / 用户输出 / 标准答案」按这个顺序写到 checker 的 stdin，
+  每段用一行 ``---`` 分隔（方便写简单的 Python/脚本 checker）。
+
+退出码按 testlib 约定映射：0=AC，1=WA，2=PE，3=FAIL（当 UKE），7=PC。
+checker 自己打印的内容（testlib 的 ``quitf`` 消息）会带到详情视图里。
+
+放在 core/ 是因为根级插件模块之间不允许互相 import（Package Control 审查规则）。
+"""
+
+import os
+import shlex
+import subprocess
+import tempfile
+
+from .cph_i18n import t
+
+#: testlib exit code -> verdict name
+EXIT_CODES = {
+	0: 'accepted',
+	1: 'wrong_answer',
+	2: 'presentation_error',
+	3: 'unknown_error',
+	4: 'unknown_error',
+	5: 'unknown_error',
+	6: 'unknown_error',
+	7: 'partially_correct',
+}
+
+DEFAULT_COMPILE_CMD = 'g++ -O2 -std=c++17 -I "{checker_dir}" "{checker}" -o "{checker}.exe"'
+
+#: checker path -> (mtime, exe_path) so a checker is built once per session
+_compiled = {}
+
+
+def config(run_settings, file, settings=None):
+	"""The checker settings for this file, or None when no checker is set.
+
+	Reads the ``checker`` key of the matching ``run_settings`` entry. An empty
+	or missing value means "no checker", so the normal comparison is used.
+	"""
+	if not run_settings or not file:
+		return None
+	ext = os.path.splitext(file)[1][1:]
+	for entry in run_settings:
+		if ext in (entry.get('extensions') or []):
+			checker = (entry.get('checker') or '').strip()
+			if not checker:
+				return None
+			src_dir = os.path.dirname(os.path.abspath(file))
+			path = checker
+			if not os.path.isabs(path):
+				path = os.path.join(src_dir, path)
+			return {
+				'path': os.path.normpath(path),
+				'dir': os.path.dirname(os.path.normpath(path)),
+				'name': os.path.splitext(os.path.basename(path))[0],
+				'style': (entry.get('checker_style') or 'testlib').strip().lower(),
+				'compile_cmd': entry.get('checker_compile_cmd') or DEFAULT_COMPILE_CMD,
+				'time_limit_ms': entry.get('checker_time_limit_ms') or 10000,
+			}
+	return None
+
+
+def _expand(cmd, cfg):
+	values = {
+		'checker': cfg['path'],
+		'checker_dir': cfg['dir'],
+		'checker_name': cfg['name'],
+	}
+	out = cmd
+	for key, value in values.items():
+		out = out.replace('{%s}' % key, value)
+	return out
+
+
+def _is_binary(path):
+	"""A .exe / extension-less file that exists is used as-is (no compile)."""
+	if not os.path.isfile(path):
+		return False
+	ext = os.path.splitext(path)[1].lower()
+	if ext in ('.exe', '.out', '.bin'):
+		return True
+	return ext == '' and os.access(path, os.X_OK)
+
+
+def executable(cfg):
+	"""Path of the runnable checker, compiling it on first use.
+
+	Returns (path, error_message). error_message is '' on success.
+	"""
+	exe = cfg['path'] + '.exe'
+	if _is_binary(cfg['path']):
+		return cfg['path'], ''
+	if _is_binary(exe):
+		return exe, ''
+
+	try:
+		key = cfg['path']
+		mtime = os.path.getmtime(cfg['path'])
+	except Exception as e:
+		return None, t('checker_missing', path=cfg['path'], error=str(e))
+
+	cached = _compiled.get(key)
+	if cached and cached[0] == mtime and os.path.isfile(cached[1]):
+		return cached[1], ''
+
+	cmd = _expand(cfg['compile_cmd'], cfg)
+	try:
+		startupinfo = None
+		startupinfo = hidden_startupinfo()
+		proc = subprocess.Popen(cmd, shell=True, stdin=None,
+								stdout=subprocess.PIPE,
+								stderr=subprocess.STDOUT,
+								cwd=cfg['dir'], startupinfo=startupinfo)
+		out = proc.communicate()[0]
+	except Exception as e:
+		return None, t('checker_compile_failed', cmd=cmd, error=str(e))
+
+	text = decode_output(out)
+	if proc.returncode != 0:
+		return None, t('checker_compile_failed', cmd=cmd, error=text[-800:])
+	_compiled[key] = (mtime, exe)
+	return exe, ''
+
+
+def hidden_startupinfo():
+	"""STARTUPINFO that keeps a console window from flashing (Windows).
+
+	Returns None on every other platform, so it can be passed to Popen
+	unconditionally.
+	"""
+	windows = os.name == 'nt'
+	try:
+		import sublime
+		windows = sublime.platform() == 'windows'
+	except Exception:
+		pass
+	if not windows:
+		return None
+	try:
+		startupinfo = subprocess.STARTUPINFO()
+		startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+		return startupinfo
+	except Exception:
+		return None
+
+
+def decode_output(data):
+	"""bytes -> str (utf-8, replace); str passes through."""
+	if isinstance(data, str):
+		return data
+	try:
+		return data.decode('utf-8', 'replace')
+	except Exception:
+		return ''
+
+
+def _write(path, text):
+	with open(path, 'wb') as f:
+		f.write((text or '').encode('utf-8', 'replace'))
+
+
+def judge(cfg, exe, input_text, output_text, expected_text):
+	"""Run the checker. Returns a dict:
+
+	{'ok': bool, 'verdict': 'accepted'|'wrong_answer'|..., 'message': str}
+	"""
+	workdir = tempfile.mkdtemp(prefix='cph-checker-')
+	in_path = os.path.join(workdir, 'input.txt')
+	out_path = os.path.join(workdir, 'output.txt')
+	ans_path = os.path.join(workdir, 'answer.txt')
+	_write(in_path, input_text)
+	_write(out_path, output_text)
+	_write(ans_path, expected_text)
+
+	argv = [exe]
+	if cfg['style'] == 'stdin':
+		payload = '\n---\n'.join([input_text or '', output_text or '',
+								  expected_text or ''])
+	else:
+		argv = [exe, in_path, out_path, ans_path]
+		payload = None
+
+	try:
+		startupinfo = None
+		startupinfo = hidden_startupinfo()
+		proc = subprocess.Popen(
+			argv, shell=False,
+			stdin=subprocess.PIPE if payload is not None else None,
+			stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+			cwd=cfg['dir'], startupinfo=startupinfo)
+		out = proc.communicate(
+			payload.encode('utf-8', 'replace') if payload is not None else None,
+			timeout=max(1.0, float(cfg['time_limit_ms']) / 1000.0))[0]
+		code = proc.returncode
+	except Exception as e:
+		_cleanup(workdir)
+		return {'ok': False, 'verdict': 'unknown_error',
+				'message': t('checker_run_failed', error=str(e))}
+
+	_cleanup(workdir)
+	message = decode_output(out).strip()
+	name = EXIT_CODES.get(code, 'unknown_error')
+	if code is not None and code < 0:
+		name = 'runtime_error'
+	return {'ok': name == 'accepted', 'verdict': name, 'message': message}
+
+
+def _cleanup(workdir):
+	try:
+		for name in os.listdir(workdir):
+			try:
+				os.remove(os.path.join(workdir, name))
+			except Exception:
+				pass
+		os.rmdir(workdir)
+	except Exception:
+		pass
+
+
+def quote_argv(argv):
+	"""Only used for the status/doctor text."""
+	return ' '.join(shlex.quote(a) for a in argv)

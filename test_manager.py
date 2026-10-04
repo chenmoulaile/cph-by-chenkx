@@ -17,6 +17,16 @@ from .core.cph_jump import (diagnostics as parse_diagnostics,
 							links_html, one_link, set_targets, handle_event as handle_jump_event)
 from .core.cph_build_mode import label as build_mode_label
 from .core.cph_parallel import run_batch as run_parallel_batch
+from .core.cph_checker import (config as checker_config,
+							   executable as checker_executable,
+							   judge as checker_judge)
+from .core.cph_stats import record_run as stats_record_run
+from .core.cph_subtasks import (parse as subtask_parse,
+								evaluate as subtask_evaluate,
+								html as subtask_html)
+from .core.cph_interactive import (config as interactor_config,
+								   executable as interactor_executable,
+								   run_case as interactive_run_case)
 from .core.cph_resources import read_resource
 from .Highlight.test_interface import get_test_styles
 from .core.cph_verdict import get_verdict, get_verdict_by_code, get_verdict_by_name, build_line_diff, outputs_equal, find_crash_location, looks_like_crash
@@ -1250,25 +1260,187 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 
 			ok = passed == judged
 			color = '#49cd32' if ok else '#d3140d'
+
+			# Subtask groups (NOI style): a group scores only when every test
+			# in it passed, so the plain pass count is not the whole story.
+			groups = subtask_parse(get_settings().get('subtasks'))
+			extra = ''
+			if groups:
+				verdicts = []
+				for test in tester.tests:
+					vd = getattr(test, 'verdict', None)
+					verdicts.append(vd.get('name') if isinstance(vd, dict) else None)
+				extra = ('<br>' + subtask_html(subtask_evaluate(verdicts, groups)))
+
 			html = (
 				'<div style="padding: 2px 0 6px 0;">'
 				'<span style="color: %s; font-weight: bold;">%s</span>'
 				'<span style="color: var(--foreground); opacity: 0.75;"> &nbsp;·&nbsp; %s</span>'
+				'%s'
 				'</div>'
-			) % (color, parts[0], ' &nbsp;·&nbsp; '.join(parts[1:]))
+			) % (color, parts[0], ' &nbsp;·&nbsp; '.join(parts[1:]), extra)
 			self.summary_phantom.update([
 				Phantom(Region(v.size(), v.size()), html, sublime.LAYOUT_BLOCK)
 			])
 		except Exception:
 			pass
 
-	def run_parallel_batch(self):
+	def record_stats(self):
+		"""Append this run's verdicts to the local practice statistics.
+
+		Called once per finished chain (and once per parallel batch), not per
+		test: the stats count *runs*, and a run is a whole evaluation.
+		"""
+		try:
+			tester = self.tester
+			file_name = self.dbg_file
+			if tester is None or not tester.tests or not file_name:
+				return
+			verdicts = []
+			for test in tester.tests:
+				verdict = getattr(test, 'verdict', None)
+				if isinstance(verdict, dict) and verdict.get('name'):
+					verdicts.append(verdict['name'])
+			if verdicts:
+				stats_record_run(file_name, verdicts)
+		except Exception as e:
+			print('[cph-by-chenkx] stats: %s' % e)
+
+	def manager_factory(self, time_limit_ms=None, memory_limit_mb=None):
+		"""A fresh ProcessManager factory for one test.
+
+		Parallel runs and the benchmark need a manager per test: sharing the
+		serial one would mix up pipes, stderr and the running flag.
+		"""
+		settings = get_settings()
+		run_settings = settings.get('run_settings')
+		separate_stderr = bool(settings.get('ignore_stderr', True))
+		file = self.dbg_file
+		build_sys = getattr(self, 'build_sys', None)
+
+		def make_manager():
+			manager = ProcessManager(file, build_sys, run_settings=run_settings)
+			if separate_stderr:
+				manager.set_separate_stderr(True)
+			if time_limit_ms is not None:
+				manager.set_time_limit(time_limit_ms)
+			if memory_limit_mb is not None:
+				manager.set_memory_limit(memory_limit_mb)
+			return manager
+
+		return make_manager
+
+	def checker_for(self):
+		"""Checker config for the file being tested, or None."""
+		target = None
+		if self.tester is not None:
+			target = getattr(self.tester.process_manager, 'file', None)
+		return checker_config(get_settings().get('run_settings'),
+							  target or self.dbg_file)
+
+	def apply_checker(self, test_id, stdout, expected):
+		"""(verdict, message) from a configured checker, or (None, '').
+
+		The verdict is a verdict dict ready for set_verdict(); the message is
+		whatever the checker printed (testlib's quitf text).
+		"""
+		cfg = self.checker_for()
+		if not cfg:
+			return None, ''
+		exe, error = checker_executable(cfg)
+		if error:
+			return None, error
+		test = self.tester.tests[test_id]
+		result = checker_judge(cfg, exe, test.test_string, stdout, expected)
+		message = result.get('message') or ''
+		if message:
+			message = '%s %s' % (t('checker_judged', verdict=result['verdict']), message)
+		return get_verdict(result['verdict']), message
+
+	def benchmark(self):
+		"""Run one test N times and report min/avg/max.
+
+		Constant-factor work (卡常) needs a stable number: a single run is
+		dominated by process start-up and scheduler noise. Runs sequentially
+		so the measurements do not compete with each other.
+		"""
+		tester = self.tester
+		if tester is None or not tester.tests:
+			sublime.status_message('[cph-by-chenkx] ' + t('benchmark_no_test'))
+			return
+		index = self.test_index_at_cursor()
+		if index is None or index >= len(tester.tests):
+			index = 0
+		settings = get_settings()
+		try:
+			runs = int(settings.get('benchmark_runs', 5) or 5)
+		except (TypeError, ValueError):
+			runs = 5
+		runs = max(2, min(runs, 50))
+
+		test = tester.tests[index]
+		if test.correct_answers:
+			expected = next(iter(test.correct_answers))
+		else:
+			expected = test.expected_output or ''
+
+		time_limit_ms = None
+		memory_limit_mb = None
+		try:
+			time_limit_ms = tester.process_manager.get_time_limit_ms()
+			memory_limit_mb = tester.process_manager.get_memory_limit_mb()
+		except Exception:
+			pass
+
+		sublime.status_message('[cph-by-chenkx] ' + t('benchmark_running', n=runs))
+		self.set_compile_bar(t('benchmark_running', n=runs))
+		run_parallel_batch(
+			self.manager_factory(time_limit_ms, memory_limit_mb),
+			[(test.test_string, expected)] * runs,
+			workers=1, time_limit_ms=time_limit_ms,
+			memory_limit_mb=memory_limit_mb,
+			float_tolerance=0, regard_pe_as_ac=False,
+			on_done=lambda results: self.report_benchmark(index, runs, results))
+
+	def report_benchmark(self, index, runs, results):
+		times = [r.get('runtime') or 0 for r in (results or []) if r]
+		# not named 't': that would shadow the i18n helper for this whole
+		# function (see the AST guard in tests/run_tests.py).
+		times = [value for value in times if value > 0]
+		if not times:
+			self.set_compile_bar('')
+			sublime.status_message('[cph-by-chenkx] ' + t('benchmark_no_test'))
+			return
+		best = min(times)
+		worst = max(times)
+		average = int(sum(times) / float(len(times)))
+		text = t('benchmark_done', n=len(times), best=best, avg=average, worst=worst)
+		self.set_compile_bar(text)
+		sublime.status_message('[cph-by-chenkx] ' + text)
+		try:
+			self.tester.tests[index].message = text
+		except Exception:
+			pass
+
+	def interactor_for(self):
+		"""Interactor config for the file being tested, or None."""
+		target = None
+		if self.tester is not None:
+			target = getattr(self.tester.process_manager, 'file', None)
+		return interactor_config(get_settings().get('run_settings'),
+								 target or self.dbg_file)
+
+	def run_parallel_batch(self, interactive=False):
 		"""Judge every test at once with a small worker pool.
 
 		Serial execution costs roughly TL x tests when several tests time out;
 		with 4 workers that becomes about TL x tests / 4. Each test gets its
 		OWN ProcessManager (own process, pipes and stderr file), so the
 		workers share nothing.
+
+		`interactive` swaps the per-case runner for the interactor dialogue
+		(see core/cph_interactive) and forces a single worker: an interactor
+		is usually not reentrant and the dialogue is slow.
 		"""
 		tester = self.tester
 		if tester is None or not tester.tests:
@@ -1287,19 +1459,7 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 		except Exception:
 			pass
 
-		run_settings = settings.get('run_settings')
-		separate_stderr = bool(settings.get('ignore_stderr', True))
-
-		def make_manager():
-			manager = ProcessManager(self.dbg_file, self.build_sys,
-									 run_settings=run_settings)
-			if separate_stderr:
-				manager.set_separate_stderr(True)
-			if time_limit_ms is not None:
-				manager.set_time_limit(time_limit_ms)
-			if memory_limit_mb is not None:
-				manager.set_memory_limit(memory_limit_mb)
-			return manager
+		make_manager = self.manager_factory(time_limit_ms, memory_limit_mb)
 
 		cases = []
 		for test in tester.tests:
@@ -1310,7 +1470,44 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 				expected = test.expected_output
 			cases.append((test.test_string, expected))
 
-		self.set_compile_bar(t('parallel_running', done=0, total=len(cases)))
+		# Build the checker (if any) BEFORE the workers start: compiling it
+		# from several threads at once would race on the same output file.
+		cfg = self.checker_for()
+		checker_hook = None
+		if cfg:
+			exe, error = checker_executable(cfg)
+			if error:
+				sublime.status_message('[cph-by-chenkx] ' + error)
+			else:
+				def checker_hook(input_text, stdout, expected, default_verdict):
+					result = checker_judge(cfg, exe, input_text, stdout, expected)
+					message = result.get('message') or ''
+					if message:
+						message = '%s %s' % (t('checker_judged',
+											   verdict=result['verdict']), message)
+					return get_verdict(result['verdict']), message
+
+		case_runner = None
+		if interactive:
+			cfg = self.interactor_for()
+			exe, error = (None, '')
+			if cfg:
+				exe, error = interactor_executable(cfg)
+			if error:
+				sublime.status_message('[cph-by-chenkx] ' + error)
+				self.set_compile_bar(error)
+				return
+			if exe and cfg:
+				# One worker: an interactor is normally not reentrant, and a
+				# dialogue is slow enough that concurrency buys nothing.
+				workers = 1
+
+				def case_runner(index, input_text, expected):
+					return interactive_run_case(make_manager, exe, input_text,
+												expected, cfg['time_limit_ms'])
+
+		label = 'interactive_running' if interactive else 'parallel_running'
+		self.set_compile_bar(t(label, done=0, total=len(cases)))
 		run_parallel_batch(
 			make_manager, cases, workers=workers,
 			time_limit_ms=time_limit_ms, memory_limit_mb=memory_limit_mb,
@@ -1318,7 +1515,8 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 			regard_pe_as_ac=bool(settings.get('regard_pe_as_ac', False)),
 			on_done=self.apply_parallel_results,
 			on_progress=lambda done, total: self.set_compile_bar(
-				t('parallel_running', done=done, total=total)))
+				t(label, done=done, total=total)),
+			judge=checker_hook, case_runner=case_runner)
 
 	def store_parallel_result(self, i, result):
 		"""Copy one parallel result onto its Test (same shape as on_stop)."""
@@ -1344,6 +1542,9 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 			test.message = t('runtime_error_at', location=test.crash_line)
 		if result.get('error'):
 			test.message = result['error']
+		elif result.get('message'):
+			# e.g. the checker's verdict message
+			test.message = result['message']
 		while len(tester.prog_out) <= i:
 			tester.prog_out.append('')
 		tester.prog_out[i] = result.get('stdout') or ''
@@ -1384,6 +1585,7 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 		v.sel().add(Region(v.size()))
 		self.set_compile_bar(t('parallel_done', total=len(tests)))
 		self.update_configs()
+		self.record_stats()
 		sublime.status_message('[cph-by-chenkx] '
 							   + t('parallel_done', total=len(tests)))
 
@@ -2136,6 +2338,18 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 			if hints:
 				self.tester.tests[test_id].message = '\n'.join(hints)
 
+		# A configured checker (SPJ) decides AC/WA/PE itself instead of the
+		# token comparison - and it is the only way to judge a problem whose
+		# answer is "any valid construction". Runs last so the RE/TLE hints
+		# above are kept and the checker message is appended to them.
+		checker_verdict, checker_message = self.apply_checker(test_id, _outp, expected_output)
+		if checker_verdict is not None:
+			self.tester.tests[test_id].set_verdict(checker_verdict)
+		if checker_message:
+			existing = self.tester.tests[test_id].message
+			self.tester.tests[test_id].message = \
+				(existing + '\n' if existing else '') + checker_message
+
 		self.tester.tests[test_id].set_stderr(stderr)
 		self.tester.tests[test_id].set_expected_output(expected_output)
 
@@ -2191,6 +2405,9 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 		else:
 			sublime.set_timeout(self.update_configs, 100)
 			self.update_summary_bar()
+			# The chain is over: this is the one moment the whole run's
+			# verdicts are known, so record them for the practice stats.
+			self.record_stats()
 
 		# Refresh the open detail of this test (view mode and phantom mode)
 		window = v.window()
@@ -2544,10 +2761,13 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 				# Which tests were AC *before* this run started (see above).
 				self.tester.previously_accepted = previously_accepted
 				v.settings().set('edit_mode', False)
-				if parallel:
+				interactive = self.interactor_for() is not None
+				if parallel or interactive:
 					# Judge every test at once with a small worker pool
-					# (see core/cph_parallel).
-					self.run_parallel_batch()
+					# (see core/cph_parallel); an interactive problem has to
+					# go through it too, because the dialogue replaces the
+					# single run (see core/cph_interactive).
+					self.run_parallel_batch(interactive=interactive)
 				elif run_failed or run_all:
 					# These modes pick their own starting test and may skip
 					# already-accepted ones, so drive the chain explicitly.
@@ -2820,6 +3040,9 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 
 		elif action == 'erase_all':
 			v.replace(edit, Region(0, v.size()), '\n')
+
+		elif action == 'benchmark':
+			self.benchmark()
 
 		elif action == 'refresh_status':
 			# Recompute the run panel's status label (language + limits +

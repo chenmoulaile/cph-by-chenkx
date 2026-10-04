@@ -137,5 +137,40 @@
 		"args": {
 			"target": "0"
 		}
+	},
+	{
+		"caption": "cph-by-chenkx: Fetch problem from URL (samples + statement)",
+		"command": "cph_fetch_problem"
+	},
+	{
+		"caption": "cph-by-chenkx: View problem statement (Markdown)",
+		"command": "cph_view_statement"
+	},
+	{
+		"caption": "cph-by-chenkx: Benchmark this test (N runs)",
+		"command": "cph_benchmark"
+	},
+	{
+		"caption": "cph-by-chenkx: Contest timer (start / stop)",
+		"command": "cph_contest_timer"
+	},
+	{
+		"caption": "cph-by-chenkx: Show practice statistics",
+		"command": "cph_stats_report"
+	},
+	{
+		"caption": "cph-by-chenkx: Reset practice statistics",
+		"command": "cph_stats_report",
+		"args": {
+			"reset": true
+		}
+	},
+	{
+		"caption": "cph-by-chenkx: Calibrate this machine's speed",
+		"command": "cph_calibrate_machine"
+	},
+	{
+		"caption": "cph-by-chenkx: Stress: replay last counterexample seed",
+		"command": "cph_stress_replay"
 	}
 ]

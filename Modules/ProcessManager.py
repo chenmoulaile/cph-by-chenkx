@@ -248,6 +248,19 @@ class ProcessManager(object):
 			out.append(d)
 		return out
 
+	def get_run_entry(self):
+		"""The run_settings entry that applies to this file, or None.
+
+		Used by the optional features that live next to the run itself
+		(checker / interactor / subtasks) so they read the same entry the
+		compiler and runner do.
+		"""
+		ext = path.splitext(self.file)[1][1:]
+		for entry in (self.run_settings or []):
+			if ext in (entry.get('extensions') or []):
+				return entry
+		return None
+
 	def get_compile_inputs(self):
 		"""All files a compile depends on (for the compile cache)."""
 		files = [self.file]

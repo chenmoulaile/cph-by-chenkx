@@ -1,8 +1,28 @@
 # cph-by-chenkx — Package Control Submission Notes
 
-Package version: v1.4.19
+Package version: v2.0
 Repository: https://github.com/chenmoulaile/cph-by-chenkx
 Channel entry file: `repository/c/cph-by-chenkx.json` (see snippet at the bottom)
+
+## v2.0 notes
+
+- New root-level plugin files (Sublime loads the commands from them):
+  `cph_jump.py`, `cph_extras.py` (fetch / statement / benchmark / contest timer
+  / stats / calibrate) and `cph_auto.py` (post-save listener). All shared logic
+  lives in `core/`, because root-level plugin modules may not import each other.
+- New `core/` modules: `cph_checker.py` (SPJ), `cph_interactive.py`
+  (interactor relay), `cph_parallel.py` (worker pool), `cph_subtasks.py`,
+  `cph_stats.py`, `cph_calibrate.py`, `cph_fetch.py`, `cph_html.py`,
+  `cph_jump.py`, `cph_build_mode.py`.
+- Everything user-visible is opt-in: `auto_run_on_save`, `auto_format_on_save`
+  and `contest_duration_minutes` default to off, and the new features only
+  activate when their `run_settings` key (`checker` / `interactor`) is set.
+- The package still never writes the user's settings file. The two data files it
+  owns live in `Packages/User/` (`cph-by-chenkx-stats.json`,
+  `cph-by-chenkx-machine.json`).
+- Six new shipped bindings, all behind `cph_keybindings_enabled`, plus eight new
+  command palette entries.
+- Regression checks: 168 -> 233.
 
 ## v1.4.19 notes
 

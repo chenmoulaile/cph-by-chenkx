@@ -5,6 +5,79 @@
 
 ---
 
+# v2.0
+
+这是一个功能大版本：把判定能力补齐到 cph-ng / CP Editor 的水平，再加上一批
+竞赛日常真正用得上的工具。**所有新功能默认不改变现有行为**（该关的都默认关）。
+
+## 判定能力
+
+- **自定义 Checker（SPJ）** —— 多解题的必需品。在 `run_settings` 的
+  `"checker"` 里填 checker 源文件（或已编译好的可执行文件）即启用：
+  - `testlib`（默认）：`checker <输入> <用户输出> <标准答案>` 三个**文件**参数，
+    与 testlib 的 `argv[1..3]` 完全一致，现成 checker 直接用；
+  - `stdin`：把三段内容按顺序写到 stdin，每段用一行 `---` 分隔；
+  - 退出码即判决（0=AC 1=WA 2=PE 3=FAIL 7=PC），checker 打印的内容（`quitf`）
+    会出现在详情视图里；
+  - checker 只编译一次（按 mtime 缓存），已有 `.exe` 直接使用。
+- **交互题（Interactor）** —— 填 `"interactor"` 即启用。按 testlib 约定接线：
+  interactor 由 `interactor <输入> <输出> <答案>` 启动，从 stdin 读选手输出、
+  往 stdout 写要发给选手的内容；退出码即判决。选手程序复用原有的
+  ProcessManager 当双向中转，所以解码、换行归一化、内存采样、终止逻辑都不用
+  重写。交互题固定单 worker（interactor 通常不可重入）。
+- **测试点并行运行**（`Ctrl+Alt+Shift+P`）—— 每个测试点**独立进程**，由
+  `parallel_workers`（默认 4）个 worker 同时跑，结果一次性回写面板。
+  实测（真实子进程、2 个 TLE 用例）：串行 7.4s → **并行 4.1s**。
+- **Subtask 分组计分** —— `"subtasks"` 里按 `{name, from, to, score}` 分组，
+  **组内全部 AC 才拿这一组的分**，汇总行显示 `Subtask 30/100` 与各组状态。
+
+## 效率与体验
+
+- **Debug / Release 一键切换**（`Ctrl+Alt+G`）—— release 保证 `-O2` 并去掉
+  sanitizer；debug 去优化并加 `-g -fsanitize=address,undefined`，崩溃时给出精确
+  行号。按文件记忆、只存内存，**不写你的设置文件**；状态栏显示当前模式。
+- **错误位置可点击** —— RE 的 `文件:行:号` 与编译器每条诊断（g++/clang 与 MSVC
+  两种格式）都渲染成链接，点一下跳到源码那一行；已打开的标签会被复用。
+- **Benchmark 模式** —— 把当前测试点跑 `benchmark_runs`（默认 5）次，报告
+  最快/平均/最慢。单次测量被进程启动和调度噪声主导，卡常必须看多次。
+- **机器速度校准** —— 跑一段固定工作量的基准程序，算出本机相对参考评测机的
+  速度系数，状态栏把本地时限换算成"相当于评测机多少毫秒"，避免"本地 TLE、
+  OJ 能过"的误判。（参考值是文档化的经验常数，只用来对齐量级。）
+- **保存后自动运行 / 自动格式化** —— `auto_run_on_save`（带防抖，连续保存只跑
+  最后一次，正在跑时不打断）与 `auto_format_on_save`（按语言的 `format_cmd`）。
+  两个都**默认关闭**。
+- **对拍 seed 入库 + 一键重放** —— 每轮把随机种子通过环境变量 `CPH_SEED` 交给
+  生成器，找到反例时把种子一起记下来（存进测试点数据）。新增
+  "Stress: replay last counterexample seed" 用同一个种子重新生成并再对一次。
+- **Companion 自动建文件** —— 收到题目时如果当前视图还没保存，自动建
+  `<auto_create_dir>/<题目标题>.<auto_create_extension>` 并打开（可配模板），
+  不用再"先手动开文件再收样例"。
+- **抓题与题面预览** —— 给一个题目 URL 就能抓下样例变成测试点，并把题面转成
+  Markdown 在 Sublime 里读。没有站点专用选择器：靠 `<pre>` 块 + 前面的
+  "样例输入/样例输出/Sample Input/..." 标签识别，洛谷/Codeforces/AtCoder 及
+  大多数自建 OJ 都能用；抓不到时如实报"没找到样例"而不是猜。
+- **练习统计** —— 本地记录每题的尝试次数、首次 AC 时间、对拍轮数、各判决次数，
+  "Show practice statistics" 出一份最近 N 天的报告（按天统计 + 需要补的题）。
+  数据在本插件自己的文件里（`Packages/User/cph-by-chenkx-stats.json`）。
+- **比赛计时器**（`Ctrl+Alt+Shift+T`）—— 状态栏倒计时，30/10/5 分钟各提醒一次；
+  Companion 收到题目时也可以自动开始（`contest_duration_minutes`）。
+- **更多默认语言** —— 新增 C / Rust / Go / Pascal 的默认 `run_settings`
+  （外加原有 C++ / Python / Java）。MSVC 的示例见 README（`.cpp` 只能映射一套
+  命令，所以作为注释示例提供）。
+
+## 说明
+
+- 回归测试 168 → **233 项**；新增 4 个真进程/纯逻辑验证台：
+  `.workbuddy/harness_parallel.py`（并行判定与省时）、`harness_html.py`
+  （题面解析与样例提取）、`harness_stats.py`（统计存储）、`harness_crash.py`
+  （崩溃判定）。
+- 新快捷键：`Ctrl+Alt+Shift+P`（并行）、`Ctrl+Alt+G`（编译模式）、
+  `Ctrl+Alt+Shift+F`（抓题）、`Ctrl+Alt+Shift+V`（题面）、
+  `Ctrl+Alt+Shift+K`（benchmark）、`Ctrl+Alt+Shift+T`（计时）。全部随包提供，
+  带 `cph_keybindings_enabled` 门，禁用插件即自动归还键位。
+
+---
+
 # v1.4.19
 
 ## 新增

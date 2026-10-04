@@ -102,6 +102,187 @@ STRINGS = {
         'zh': '测试面板还没准备好（编译失败或尚未编译）',
         'en': 'the test panel is not ready yet (nothing compiled)',
     },
+    # ---- 机器速度校准 ----
+    'calibrate_write_failed': {
+        'zh': '写基准程序失败：{error}',
+        'en': 'could not write the benchmark: {error}',
+    },
+    'calibrate_compile_failed': {
+        'zh': '基准程序编译失败（{compiler} 是否在 PATH？）：{error}',
+        'en': 'benchmark failed to compile (is {compiler} on PATH?): {error}',
+    },
+    'calibrate_run_failed': {
+        'zh': '基准程序运行失败：{error}',
+        'en': 'benchmark failed to run: {error}',
+    },
+    'calibrate_report': {
+        'zh': '本机速度系数 {factor}×（{score} ops/s，耗时 {seconds}s）。'
+              '系数 >1 表示本机比参考评测机快：本地 {factor} 毫秒只相当于评测机 1 毫秒。',
+        'en': 'machine factor {factor}x ({score} ops/s, {seconds}s). A factor '
+              'above 1 means this machine is faster than the reference judge.',
+    },
+    'calibrate_label': {
+        'zh': '本机 {factor}× ≈ OJ {ms}ms',
+        'en': 'local {factor}x ~ OJ {ms}ms',
+    },
+    'calibrate_factor': {
+        'zh': '本机 {factor}×',
+        'en': 'local {factor}x',
+    },
+    # ---- 抓题 ----
+    'fetch_bad_url': {
+        'zh': '不是合法的 http(s) 链接：{url}',
+        'en': 'not a valid http(s) URL: {url}',
+    },
+    'fetch_http_error': {
+        'zh': '抓取失败：HTTP {code}（{url}）',
+        'en': 'fetch failed: HTTP {code} ({url})',
+    },
+    'fetch_failed': {
+        'zh': '抓取失败：{error}（{url}）',
+        'en': 'fetch failed: {error} ({url})',
+    },
+    'fetch_no_samples': {
+        'zh': '页面上没找到样例（可能需要在浏览器里登录，或该站结构不同）',
+        'en': 'no sample found on the page (it may need a login, or the site '
+              'uses a different structure)',
+    },
+    'fetch_found_samples': {
+        'zh': '找到 {n} 组样例',
+        'en': 'found {n} sample(s)',
+    },
+    'fetch_added': {
+        'zh': '已加入 {n} 个测试点，共 {total} 个',
+        'en': 'added {n} test(s), {total} in total',
+    },
+    'fetch_enter_url': {
+        'zh': '题目链接',
+        'en': 'problem URL',
+    },
+    'statement_source': {
+        'zh': '> 来源：{url}',
+        'en': '> Source: {url}',
+    },
+    'statement_empty': {
+        'zh': '题面解析为空（可能需要在浏览器里登录）',
+        'en': 'the statement parsed as empty (it may need a login)',
+    },
+    # ---- 比赛计时 ----
+    'contest_enter_minutes': {
+        'zh': '比赛时长（分钟）',
+        'en': 'contest length (minutes)',
+    },
+    'contest_started': {
+        'zh': '比赛计时开始：{minutes} 分钟',
+        'en': 'contest timer started: {minutes} minutes',
+    },
+    'contest_stopped': {
+        'zh': '比赛计时已停止',
+        'en': 'contest timer stopped',
+    },
+    'contest_remaining': {
+        'zh': '剩余 {time}',
+        'en': '{time} left',
+    },
+    'contest_finished': {
+        'zh': '比赛时间到！',
+        'en': 'time is up!',
+    },
+    'contest_warning': {
+        'zh': '还剩 {minutes} 分钟',
+        'en': '{minutes} minutes left',
+    },
+    # ---- Benchmark ----
+    'benchmark_no_test': {
+        'zh': '先跑一次测试点再做 benchmark',
+        'en': 'run a test first, then benchmark it',
+    },
+    'benchmark_running': {
+        'zh': 'benchmark：跑 {n} 次…',
+        'en': 'benchmark: running {n} times...',
+    },
+    'benchmark_done': {
+        'zh': 'benchmark（{n} 次）：最快 {best}ms / 平均 {avg}ms / 最慢 {worst}ms',
+        'en': 'benchmark ({n} runs): best {best}ms / avg {avg}ms / worst {worst}ms',
+    },
+    # ---- 练习统计 ----
+    'stats_empty': {
+        'zh': '还没有练习记录',
+        'en': 'no practice history yet',
+    },
+    'stats_reset_done': {
+        'zh': '练习统计已清空',
+        'en': 'practice statistics cleared',
+    },
+    'stats_title': {
+        'zh': '练习统计（最近 {days} 天）',
+        'en': 'practice statistics (last {days} days)',
+    },
+    'stress_seed': {
+        'zh': '本轮随机种子 seed = {seed}（生成器可通过环境变量 CPH_SEED 复现）',
+        'en': 'round seed = {seed} (the generator can read it from CPH_SEED)',
+    },
+    'stress_replaying': {
+        'zh': '用 seed = {seed} 重放上一个反例…',
+        'en': 'replaying the last counterexample with seed = {seed}...',
+    },
+    'stress_no_counterexample': {
+        'zh': '还没有记录到反例（或该轮没有种子）',
+        'en': 'no counterexample recorded yet (or it has no seed)',
+    },
+    'stress_replay_same': {
+        'zh': '重放结果一致：这轮的差异可能是环境/时序导致的',
+        'en': 'replay matched: the earlier difference may have been timing',
+    },
+    'stress_replay_tle': {
+        'zh': '重放时用户程序超时',
+        'en': 'the user program timed out during the replay',
+    },
+    'interactor_missing': {
+        'zh': '找不到 interactor 文件：{path}（{error}）',
+        'en': 'interactor file not found: {path} ({error})',
+    },
+    'interactor_compile_failed': {
+        'zh': 'interactor 编译失败：{cmd}\n{error}',
+        'en': 'interactor failed to compile: {cmd}\n{error}',
+    },
+    'interactive_running': {
+        'zh': '交互题：正在与 interactor 交互（{done}/{total}）',
+        'en': 'interactive: talking to the interactor ({done}/{total})',
+    },
+    'interactor_label': {
+        'zh': 'interactor 对话',
+        'en': 'interactor dialogue',
+    },
+    'checker_missing': {
+        'zh': '找不到 checker 文件：{path}（{error}）',
+        'en': 'checker file not found: {path} ({error})',
+    },
+    'checker_compile_failed': {
+        'zh': 'checker 编译失败：{cmd}\n{error}',
+        'en': 'checker failed to compile: {cmd}\n{error}',
+    },
+    'checker_run_failed': {
+        'zh': 'checker 运行失败：{error}',
+        'en': 'checker failed to run: {error}',
+    },
+    'checker_judged': {
+        'zh': 'SPJ 判定：{verdict}',
+        'en': 'judged by the checker: {verdict}',
+    },
+    'checker_label': {
+        'zh': 'checker 输出',
+        'en': 'checker output',
+    },
+    'checker_disabled': {
+        'zh': '该语言没有配置 checker（run_settings 里的 "checker"），仍按逐 token 比较',
+        'en': 'no checker configured for this language (run_settings "checker"); '
+              'falling back to token comparison',
+    },
+    'checker_ok': {
+        'zh': 'checker 可用：{path}',
+        'en': 'checker ready: {path}',
+    },
     'parallel_running': {
         'zh': '并行运行测试点：{done}/{total}',
         'en': 'running tests in parallel: {done}/{total}',

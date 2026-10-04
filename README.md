@@ -131,6 +131,10 @@ copy-paste reference if you want to change one.
 - **输出上限**：`max_output_bytes`（默认 8MB）防止疯狂输出卡死编辑器，超出部分会被截断并给出提示
 - **多文件编译**：`run_settings` 里用 `extra_sources`（glob）与 `include_dirs`，编译命令中用 `{extra_sources}` / `{include_dirs}` 占位符
 - **面板汇总行**：底部显示 `4/5 通过 · 首个失败 test 3 · 总用时 1.24s`
+- **自定义判定器（SPJ）**：`run_settings` 里填 `checker` 即可用 testlib 风格的 checker（三个文件参数 + 退出码判定），多解题不再只能靠 token 比较
+- **交互题**：填 `interactor` 即按 testlib 约定接线，选手程序与 interactor 双向对话，退出码即判决
+- **Subtask 分组**：`subtasks` 里分组，组内全 AC 才拿分，汇总行显示部分分
+- **Benchmark / 机器校准 / 练习统计 / 比赛计时 / 抓题与题面预览 / 保存自动运行**：命令面板里搜 `cph-by-chenkx:` 都能找到
 - **错误位置可点击**：RE 的 `文件:行:号` 和编译器的每条诊断都会渲染成链接，点一下直接跳到源码那一行（已经打开的标签会被复用，不会新开一个）
 - **Debug / Release 一键切换**（`Ctrl+Alt+G`）：Debug 去掉优化并加 `-g -fsanitize=address,undefined`，崩溃时能给出精确行号；Release 保证 `-O2` 并去掉 sanitizer，计时与评测机可比。按文件记忆，**不写你的设置文件**；当前模式显示在运行面板状态栏
 - **并行运行**（`Ctrl+Alt+Shift+P`）：每个测试点一个独立进程、`parallel_workers`（默认 4）个 worker 同时跑。串行时 5 个点里有 2 个 TLE 要等 2×时限，并行约 1/4
@@ -216,6 +220,10 @@ copy-paste reference if you want to change one.
 | `Ctrl+Alt+R` (Mac: `Cmd+Alt+R`) | 只重跑失败的测试点（已 AC 的自动跳过） |
 | `Ctrl+Alt+Shift+B` | 跑完全部测试点（不因失败中断） |
 | `Ctrl+Alt+Shift+P` | **并行**跑完全部测试点（多进程，TLE 多时总时长约 1/4） |
+| `Ctrl+Alt+Shift+F` | 从题目 URL 抓题：样例变测试点（可同时打开题面） |
+| `Ctrl+Alt+Shift+V` | 把题目题面转成 Markdown 打开 |
+| `Ctrl+Alt+Shift+K` | Benchmark 当前测试点（跑 N 次报最快/平均/最慢） |
+| `Ctrl+Alt+Shift+T` | 比赛计时器（状态栏倒计时，可停止） |
 | `Ctrl+Alt+Shift+R` | 强制重新编译后运行（忽略编译缓存） |
 | `Ctrl+Alt+G` (Mac: `Cmd+Alt+G`) | 切换 Debug / Release 编译模式（状态栏显示当前模式） |
 | `Ctrl+Alt+D` (Mac: `Cmd+Alt+D`) | 环境自检（编译器 / 端口 / 路径 / 资源） |

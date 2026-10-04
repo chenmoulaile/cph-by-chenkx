@@ -5,6 +5,7 @@ cph-by-chenkx - 对拍 (Stress Test) 功能
 import sublime
 import sublime_plugin
 import os
+import random
 import shlex
 import subprocess
 import threading
@@ -288,17 +289,24 @@ def _compile_program(file, time_limit=30):
         return False, None, str(e)[:200]
 
 
-def _popen_capture(cmd, cwd, input_text=None, shell=False, timeout=30):
+def _popen_capture(cmd, cwd, input_text=None, shell=False, timeout=30, env=None):
     """Run a command and capture its output as text.
 
     Uses Popen instead of subprocess.run: Sublime's plugin host is Python
     3.3, which has no subprocess.run (3.5+) and no text/encoding arguments
     (3.6/3.7+). Raises subprocess.TimeoutExpired on timeout.
     """
+    if env:
+        # Extra variables (the stress seed) on top of the inherited ones.
+        merged = dict(os.environ)
+        merged.update(env)
+    else:
+        merged = None
     proc = subprocess.Popen(
         cmd,
         cwd=cwd,
         shell=shell,
+        env=merged,
         stdin=subprocess.PIPE if input_text is not None else None,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -350,7 +358,7 @@ def _program_argv(file):
     return parts
 
 
-def _run_program(program, input_data, cwd=None, time_limit=2.0):
+def _run_program(program, input_data, cwd=None, time_limit=2.0, env=None):
     """Run a program with the run_settings command; program is a source file."""
     argv = _program_argv(program) if not isinstance(program, list) else program
     if not argv:
@@ -359,7 +367,7 @@ def _run_program(program, input_data, cwd=None, time_limit=2.0):
         cwd = os.path.dirname(program if isinstance(program, str) else argv[0])
     try:
         rc, out, err = _popen_capture(argv, cwd, input_text=input_data,
-                                     timeout=time_limit)
+                                     timeout=time_limit, env=env)
         return (rc, out, err, False)
     except subprocess.TimeoutExpired:
         return (-1, '', '', True)
@@ -430,6 +438,12 @@ def _run_stress_loop(user_file, std_file, gen_file, time_limit, max_rounds):
                 break
 
             _stress_state['current_round'] = round_count
+            # A fresh seed per round, handed to the generator through the
+            # environment (CPH_SEED) so a counterexample can be replayed:
+            # "found a counterexample" is only actionable when you can make
+            # the generator produce exactly that test again.
+            seed = random.randrange(1, 2147483647)
+            _stress_state['current_seed'] = seed
 
             # The generator gets its own, larger budget. Generating the test
             # is legitimately slower than solving it, and measuring it with
@@ -437,7 +451,8 @@ def _run_stress_loop(user_file, std_file, gen_file, time_limit, max_rounds):
             # "Generator failed at round 1" (a timeout was reported as a
             # failure because the TLE flag was dropped here).
             ret, inp, gen_err, gen_tle = _run_program(
-                gen_file, '', time_limit=generator_limit)
+                gen_file, '', time_limit=generator_limit,
+                env={'CPH_SEED': str(seed)})
             if gen_tle:
                 gen_timeouts += 1
                 sublime.set_timeout(
@@ -560,9 +575,24 @@ def _append_stress(text):
 
 
 def _on_stress_failed(round_count, inp, user_out, std_out):
+    # Keep everything needed to reproduce this counterexample later
+    # ('Stress: replay last counterexample').
+    _stress_state['last_counterexample'] = {
+        'seed': _stress_state.get('current_seed'),
+        'input': inp,
+        'user_out': user_out,
+        'std_out': std_out,
+        'round': round_count,
+    }
+
     text = '\n' + '=' * 60 + '\n'
     text += '[cph-by-chenkx] ' + t('stress_failed', round=round_count) + '\n'
     text += '=' * 60 + '\n\n'
+    seed = _stress_state.get('current_seed')
+    if seed is not None:
+        # Without the seed the counterexample cannot be regenerated; say it
+        # out loud so it can be replayed (or set CPH_SEED by hand).
+        text += '[cph-by-chenkx] ' + t('stress_seed', seed=seed) + '\n\n'
     text += '[' + t('stress_input') + ']\n'
     text += inp + '\n'
     text += '\n[' + t('stress_user_output') + ']\n'
@@ -590,7 +620,10 @@ def _on_stress_failed(round_count, inp, user_out, std_out):
                 answer = std_out.strip()
                 merged, _conflicts = merge_tests(load_all_tests(user_file), [{
                     'test': inp,
-                    'correct_answers': [answer] if answer else []}])
+                    'correct_answers': [answer] if answer else [],
+                    # Keep the generator seed with the counterexample so
+                    # 'Stress: replay last seed' can reproduce it exactly.
+                    'seed': _stress_state.get('current_seed')}])
                 if save_tests(user_file, merged):
                     text += '\n[cph-by-chenkx] ' + \
                         t('stress_counterexample_added', total=len(merged)) + '\n'
@@ -599,3 +632,65 @@ def _on_stress_failed(round_count, inp, user_out, std_out):
 
     _append_stress(text)
     _stop_stress()
+
+
+class CphStressReplayCommand(sublime_plugin.TextCommand):
+	"""Re-run the last counterexample from its recorded generator seed.
+
+	The stress loop hands the generator a fresh seed every round (CPH_SEED) and
+	stores it with the counterexample, so the exact failing test can be
+	reproduced instead of hoping the random search hits it again.
+	"""
+
+	def run(self, edit):
+		state = _stress_state.get('last_counterexample')
+		if not state or state.get('seed') is None:
+			sublime.status_message('[cph-by-chenkx] ' + t('stress_no_counterexample'))
+			return
+		gen_file = get_settings().get('stress_generator_file') or _stress_state.get('gen_file')
+		user_file = _stress_state.get('user_file')
+		std_file = get_settings().get('stress_std_file') or _stress_state.get('std_file')
+		if not (gen_file and user_file and std_file):
+			sublime.status_message('[cph-by-chenkx] ' + t('stress_no_counterexample'))
+			return
+
+		seed = state['seed']
+		_append_stress('\n[cph-by-chenkx] ' + t('stress_replaying', seed=seed) + '\n')
+
+		def worker():
+			try:
+				ok, gen_exe, why = _compile_program(gen_file)
+				if not ok:
+					_append_stress('[cph-by-chenkx] generator: %s\n' % (why or 'failed'))
+					return
+				rc, inp, err, tle = _run_program(
+					gen_exe, '', time_limit=float(
+						get_settings().get('stress_generator_time_limit_seconds', 10) or 10),
+					env={'CPH_SEED': str(seed)})
+				if rc != 0 or tle:
+					_append_stress('[cph-by-chenkx] generator failed: rc=%s %s\n'
+								   % (rc, err[:200]))
+					return
+				_append_stress('[cph-by-chenkx] regenerated %d bytes\n' % len(inp))
+				ok1, user_exe, why1 = _compile_program(user_file)
+				ok2, std_exe, why2 = _compile_program(std_file)
+				if not (ok1 and ok2):
+					_append_stress('[cph-by-chenkx] compile failed: %s%s\n'
+								   % (why1 or '', why2 or ''))
+					return
+				limit = float(get_settings().get('stress_time_limit_seconds', 2) or 2)
+				_rc1, user_out, _e1, tle1 = _run_program(user_exe, inp, time_limit=limit)
+				_rc2, std_out, _e2, _tle2 = _run_program(std_exe, inp, time_limit=limit)
+				if tle1:
+					_append_stress('[cph-by-chenkx] ' + t('stress_replay_tle') + '\n')
+					return
+				if normalize_lines(user_out) == normalize_lines(std_out):
+					_append_stress('[cph-by-chenkx] ' + t('stress_replay_same') + '\n')
+				else:
+					_on_stress_failed(state.get('round') or 0, inp, user_out, std_out)
+			except Exception as e:
+				_append_stress('[cph-by-chenkx] replay error: %s\n' % e)
+
+		thread = threading.Thread(target=worker)
+		thread.daemon = True
+		thread.start()

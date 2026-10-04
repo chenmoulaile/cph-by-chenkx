@@ -1,0 +1,63 @@
+cph-by-chenkx 2.0
+==================
+
+A feature release: the judging side now matches cph-ng / CP Editor, plus a set
+of tools that competitive programming actually needs day to day. Every new
+feature is opt-in - the ones that could get in the way are off by default.
+
+Judging:
+
+* Custom checker (SPJ). Put a checker source (or a compiled binary) in
+  run_settings "checker" and the token comparison is replaced by it.
+  "testlib" style (default) runs `checker <input> <output> <answer>` with three
+  FILE arguments, exactly like testlib's argv[1..3], so an existing checker
+  works as is; "stdin" writes the three parts to stdin separated by a `---`
+  line. The exit code is the verdict (0=AC 1=WA 2=PE 3=FAIL 7=PC) and whatever
+  the checker prints (quitf) shows up in the detail view.
+* Interactive problems. Fill in "interactor" and the run becomes a dialogue:
+  the interactor is started as `interactor <input> <output> <answer>`, reads
+  the solution's output on stdin and writes to the solution on stdout, and its
+  exit code is the verdict. The solution reuses the existing ProcessManager as
+  the relay, so decoding, newline handling, memory sampling and termination did
+  not have to be rewritten. Interactive runs use a single worker.
+* Run all tests in parallel (Ctrl+Alt+Shift+P). Each test gets its own process
+  and `parallel_workers` (default 4) workers run them at once. Measured with
+  real child processes and two TLE cases: 7.4s serial -> 4.1s parallel.
+* Subtask scoring. Group tests with {name, from, to, score}; a group scores
+  only when every test in it passed, and the summary bar shows the partial
+  score.
+
+Workflow:
+
+* Debug / Release toggle (Ctrl+Alt+G): release guarantees -O2 and drops the
+  sanitizer; debug drops the optimisation and adds
+  -g -fsanitize=address,undefined so a crash reports an exact line. Per file, in
+  memory only - your settings file is never touched.
+* Clickable error locations: the RE location and every compiler diagnostic
+  (g++/clang and MSVC formats) become links that jump to the source line.
+* Benchmark mode: run the current test `benchmark_runs` (default 5) times and
+  report best/average/worst.
+* Machine calibration: a fixed workload measures how fast this machine is
+  relative to a reference judge, so "local TLE, accepted on the judge" stops
+  being a mystery.
+* Auto-run / auto-format on save (both off by default, with debounce).
+* Stress seeds: the generator gets a fresh seed through CPH_SEED every round and
+  the seed is stored with the counterexample, so
+  "Stress: replay last counterexample seed" can reproduce it exactly.
+* Competitive Companion auto-creates <dir>/<problem name>.<ext> when the
+  problem arrives in an unsaved view.
+* Fetch a problem from a URL: samples become tests and the statement opens as
+  Markdown. No per-site selectors - <pre> blocks are classified by the
+  "Sample Input / 样例输入" label in front of them.
+* Practice statistics: attempts, first-AC time, stress rounds and verdict
+  counts per problem, with a report over the last N days.
+* Contest timer (Ctrl+Alt+Shift+T) in the status bar, with 30/10/5 minute
+  warnings.
+* More default languages: C, Rust, Go and Pascal.
+
+Notes:
+
+* Regression checks: 168 -> 233, plus four harnesses (parallel judging and its
+  speed-up, statement parsing, the stats store, crash detection).
+* New bindings all ship with the package behind cph_keybindings_enabled, so
+  disabling the package releases the keys.

@@ -31,7 +31,7 @@ _GRACE_SECONDS = 0.05
 
 
 def _run_one(make_manager, input_text, expected, time_limit_ms, memory_limit_mb,
-             float_tolerance, regard_pe_as_ac):
+             float_tolerance, regard_pe_as_ac, judge=None):
     """Run one test in this thread. Never raises: errors become a result."""
     result = {
         'rtcode': None, 'stdout': '', 'stderr': '', 'runtime': 0,
@@ -101,6 +101,21 @@ def _run_one(make_manager, input_text, expected, time_limit_ms, memory_limit_mb,
                 float_tolerance=float_tolerance,
             )
 
+        if judge is not None:
+            # Optional custom judging (a configured SPJ checker). It may
+            # replace the verdict and add a message; failures inside it must
+            # never lose the result we already have.
+            try:
+                replacement = judge(input_text, stdout, expected, result['verdict'])
+                if replacement:
+                    verdict, message = replacement
+                    if verdict:
+                        result['verdict'] = verdict
+                    if message:
+                        result['message'] = message
+            except Exception as e:
+                result['message'] = 'checker: %s: %s' % (type(e).__name__, e)
+
         if result['verdict']['name'] == 'RE':
             result['crash'] = find_crash_location(stderr or stdout)
     except Exception as e:
@@ -117,10 +132,17 @@ def _run_one(make_manager, input_text, expected, time_limit_ms, memory_limit_mb,
 
 def run_batch(make_manager, cases, workers=4, time_limit_ms=None,
               memory_limit_mb=None, float_tolerance=0, regard_pe_as_ac=False,
-              on_done=None, on_progress=None):
+              on_done=None, on_progress=None, judge=None,
+              case_runner=None):
     """Judge every case in `cases` concurrently.
 
     `cases` is a list of (input_text, expected_output) pairs.
+    `judge(input, output, expected, default_verdict)` may return
+    `(verdict, message)` to override the computed verdict (used by a
+    configured SPJ checker).
+    `case_runner(index, input_text, expected)` replaces the default "run the
+    program once" step entirely - that is how interactive problems reuse this
+    pool (they need a dialogue instead of a single run).
     `on_done(results)` and `on_progress(done, total)` are called on the MAIN
     thread (via sublime.set_timeout), so they may touch views.
     Returns the number of worker threads started.
@@ -151,9 +173,12 @@ def run_batch(make_manager, cases, workers=4, time_limit_ms=None,
                 index = state['next']
                 state['next'] += 1
             input_text, expected = cases[index]
-            results[index] = _run_one(
-                make_manager, input_text, expected, time_limit_ms,
-                memory_limit_mb, float_tolerance, regard_pe_as_ac)
+            if case_runner is not None:
+                results[index] = case_runner(index, input_text, expected)
+            else:
+                results[index] = _run_one(
+                    make_manager, input_text, expected, time_limit_ms,
+                    memory_limit_mb, float_tolerance, regard_pe_as_ac, judge)
             report()
 
     def supervise():
