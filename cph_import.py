@@ -343,6 +343,23 @@ class CphImportTestsCommand(sublime_plugin.TextCommand):
             sublime.error_message(t('import_save_failed'))
 
 
+class CphImportTestsHereCommand(CphImportTestsCommand):
+    """Import every .in/.out pair sitting next to the source file.
+
+    Same as the folder import but without the path prompt: data packs from
+    an OJ (and this package's own "Export tests as .in/.out files") land in
+    the directory of the file being solved, so that is the folder to scan.
+    """
+
+    def run(self, edit):
+        src_file = self.view.file_name()
+        if not src_file:
+            sublime.status_message(t('save_file_first'))
+            return
+        self._do_import_from_folder(os.path.dirname(src_file),
+                                    self.view.window())
+
+
 class CphPickImportFileCommand(sublime_plugin.TextCommand):
     def is_visible(self, event=None, **kwargs):
         """Context menu: only offered where this package applies.

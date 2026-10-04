@@ -525,6 +525,10 @@ STRINGS = {
         'zh': '对拍失败: 第 {round} 轮输出不一致',
         'en': 'Stress test failed: mismatch at round {round}',
     },
+    'stress_checker_message': {
+        'zh': 'checker 判定: {message}',
+        'en': 'Checker verdict: {message}',
+    },
     'stress_diff': {
         'zh': '差异:',
         'en': 'Diff:',

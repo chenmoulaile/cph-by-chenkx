@@ -114,6 +114,15 @@
 			"run_cmd": "\"{source_file_dir}/{file_name}.exe\" {args}",
 			"time_limit_ms": 2000,
 			"memory_limit_mb": 256
+		},
+		{
+			"name": "JavaScript (Node.js)",
+			"extensions": ["js", "mjs", "cjs"],
+			// Node 直接跑源码，无需编译
+			"compile_cmd": null,
+			"run_cmd": "node \"{source_file}\"",
+			"time_limit_ms": 5000,
+			"memory_limit_mb": 256
 		}
 	],
 

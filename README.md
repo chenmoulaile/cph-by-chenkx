@@ -30,7 +30,7 @@ verdict display rebuilt after VSCode's [cph-ng](https://github.com/langningchen/
 
 **Getting started**: open a source file, then use `Ctrl+Shift+P` → `cph` (every command is in the
 command palette) or the `View → cph-by-chenkx` menu. The default `run_settings` cover C++ (`g++`,
-`-std=c++17 -O2`), Python and Java — edit them under
+`-std=c++17 -O2`), Python, Java, C, Rust, Go, Pascal and JavaScript (Node.js) — edit them under
 `Preferences → Package Settings → cph-by-chenkx → Settings` to match your toolchain (the compiler has
 to be on `PATH`; the *Check environment (doctor)* command reports anything that is missing).
 `-O2` matters: without optimisation a local run is orders of magnitude slower than the judge, so a
@@ -276,6 +276,9 @@ int main() {
 - **发现不一致**时立即停止，展示：输入数据、你的输出、std 输出、逐行差异（`user:` vs `std:`）
 - 跑满最大轮数全部一致则显示对拍通过；全部轮次超时会明确提示「未比较任何输出」
 - 中途可用 `Stop stress test`（`Ctrl+Alt+Shift+S`）停止
+- **多解题 / 浮点题也能对拍**：`run_settings` 里配了 `checker` 时由 checker 判定
+  （不再逐行比对，输出任意合法方案都不会被误报），checker 的 `quitf` 消息会跟着反例
+  一起显示；没配 checker 时 `float_tolerance` 同样生效，最后一位小数的差异不再算不一致
 
 ### 4. 注意事项
 

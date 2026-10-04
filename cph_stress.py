@@ -16,7 +16,8 @@ from .core.cph_tests_merge import merge_tests
 from .core.cph_state import set_stress_running
 from .core.cph_target import context_menu_enabled, visible as context_menu_visible
 from .core.cph_i18n import t
-from .core.cph_verdict import normalize_lines
+from .core.cph_verdict import normalize_lines, outputs_equal
+from .core import cph_checker
 from .Modules.ProcessManager import _LenientFormat
 from .Modules.build_artifact import (output_path_from_compile_cmd,
                                      resolve_artifact, retarget_path,
@@ -417,14 +418,44 @@ def _run_stress_loop(user_file, std_file, gen_file, time_limit, max_rounds):
         if generator_limit <= 0:
             generator_limit = 10.0
 
+        # Multi-solution problems: comparing the two outputs line by line
+        # reports a difference on almost every round even though both are
+        # valid. When a checker is configured it decides instead.
+        checker_cfg = cph_checker.config(
+            (get_settings().get('run_settings') or []), user_file, get_settings())
+        checker_exe = None
+        if checker_cfg is not None:
+            exe, why = cph_checker.executable(checker_cfg)
+            if not exe:
+                sublime.set_timeout(
+                    lambda w=why: _append_stress(
+                        '[cph-by-chenkx] Failed to build checker: %s\n' % w), 0)
+                _stop_stress()
+                return
+            checker_exe = exe
+
+        try:
+            float_tol = float(get_settings().get('float_tolerance', 0) or 0)
+        except (TypeError, ValueError):
+            float_tol = 0.0
+
+        started_extra = ''
+        if checker_exe is not None:
+            started_extra += '  checker: %s (%s)\n' % (
+                os.path.basename(str(checker_cfg.get('path') or '')),
+                checker_cfg.get('style') or 'testlib')
+        elif float_tol > 0:
+            started_extra += '  float tolerance: %g\n' % float_tol
+
         sublime.set_timeout(
             lambda: _append_stress(
                 '[cph-by-chenkx] Stress test started\n'
                 '  user: %s\n  std:  %s\n  gen:  %s\n'
-                '  time limit: %ss/round, generator limit: %ss, max rounds: %d\n\n'
+                '  time limit: %ss/round, generator limit: %ss, max rounds: %d\n'
+                '%s\n'
                 % (os.path.basename(user_file), os.path.basename(std_file),
                    os.path.basename(gen_file), time_limit, generator_limit,
-                   max_rounds)
+                   max_rounds, started_extra)
             ), 0)
 
         round_count = 0
@@ -512,9 +543,18 @@ def _run_stress_loop(user_file, std_file, gen_file, time_limit, max_rounds):
                 break
 
             compared += 1
-            # Same comparison rules as the judge-like runner (ignore trailing
-            # whitespace per line and trailing blank lines).
-            is_diff = normalize_lines(user_out) != normalize_lines(std_out)
+            checker_msg = ''
+            if checker_exe is not None:
+                # Both answers can be valid: let the checker decide.
+                res = cph_checker.judge(checker_cfg, checker_exe, inp,
+                                        user_out, std_out)
+                is_diff = not res.get('ok')
+                checker_msg = (res.get('message') or '').strip()
+            else:
+                # Same comparison rules as the judge-like runner (whitespace
+                # insensitive) plus the configured float tolerance, so a
+                # floating point problem no longer "fails" on the last digit.
+                is_diff = not outputs_equal(user_out, std_out, float_tol)
 
             if is_diff:
                 _stress_state['last_diff'] = {
@@ -522,9 +562,11 @@ def _run_stress_loop(user_file, std_file, gen_file, time_limit, max_rounds):
                     'input': inp,
                     'user_output': user_out,
                     'std_output': std_out,
+                    'checker_message': checker_msg,
                 }
                 sublime.set_timeout(
-                    lambda: _on_stress_failed(round_count, inp, user_out, std_out), 0)
+                    lambda m=checker_msg: _on_stress_failed(
+                        round_count, inp, user_out, std_out, m), 0)
                 break
 
             if round_count <= 10 or round_count % 10 == 0:
@@ -574,7 +616,7 @@ def _append_stress(text):
                 return
 
 
-def _on_stress_failed(round_count, inp, user_out, std_out):
+def _on_stress_failed(round_count, inp, user_out, std_out, checker_message=''):
     # Keep everything needed to reproduce this counterexample later
     # ('Stress: replay last counterexample').
     _stress_state['last_counterexample'] = {
@@ -593,6 +635,11 @@ def _on_stress_failed(round_count, inp, user_out, std_out):
         # Without the seed the counterexample cannot be regenerated; say it
         # out loud so it can be replayed (or set CPH_SEED by hand).
         text += '[cph-by-chenkx] ' + t('stress_seed', seed=seed) + '\n\n'
+    if checker_message:
+        # testlib's quitf message: the only explanation of *why* the two
+        # outputs are not both valid.
+        text += '[cph-by-chenkx] ' + t('stress_checker_message',
+                                       message=checker_message[:500]) + '\n\n'
     text += '[' + t('stress_input') + ']\n'
     text += inp + '\n'
     text += '\n[' + t('stress_user_output') + ']\n'

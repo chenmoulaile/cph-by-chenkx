@@ -36,5 +36,5 @@ Notes:
 * Two new bindings ship with the package (Ctrl+Alt+G, Ctrl+Alt+Shift+P), both
   behind the same cph_keybindings_enabled gate as the others, so disabling the
   package releases the keys.
-* New real-process harness .workbuddy/harness_parallel.py verifies the
-  AC/WA/RE/TLE verdicts, per-test stderr isolation and the speed-up.
+* A new real-process harness verifies the AC/WA/RE/TLE verdicts, per-test
+  stderr isolation and the speed-up.

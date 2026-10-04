@@ -1,0 +1,34 @@
+cph-by-chenkx 2.1.0
+====================
+
+Added - stress testing now uses the same judging rules as a test run:
+
+* Multi-solution problems can be stress tested. The two programs' outputs were
+  compared line by line, so "output any valid answer" problems reported a
+  mismatch on almost every round even when both answers were correct. When a
+  `checker` is configured in `run_settings`, it decides instead - the same
+  testlib/stdin checker the judge already uses. testlib's `quitf` message is
+  printed with the counterexample, so you get the reason, not just "mismatch".
+
+* Floating point problems can be stress tested. `float_tolerance` now applies
+  to the stress comparison too, so the two programs no longer "disagree" on
+  the last digit.
+
+* The header printed when a stress run starts says which checker (or which
+  tolerance) is in force, so a run is never silently judged differently than
+  you expect.
+
+Added - "cph-by-chenkx: Import .in/.out tests next to this file": one command
+that loads every `*.in` / `*.out` pair sitting in the directory of the file you
+are solving. That is where an OJ data pack lands, and where this package's own
+"Export tests as .in/.out files" writes them; previously the same import had to
+be done by typing the folder path into an input panel.
+
+Added - JavaScript (Node.js) ships as a default language (`js`, `mjs`, `cjs`),
+run with `node <file>` and no compile step.
+
+Notes:
+
+* If a checker is configured but cannot be built, the stress run stops and says
+  why instead of silently falling back to a plain comparison.
+* tests/run_tests.py: 243 -> 258 checks.

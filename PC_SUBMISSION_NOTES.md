@@ -1,13 +1,30 @@
 # cph-by-chenkx — Package Control Submission Notes
 
-Package version: v2.0.1
+Package version: v2.1.0
 Repository: https://github.com/chenmoulaile/cph-by-chenkx
 Channel entry file: `repository/c/cph-by-chenkx.json` (see snippet at the bottom)
+
+## v2.1.0 notes
+
+- **Stress testing now follows the judging rules**: the two programs' outputs
+  were compared line by line, which made stress testing unusable for
+  multi-solution problems (any valid answer "differs") and for floating point
+  problems. When a `checker` is configured it decides instead (the same
+  testlib/stdin checker the judge uses); otherwise `float_tolerance` applies.
+  Nothing else about the stress flow changed.
+- **New command** `cph_import_tests_here`: loads every `*.in` / `*.out` pair in
+  the directory of the file being solved (no path prompt). It reuses the
+  existing folder-import code, so the merge/dedup policy is unchanged.
+- **New default language**: JavaScript (Node.js), `node <file>`, no compile.
+- Still no root-level plugin imports, no `sys.path` changes, no bindings
+  without a context, tip of main tagged, CI green on Linux 3.8/3.12 +
+  Windows + macOS.
 
 ## v2.0.1 notes (bug fix)
 
 Four defects found by driving every feature through its real command path in a
-Sublime simulator (.workbuddy/sim_sublime.py + .workbuddy/harness_features.py):
+Sublime simulator (a dev-only harness that dispatches the plugin's real
+commands against real buffers):
 
 - the program's stdin was never closed, so anything that reads to EOF
   (`sys.stdin.read()`, `while (cin >> x)`) hung and was reported TLE;
@@ -388,9 +405,9 @@ Reviewer feedback addressed:
 - **Added `tests/` and CI**: `tests/run_tests.py` (26 checks, fake `sublime`
   module, no third-party deps) and `tests/check_py33.py` (Python 3.3 guard
   that already proved it catches the `Popen(encoding=...)` regression), both
-  run by `.github/workflows/tests.yml` on push/PR. `tests/`, `.github/`,
-  `.workbuddy/` and the dev documents are `export-ignore`d, so they stay out
-  of the `.sublime-package`.
+  run by `.github/workflows/tests.yml` on push/PR. `tests/`, `.github/` and
+  the dev documents are `export-ignore`d, so they stay out of the
+  `.sublime-package`.
 
 ## v1.4.1 notes (packaging-relevant)
 

@@ -38,6 +38,10 @@
 		"command": "cph_pick_import_file"
 	},
 	{
+		"caption": "cph-by-chenkx: Import .in/.out tests next to this file",
+		"command": "cph_import_tests_here"
+	},
+	{
 		"caption": "cph-by-chenkx: Start stress test",
 		"command": "cph_start_stress_test"
 	},

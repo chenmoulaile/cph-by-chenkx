@@ -1670,8 +1670,14 @@ def main():
               'subtasks', 'build_mode', 'parallel_workers')))
     check('the extra default languages ship',
           [e['name'] for e in shipped.get('run_settings', [])][-4:]
-          == ['C', 'Rust', 'Go', 'Pascal'],
+          == ['Rust', 'Go', 'Pascal', 'JavaScript (Node.js)'],
           str([e['name'] for e in shipped.get('run_settings', [])]))
+    node_entry = [e for e in shipped.get('run_settings', [])
+                  if 'js' in (e.get('extensions') or [])]
+    check('the Node.js entry runs the source directly',
+          len(node_entry) == 1 and node_entry[0].get('compile_cmd') is None
+          and 'node' in (node_entry[0].get('run_cmd') or ''),
+          str(node_entry))
     check('the C++ entry documents the checker and the interactor',
           'checker' in shipped['run_settings'][0]
           and 'interactor' in shipped['run_settings'][0])
@@ -1757,6 +1763,40 @@ def main():
           and verdict.get_verdict_by_code(9, 10, 2000, 256, '', '', 'x\n')['name'] == 'MLE'
           and verdict.get_verdict_by_code(124, 10, 2000, 256, '', '', 'x\n')['name'] == 'TLE'
           and verdict.get_verdict_by_code(1, 10, 2000, 256, '', '', 'x\n')['name'] == 'RE')
+
+    print('== round 9: stress testing follows the judging rules ==')
+    # Comparing the two outputs line by line made stress testing useless for
+    # multi-solution problems (any valid permutation "fails") and for
+    # floating point problems (the last digit differs). The judge already
+    # knows how to handle both, so the stress loop now uses the same code.
+    stress_src = open(os.path.join(ROOT, 'cph_stress.py'),
+                      encoding='utf-8').read()
+    check('the stress loop can use the checker',
+          'from .core import cph_checker' in stress_src
+          and 'cph_checker.judge(' in stress_src
+          and 'cph_checker.config(' in stress_src)
+    check('the checker decides instead of a plain line diff',
+          'is_diff = not res.get(\'ok\')' in stress_src)
+    check('the stress loop honours the float tolerance',
+          'outputs_equal(' in stress_src
+          and 'float_tolerance' in stress_src)
+    check('the checker message reaches the counterexample report',
+          'stress_checker_message' in stress_src
+          and 'checker_message' in stress_src)
+    check('a checker that cannot be built stops the run',
+          'Failed to build checker' in stress_src)
+    # One-click import of the .in/.out pairs sitting next to the source file
+    # (OJ data packs and "Export tests as .in/.out" both land there).
+    import_src = open(os.path.join(ROOT, 'cph_import.py'),
+                      encoding='utf-8').read()
+    check('the one-click folder import exists',
+          'class CphImportTestsHereCommand' in import_src
+          and '_do_import_from_folder(os.path.dirname(src_file)' in import_src)
+    check('the one-click import is in the command palette',
+          'cph_import_tests_here' in commands_text)
+    check('the checker message is translated',
+          i18n.STRINGS.get('stress_checker_message', {}).get('zh')
+          and i18n.STRINGS.get('stress_checker_message', {}).get('en'))
 
     print('')
     print('%d checks, %d failures' % (CHECKS[0], len(FAILURES)))

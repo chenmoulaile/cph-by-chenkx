@@ -1,9 +1,0 @@
-{
-	"details": "https://github.com/chenmoulaile/cph-by-chenkx",
-	"releases": [
-		{
-			"sublime_text": ">=4095",
-			"tags": true
-		}
-	]
-}

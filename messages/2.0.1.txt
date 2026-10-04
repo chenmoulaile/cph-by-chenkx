@@ -29,10 +29,9 @@ path in a Sublime simulator, not by reading the code:
 
 Notes:
 
-* New .workbuddy/sim_sublime.py: a Sublime simulator that really executes the
-  plugin's commands (real buffers, real command dispatch, one command instance
-  per view, a virtual clock, working built-in commands).
-* New .workbuddy/harness_features.py: per-feature integration tests that drive
-  every command the way a user would - 46 assertions, all passing.
+* A Sublime simulator that really executes the plugin's commands (real
+  buffers, real command dispatch, one command instance per view, a virtual
+  clock, working built-in commands) is now used to drive per-feature
+  integration tests the way a user would - 46 assertions, all passing.
 * tests/run_tests.py gained round 8 (including a real subprocess case for the
   EOF fix): 233 -> 243 checks.
