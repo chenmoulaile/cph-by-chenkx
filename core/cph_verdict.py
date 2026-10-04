@@ -245,10 +245,12 @@ def get_verdict_by_code(rtcode, runtime, time_limit_ms, memory_limit_mb,
         return get_verdict('runtime_error')
 
     if time_limit_ms and runtime and runtime > time_limit_ms:
-        # ...unless the error stream shows a crash: the watchdog kill and
-        # the crash happened at (nearly) the same moment, and RE is the
-        # honest verdict.
-        if looks_like_crash(stderr):
+        # ...unless the output shows a crash: the watchdog kill and the crash
+        # happened at (nearly) the same moment, and RE is the honest verdict.
+        # stdout is checked too, because with separate stderr off the crash
+        # text (an assert / sanitizer message) lands there - only looking at
+        # stderr reported a plain TLE for a program that had aborted.
+        if looks_like_crash(stderr) or looks_like_crash(stdout):
             return get_verdict('runtime_error')
         return get_verdict('time_limit_exceed')
 

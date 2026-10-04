@@ -45,7 +45,7 @@
 	},
 	{
 		"keys": [
-			"super+v"
+			"ctrl+v"
 		],
 		"command": "cph_test_manager",
 		"args": {
@@ -67,7 +67,7 @@
 	},
 	{
 		"keys": [
-			"super+x"
+			"ctrl+x"
 		],
 		"command": "cph_test_manager",
 		"args": {
@@ -84,7 +84,7 @@
 	},
 	{
 		"keys": [
-			"super+d"
+			"ctrl+d"
 		],
 		"command": "cph_test_manager",
 		"args": {
@@ -101,7 +101,7 @@
 	},
 	{
 		"keys": [
-			"super+shift+up"
+			"ctrl+shift+up"
 		],
 		"command": "cph_test_manager",
 		"args": {
@@ -119,7 +119,7 @@
 	},
 	{
 		"keys": [
-			"super+shift+down"
+			"ctrl+shift+down"
 		],
 		"command": "cph_test_manager",
 		"args": {
@@ -137,7 +137,7 @@
 	},
 	{
 		"keys": [
-			"super+alt+b"
+			"ctrl+alt+b"
 		],
 		"command": "cph_test_manager",
 		"args": {
@@ -155,7 +155,7 @@
 	},
 	{
 		"keys": [
-			"super+alt+p"
+			"ctrl+alt+p"
 		],
 		"command": "cph_view_tester",
 		"args": {
@@ -171,8 +171,8 @@
 	},
 	{
 		"keys": [
-			"super+k",
-			"super+p"
+			"ctrl+k",
+			"ctrl+p"
 		],
 		"command": "cph_view_tester",
 		"args": {
@@ -188,7 +188,7 @@
 	},
 	{
 		"keys": [
-			"super+alt+shift+s"
+			"ctrl+alt+shift+s"
 		],
 		"command": "cph_stop_stress_test",
 		"context": [
@@ -201,12 +201,262 @@
 	},
 	{
 		"keys": [
-			"super+alt+shift+l"
+			"ctrl+alt+shift+l"
 		],
 		"command": "cph_companion_stop_listener",
 		"context": [
 			{
 				"key": "cph_listener_running",
+				"operator": "equal",
+				"operand": true
+			}
+		]
+	},
+	{
+		"keys": [
+			"ctrl+alt+t"
+		],
+		"command": "cph_insert_template",
+		"context": [
+			{
+				"operand": "source.c++",
+				"operator": "equal",
+				"match_all": true,
+				"key": "selector"
+			},
+			{
+				"key": "cph_keybindings_enabled",
+				"operator": "equal",
+				"operand": true
+			}
+		]
+	},
+	{
+		"keys": [
+			"ctrl+alt+b"
+		],
+		"command": "cph_view_tester",
+		"args": {
+			"action": "make_opd"
+		},
+		"context": [
+			{
+				"operand": "source.TestSyntax",
+				"operator": "not_equal",
+				"match_all": true,
+				"key": "selector"
+			},
+			{
+				"key": "cph_keybindings_enabled",
+				"operator": "equal",
+				"operand": true
+			}
+		]
+	},
+	{
+		"keys": [
+			"ctrl+alt+i"
+		],
+		"command": "cph_import_tests",
+		"context": [
+			{
+				"operand": "source.TestSyntax",
+				"operator": "not_equal",
+				"match_all": true,
+				"key": "selector"
+			},
+			{
+				"key": "cph_keybindings_enabled",
+				"operator": "equal",
+				"operand": true
+			}
+		]
+	},
+	{
+		"keys": [
+			"ctrl+alt+s"
+		],
+		"command": "cph_start_stress_test",
+		"context": [
+			{
+				"operand": "source.TestSyntax",
+				"operator": "not_equal",
+				"match_all": true,
+				"key": "selector"
+			},
+			{
+				"key": "cph_keybindings_enabled",
+				"operator": "equal",
+				"operand": true
+			}
+		]
+	},
+	{
+		"keys": [
+			"ctrl+alt+l"
+		],
+		"command": "cph_companion_listener",
+		"context": [
+			{
+				"operand": "source.TestSyntax",
+				"operator": "not_equal",
+				"match_all": true,
+				"key": "selector"
+			},
+			{
+				"key": "cph_keybindings_enabled",
+				"operator": "equal",
+				"operand": true
+			}
+		]
+	},
+	{
+		"keys": [
+			"ctrl+alt+shift+b"
+		],
+		"command": "cph_run_all_tests",
+		"context": [
+			{
+				"key": "selector",
+				"operator": "equal",
+				"match_all": false,
+				"operand": "source.c++, source.c, source.python, source.java, source.TestSyntax"
+			},
+			{
+				"key": "cph_keybindings_enabled",
+				"operator": "equal",
+				"operand": true
+			}
+		]
+	},
+	{
+		"keys": [
+			"ctrl+alt+r"
+		],
+		"command": "cph_run_failed_tests",
+		"context": [
+			{
+				"key": "selector",
+				"operator": "equal",
+				"match_all": false,
+				"operand": "source.c++, source.c, source.python, source.java, source.TestSyntax"
+			},
+			{
+				"key": "cph_keybindings_enabled",
+				"operator": "equal",
+				"operand": true
+			}
+		]
+	},
+	{
+		"keys": [
+			"ctrl+alt+shift+r"
+		],
+		"command": "cph_run_force_recompile",
+		"context": [
+			{
+				"key": "selector",
+				"operator": "equal",
+				"match_all": false,
+				"operand": "source.c++, source.c, source.python, source.java, source.TestSyntax"
+			},
+			{
+				"key": "cph_keybindings_enabled",
+				"operator": "equal",
+				"operand": true
+			}
+		]
+	},
+	{
+		"keys": [
+			"ctrl+alt+v"
+		],
+		"command": "cph_add_test_from_clipboard",
+		"context": [
+			{
+				"key": "selector",
+				"operator": "equal",
+				"match_all": false,
+				"operand": "source.c++, source.c, source.python, source.java, source.TestSyntax"
+			},
+			{
+				"key": "cph_keybindings_enabled",
+				"operator": "equal",
+				"operand": true
+			}
+		]
+	},
+	{
+		"keys": [
+			"ctrl+alt+c"
+		],
+		"command": "cph_copy_test_expected",
+		"context": [
+			{
+				"key": "selector",
+				"operator": "equal",
+				"match_all": false,
+				"operand": "source.c++, source.c, source.python, source.java, source.TestSyntax"
+			},
+			{
+				"key": "cph_keybindings_enabled",
+				"operator": "equal",
+				"operand": true
+			}
+		]
+	},
+	{
+		"keys": [
+			"ctrl+alt+shift+c"
+		],
+		"command": "cph_copy_test_actual",
+		"context": [
+			{
+				"key": "selector",
+				"operator": "equal",
+				"match_all": false,
+				"operand": "source.c++, source.c, source.python, source.java, source.TestSyntax"
+			},
+			{
+				"key": "cph_keybindings_enabled",
+				"operator": "equal",
+				"operand": true
+			}
+		]
+	},
+	{
+		"keys": [
+			"ctrl+alt+d"
+		],
+		"command": "cph_doctor",
+		"context": [
+			{
+				"key": "selector",
+				"operator": "equal",
+				"match_all": false,
+				"operand": "source.c++, source.c, source.python, source.java, source.TestSyntax"
+			},
+			{
+				"key": "cph_keybindings_enabled",
+				"operator": "equal",
+				"operand": true
+			}
+		]
+	},
+	{
+		"keys": [
+			"ctrl+alt+m"
+		],
+		"command": "cph_test_menu",
+		"context": [
+			{
+				"key": "selector",
+				"operator": "equal",
+				"match_all": false,
+				"operand": "source.c++, source.c, source.python, source.java, source.TestSyntax"
+			},
+			{
+				"key": "cph_keybindings_enabled",
 				"operator": "equal",
 				"operand": true
 			}

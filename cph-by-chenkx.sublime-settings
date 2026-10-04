@@ -23,7 +23,11 @@
 			"name": "C++",
 			"extensions": ["cpp"],
 			// 编译命令；{extra_sources} / {include_dirs} 用不到时删掉即可
-			"compile_cmd": "g++ \"{source_file}\" {extra_sources} {include_dirs} -std=c++23 -o \"{file_name}.exe\" -DLOCAL",
+			// -O2 很重要：不加优化时程序比评测机慢几十倍，本地时限毫无参考价值，
+			//   正确代码也会被判 TLE；实测 -O2 几乎不增加编译时间。
+			// -std 用 c++17：实测比 c++23 每次编译快约 1.2 秒
+			//   （3.4s vs 4.7s，含 <bits/stdc++.h>），也是多数 OJ 的口径。
+			"compile_cmd": "g++ \"{source_file}\" {extra_sources} {include_dirs} -std=c++17 -O2 -o \"{file_name}.exe\" -DLOCAL",
 			// 运行命令（编译产物在源代码目录下）
 			"run_cmd": "\"{source_file_dir}/{file_name}.exe\" {args}",
 			// 单个测试的时间限制(毫秒) / 内存限制(MB)，超限判 TLE / MLE
@@ -107,6 +111,13 @@
 	// 右键菜单里是否显示本插件的项。只看相关文件（run_settings 里的扩展名），
 	// 设为 false 可以完全不显示；命令面板和 View 菜单不受影响。
 	"context_menu": true,
+
+	// 包内快捷键（ctrl+alt+t / ctrl+alt+b / ctrl+alt+s ... 那一批）是否生效。
+	// 这些绑定随包加载、随包卸载：禁用或卸载本插件后按键会自动还给其它插件，
+	// 不会再占着键位。设成 false 则可以在**不改 keymap** 的情况下临时让出键位
+	// （运行面板内部的 enter / ctrl+d 等绑定不受影响，它们只在本插件自己的
+	// 视图里生效）。
+	"enable_keybindings": true,
 
 	// ================= 测试卡片面板自适应宽度 =================
 	// 自动加宽右侧运行面板, 直到测试卡片 (AC test 1 / edit / run / detail /

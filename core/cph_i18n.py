@@ -102,6 +102,24 @@ STRINGS = {
         'zh': '测试面板还没准备好（编译失败或尚未编译）',
         'en': 'the test panel is not ready yet (nothing compiled)',
     },
+    'tle_debug_build': {
+        'zh': '编译命令里有 -DLOCAL/-DDEBUG：调试宏通常会把 debug() 输出打到不缓冲的 '
+              'stderr，循环里调用时输出量是 O(n²)，本地会比评测机慢几十倍——'
+              '代码正确也可能被判 TLE。计时时建议去掉该宏，并确认编译命令带 -O2。',
+        'en': 'the compile command has -DLOCAL/-DDEBUG: the debug macro usually '
+              'writes debug() to unbuffered stderr, which is O(n^2) output '
+              'inside a loop, so a local run can be orders of magnitude slower '
+              'than the judge and a correct program is reported TLE. Drop the '
+              'macro for timing runs, and make sure the command uses -O2.',
+    },
+    'tle_no_output': {
+        'zh': '超时被终止，且完全没有输出：程序很可能在等待输入（样例是否完整？）'
+              '或者死循环。若终端里能正常跑出结果，先确认样例是否粘贴完整。',
+        'en': 'killed at the time limit with no output at all: the program is '
+              'most likely waiting for input (is the sample complete?) or '
+              'looping forever. If it works in a terminal, check that the '
+              'whole sample was pasted.',
+    },
     'diff': {
         'zh': '差异',
         'en': 'Diff',

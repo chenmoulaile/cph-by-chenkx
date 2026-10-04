@@ -1,0 +1,53 @@
+cph-by-chenkx 1.4.17
+====================
+
+Fixed:
+
+* The key bindings are no longer written into your own keymap. The 13
+  ctrl+alt+... bindings used to be copied into
+  Packages/User/Default (Windows).sublime-keymap, where they stayed after the
+  package was disabled and kept other packages from using those keys. They are
+  back in the package's own Default (<platform>).sublime-keymap: they load
+  with the package and are released when you disable or uninstall it. Set
+  "enable_keybindings": false to release the keys without editing a keymap.
+* A false TLE hid a real RE. "Assertion '__n < this->size()' failed." comes
+  from the debug assertions that a -DLOCAL template enables via algo/debug.h.
+  With the default settings the plugin does report RE for that crash (exit
+  code 3 plus the assertion text on stderr) - but the compile command used
+  here was
+      g++ "{source_file}" -std=c++23 -o "{file_name}.exe" -DLOCAL
+  i.e. without -O2, and combined with -DLOCAL debug output the program runs
+  orders of magnitude slower than the judge, so the 2s limit killed it before
+  it ever reached the assertion and only TLE was visible. Now:
+    - the shipped compile command uses -std=c++17 -O2 (measured: -O2 is
+      essentially free in compile time);
+    - a TLE whose compile command contains -DLOCAL / -DDEBUG says so in the
+      detail view;
+    - a TLE with no output at all explains that the program is most likely
+      waiting for input (an incomplete sample) or looping forever;
+    - the timeout branch also looks for crash signatures in stdout. It used to
+      look at stderr only, so with separate stderr off the crash text landed in
+      stdout and the verdict was a plain TLE.
+* The previous run's verdicts leaked into the next one: they are stored in the
+  tests file and were loaded again, so the summary claimed "5/5 passed" for a
+  run that had just failed, and tests the run never reached kept last time's
+  green badge. A fresh run now clears every verdict first ("Run failed tests"
+  snapshots the accepted ones before that), and the summary only counts the
+  tests this run actually ran.
+* Closing xxx.cpp now closes its "xxx.cpp -run" panel as well, together with
+  any "test N -edit" / "-answer" tabs opened from it (closing the panel also
+  terminates its process).
+
+Improvements:
+
+* Compile / start speed, measured on a trivial <bits/stdc++.h> program on the
+  same machine: -std=c++11 3.0s, -std=c++17 3.4s, -std=c++23 4.7s, and
+  -std=c++23 -O2 4.5s. -O2 is essentially free, a higher -std is not. The
+  shipped command is now -std=c++17 -O2: about 1.2s less per compile than
+  before, while the program runs tens of times faster.
+* Moving the caret in the run panel no longer re-tags the whole view:
+  sync_read_only only calls set_read_only() when the state really changes.
+
+Notes:
+
+* Regression checks: 158 -> 166.

@@ -834,6 +834,24 @@ def main():
           '; '.join(claims))
     check('every shipped binding still carries a context', every_binding_scoped)
 
+    # The code-file bindings live in the PACKAGE keymap on purpose: they load
+    # with the package and vanish with it, so disabling/uninstalling hands the
+    # keys back to other packages. They are gated behind 'enable_keybindings'
+    # so the keys can be released without editing any keymap.
+    with open(os.path.join(ROOT, 'Default (Windows).sublime-keymap'), encoding='utf-8') as f:
+        shipped_bindings = json.load(f)
+    gated = [e for e in shipped_bindings
+             if any(str(i.get('key', '')) == 'cph_keybindings_enabled'
+                    for i in (e.get('context') or []))]
+    check('the code-file bindings ship inside the package',
+          len(gated) >= 13
+          and any(e.get('command') == 'cph_view_tester' for e in gated),
+          '%d gated bindings' % len(gated))
+    check('the keybinding gate is backed by a real setting',
+          '"enable_keybindings"' in settings_text
+          and 'cph_keybindings_enabled' in open(
+              os.path.join(ROOT, 'cph_context.py'), encoding='utf-8').read())
+
     # 2. The suggestions users copy must be valid JSON and scoped as well.
     suggestion_problems = []
     suggestion_count = 0
@@ -1220,6 +1238,17 @@ def main():
               '', 'x\n')['name'] == 'RE')
     check('a genuine timeout is still TLE',
           verdict.get_verdict_by_code(0, 3000, 2000, 256, '', '', 'x\n')['name'] == 'TLE')
+    # With separate stderr off the crash text lands in stdout; only looking at
+    # stderr reported a plain TLE for a program that had aborted.
+    check('a crash signature in stdout also beats the time limit',
+          verdict.get_verdict_by_code(
+              0, 3000, 2000, 256, '',
+              "Assertion '__n < this->size()' failed.", 'x\n')['name'] == 'RE')
+    check('the shipped C++ command optimises the build',
+          '-O2' in ([x for x in shipped.get('run_settings', [])
+                     if 'cpp' in (x.get('extensions') or [])][0].get('compile_cmd') or ''),
+          [x for x in shipped.get('run_settings', [])
+           if 'cpp' in (x.get('extensions') or [])][0].get('compile_cmd'))
 
     # Run clock: it must stay paused while the sample is still being pasted
     tester = make_tester([tm.CphTestManagerCommand.Test('')])
@@ -1315,6 +1344,32 @@ def main():
     check('a tester-less panel ignores test-model actions',
           'ACTIONS_NEEDING_TESTER' in tm_src
           and 'self.tester is None and action in self.ACTIONS_NEEDING_TESTER' in tm_src)
+
+    # A fresh run must not inherit the previous run's verdicts: counting them
+    # again made the summary claim 'N/N passed' for a run that had just
+    # failed, and kept green badges on the tests the run never reached.
+    restored_card = tm.CphTestManagerCommand.Test(
+        {'test': '1\n', 'verdict': 'AC', 'runtime': 12, 'stdout': '1'})
+    check('a restored test keeps its verdict for the panel',
+          restored_card.verdict is not None and restored_card.runtime == 12
+          and restored_card.stdout == '1')
+    restored_card.reset_run_state()
+    check('reset_run_state forgets the result but keeps the sample',
+          restored_card.verdict is None and restored_card.runtime == '-'
+          and restored_card.stdout == '' and restored_card.test_string == '1\n')
+    check('a fresh run clears the verdicts and remembers the AC ones',
+          'previously_accepted = set(' in tm_src
+          and 't.reset_run_state()' in tm_src
+          and 'self.tester.previously_accepted = previously_accepted' in tm_src
+          and "getattr(self.tester, 'previously_accepted', ())" in tm_src)
+
+    # Closing xxx.cpp must close 'xxx.cpp -run' (and the paired edit tabs):
+    # otherwise the user closes the panel by hand every single time.
+    close_src = tm_src[tm_src.find('class CloseListener'):]
+    close_src = close_src[:close_src.find('\nclass ', 10)]
+    check('closing a source file closes its run panel and edit tabs',
+          "' -run'" in close_src and 'cph_edit_source' in close_src
+          and close_src.count('.close()') >= 2, close_src[:60])
 
     # The edit card template must stay byte-identical to the v1.4.13 one. The
     # whitespace inside each <a> is what gives the chips their inner padding:

@@ -373,6 +373,24 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 			self.verdict = verdict
 			self.verdict_name = verdict['name'] if verdict else None
 
+		def reset_run_state(self):
+			"""Forget the previous run's result.
+
+			Called when a fresh run starts: the verdicts loaded from the tests
+			file are *last time's* results, and counting them again made the
+			summary report 'N/N passed' for a run that had just failed, and
+			kept green badges on tests this run never reached.
+			"""
+			self.verdict = None
+			self.verdict_name = None
+			self.runtime = '-'
+			self.memory = '-'
+			self.stdout = ''
+			self.stderr = ''
+			self.message = ''
+			self.crash_line = ''
+			self.rtcode = '0'
+
 		def set_memory(self, memory):
 			self.memory = memory
 
@@ -1246,6 +1264,10 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 		tests = self.tester.tests
 		if i >= len(tests):
 			return False
+		# A fresh run clears every verdict, so the tests that were AC before
+		# it started are remembered in 'previously_accepted'.
+		if i in getattr(self.tester, 'previously_accepted', ()):
+			return True
 		verdict = getattr(tests[i], 'verdict', None)
 		return isinstance(verdict, dict) and verdict.get('name') == 'AC'
 
@@ -1939,6 +1961,31 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 													   location=crash_line)
 				sublime.status_message('[cph-by-chenkx] '
 									   + t('runtime_error_at', location=crash_line))
+
+		# A TLE is the verdict the user can least explain, so say what is
+		# most likely behind it instead of leaving a bare red badge.
+		if verdict['name'] == 'TLE':
+			hints = []
+			if not (stderr or '').strip() and not (_outp or '').strip():
+				# The watchdog killed the process, so there is no exit code
+				# to judge by, and with no output there is no crash signature
+				# either - the usual cause is a program still waiting for
+				# input (an incomplete sample) or a silent infinite loop.
+				hints.append(t('tle_no_output'))
+			try:
+				compile_cmd = pm.get_compile_cmd() or ''
+			except Exception:
+				compile_cmd = ''
+			if '-DLOCAL' in compile_cmd or '-DDEBUG' in compile_cmd:
+				# A debug build is not a judge build: the usual -DLOCAL
+				# template pulls in algo/debug.h, whose debug() writes to the
+				# unbuffered stderr on every call. Inside a loop that is
+				# O(n^2) output, and the program runs orders of magnitude
+				# slower than it would on the judge.
+				hints.append(t('tle_debug_build'))
+			if hints:
+				self.tester.tests[test_id].message = '\n'.join(hints)
+
 		self.tester.tests[test_id].set_stderr(stderr)
 		self.tester.tests[test_id].set_expected_output(expected_output)
 
@@ -2233,6 +2280,7 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 		if not v.settings().get('word_wrap'):
 			v.run_command('toggle_setting', {'setting': 'word_wrap'})
 
+		previously_accepted = set()
 		if not clr_tests:
 			# Try to load tests from all possible locations (traditional + cph-ng style folder)
 			loaded_data = load_all_tests(run_file)
@@ -2256,6 +2304,20 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 				except Exception as e:
 					print('[cph-by-chenkx] failed to clear %s: %s' % (tests_path, e))
 			tests = []
+
+		if not load_session:
+			# Pressing Run starts a clean evaluation. The verdicts that came
+			# out of the tests file describe the *previous* run: leaving them
+			# in place made the summary report 'N/N passed' for a run that had
+			# just failed, and kept green badges on the tests this run never
+			# reached. 'Run failed tests' still has to know what was AC, so
+			# remember that before wiping.
+			previously_accepted = set(
+				i for i, t in enumerate(tests)
+				if isinstance(getattr(t, 'verdict', None), dict)
+				and t.verdict.get('name') == 'AC')
+			for t in tests:
+				t.reset_run_state()
 		file_ext = path.splitext(run_file)[1][1:]
 
 		self.change_process_status('COMPILING')
@@ -2301,6 +2363,8 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 					tests=tests, sync_out=sync_out, epoch=self.tester_epoch,
 					run_failed=run_failed)
 				self.tester.run_all = run_all
+				# Which tests were AC *before* this run started (see above).
+				self.tester.previously_accepted = previously_accepted
 				v.settings().set('edit_mode', False)
 				if run_failed or run_all:
 					# These modes pick their own starting test and may skip
@@ -2413,9 +2477,18 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 					delete_forb = True
 					break
 
-			view.settings().set('delete_forb', delete_forb)
+			if view.settings().get('delete_forb') != delete_forb:
+				view.settings().set('delete_forb', delete_forb)
 
-		view.set_read_only(err)
+		# ModifiedListener calls this on *every* caret move in the run panel.
+		# set_read_only() is a real view update, so only touch it when the
+		# value actually changes - otherwise every arrow key re-tags the
+		# whole view.
+		try:
+			if view.is_read_only() != err:
+				view.set_read_only(err)
+		except Exception:
+			view.set_read_only(err)
 
 	def apply_edit_changes(self):
 		v = self.view
@@ -2634,7 +2707,42 @@ class ModifiedListener(sublime_plugin.EventListener):
 class CloseListener(sublime_plugin.EventListener):
 	def on_pre_close(self, view):
 		if view.settings().get('cph_run_view'):
+			# Closing the panel stops the process it owns.
 			view.run_command('cph_test_manager', {'action': 'close'})
+			return
+
+		if view.settings().get('cph_edit_view'):
+			# An edit tab is paired with its source view; that side is
+			# handled when the *source* file closes.
+			return
+
+		file_name = view.file_name()
+		if not file_name:
+			return
+		window = view.window()
+		if window is None:
+			return
+
+		# Closing xxx.cpp closes 'xxx.cpp -run' (and any 'test N -edit' /
+		# '-answer' tabs opened from it). Leaving them behind meant the user
+		# had to close the panel by hand every time - and a forgotten panel
+		# keeps its process, its output and its own tab around.
+		target = file_name.replace('\\', '/').split('/')[-1] + ' -run'
+		view_id = view.id()
+		for other in list(window.views()):
+			if other is view:
+				continue
+			if (other.name() or '') == target:
+				try:
+					other.close()
+				except Exception:
+					pass
+				continue
+			if other.settings().get('cph_edit_source') == view_id:
+				try:
+					other.close()
+				except Exception:
+					pass
 
 
 class CphViewTesterCommand(sublime_plugin.TextCommand):

@@ -9,6 +9,8 @@ Package Control 审查要求包内快捷键必须带具体 context（不能用"�
 - ``cph_listener_running``Competitive Companion 监听器正在运行
 - ``cph_supported_file``  当前视图是本插件能处理的文件（见 core/cph_target）
 - ``cph_context_menu_enabled`` context_menu 设置是否为 true
+- ``cph_keybindings_enabled``  enable_keybindings 设置是否为 true
+  （包内绑定随包加载/卸载；这个开关让你不改 keymap 也能让出键位）
 
 状态从 ``core/cph_state`` / ``core/cph_target`` 读取，
 避免根级插件之间互相 import。
@@ -17,12 +19,26 @@ Package Control 审查要求包内快捷键必须带具体 context（不能用"�
 import sublime
 import sublime_plugin
 
+from .core.cph_settings import get_settings
 from .core.cph_state import is_listener_running, is_stress_running
 from .core.cph_target import context_menu_enabled, supported_file
 
 
 def _is_run_view(view):
 	return bool(view.settings().get('cph_run_view'))
+
+
+def keybindings_enabled():
+	"""``enable_keybindings`` 设置：关掉后包内快捷键全部变成空操作。
+
+	包内的绑定随包加载、随包卸载，所以禁用/卸载本插件后按键会自动还给
+	其它插件；这个设置只是让你**不改 keymap** 也能临时让出键位。
+	"""
+	try:
+		value = get_settings().get('enable_keybindings', True)
+	except Exception:
+		return True
+	return value is not False
 
 
 def _has_run_panel(view):
@@ -58,6 +74,8 @@ class CphContextListener(sublime_plugin.EventListener):
 			value = supported_file(view)
 		elif key == 'cph_context_menu_enabled':
 			value = context_menu_enabled()
+		elif key == 'cph_keybindings_enabled':
+			value = keybindings_enabled()
 		else:
 			return None
 

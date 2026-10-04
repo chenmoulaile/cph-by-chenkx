@@ -30,14 +30,17 @@ verdict display rebuilt after VSCode's [cph-ng](https://github.com/langningchen/
 
 **Getting started**: open a source file, then use `Ctrl+Shift+P` → `cph` (every command is in the
 command palette) or the `View → cph-by-chenkx` menu. The default `run_settings` cover C++ (`g++`,
-`-std=c++23`), Python and Java — edit them under
+`-std=c++17 -O2`), Python and Java — edit them under
 `Preferences → Package Settings → cph-by-chenkx → Settings` to match your toolchain (the compiler has
 to be on `PATH`; the *Check environment (doctor)* command reports anything that is missing).
+`-O2` matters: without optimisation a local run is orders of magnitude slower than the judge, so a
+correct program gets reported as TLE.
 
-**Key bindings**: this package deliberately ships **no active key bindings** (Package Control asks
-packages not to claim keys by default). Ready-to-use suggestions are in
-`Example (Windows|Linux|OSX).sublime-keymap` — copy the entries you want into your own keymap via
-`Preferences → Key Bindings`. The table further down lists them all.
+**Key bindings**: the bindings live in this package's own `Default (<platform>).sublime-keymap`, so
+they load with the package and are released again when you disable or uninstall it — nothing is ever
+written into your personal keymap. Set `"enable_keybindings": false` to release the keys without
+editing any keymap. `Example (Windows|Linux|OSX).sublime-keymap` holds the same entries as a
+copy-paste reference if you want to change one.
 
 **Context menu**: entries only appear for the file types listed in `run_settings`; set
 `"context_menu": false` to hide them completely. Nothing is added to other menus.
@@ -186,15 +189,15 @@ packages not to claim keys by default). Ready-to-use suggestions are in
 
 ## 快捷键
 
-> **默认不添加任何快捷键。** Package Control 明确建议包不要默认占用按键（键位不够分，还容易和别的包打架），
-> 所以这里的绑定都放在 `Example (Windows|Linux|OSX).sublime-keymap` 里作为**建议**。
+> 绑定随**插件包**一起加载（`Default (<你的平台>).sublime-keymap`），**不会写进你自己的 keymap**。
+> 所以禁用或卸载本插件时，这些按键会自动还给其它插件，不会留下"占着键位却没人响应"的死绑定。
 >
-> 启用方法二选一：
-> 1. `Preferences → Key Bindings`，把 `Example (<你的平台>).sublime-keymap` 里的条目复制进去（推荐）；
-> 2. 直接用整份 Example 文件覆盖 `Packages/User/Default (<你的平台>).sublime-keymap`。
+> - 想临时让出键位：设置 `"enable_keybindings": false`，不用改任何 keymap。
+> - 想改某一个键：在 `Preferences → Key Bindings` 里覆盖同一条即可
+>   （`Example (<你的平台>).sublime-keymap` 里有同样的条目可以直接抄）。
 >
-> 下表里的按键就是 Example 文件里的建议（macOS 上 `Ctrl+Alt` 对应 `Cmd+Alt`）。
-> 面板内的 `Enter / Ctrl+V / Ctrl+D …` 只在本插件的测试编辑/详情视图里生效，随包默认启用。
+> 下表里的按键就是随包默认生效的绑定（macOS 上 `Ctrl+Alt` 对应 `Cmd+Alt`）。
+> 面板内的 `Enter / Ctrl+V / Ctrl+D …` 只在本插件的测试编辑/详情视图里生效。
 
 | 按键 | 功能 |
 | --- | --- |

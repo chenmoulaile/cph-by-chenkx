@@ -1,8 +1,39 @@
 # cph-by-chenkx — Package Control Submission Notes
 
-Package version: v1.4.16
+Package version: v1.4.17
 Repository: https://github.com/chenmoulaile/cph-by-chenkx
 Channel entry file: `repository/c/cph-by-chenkx.json` (see snippet at the bottom)
+
+## v1.4.17 notes
+
+- **Key bindings moved back into the package keymap.** They had been copied
+  into the user's own `Packages/User/Default (<platform>).sublime-keymap`
+  (to satisfy the "no keybindings by default" advice), which meant they
+  survived disabling the package and blocked other packages from using those
+  keys. Every binding still carries a concrete context; the 13 code-file ones
+  additionally carry the new `cph_keybindings_enabled` context key, which is
+  driven by the new `enable_keybindings` setting (default true) - so the keys
+  can be released without editing any keymap. `tests/run_tests.py` keeps both
+  rules (every shipped binding has a context; code-file bindings are gated)
+  and no longer requires the bindings to live outside the package.
+- **RE vs false TLE.** `get_verdict_by_code()` now also looks for crash
+  signatures in `stdout` when the runtime is over the limit; it only checked
+  `stderr`, so with `separate_stderr` off the crash text was invisible and an
+  aborted program was reported as a plain TLE. TLE verdicts now also carry a
+  diagnostic message when the program produced no output at all, or when the
+  compile command contains `-DLOCAL` / `-DDEBUG`.
+- **Stale verdicts.** `Test.reset_run_state()` plus a snapshot of the
+  previously-accepted indices in `make_opd()`: a fresh run clears the verdicts
+  loaded from the tests file, so the summary no longer counts the previous
+  run's results (and `Run failed tests` still skips what was accepted).
+- **Closing the source file closes its panel**: `CloseListener.on_pre_close`
+  now also closes the paired `<file> -run` view and the `test N -edit` /
+  `-answer` tabs opened from it.
+- The shipped C++ `compile_cmd` uses `-std=c++17 -O2` (measured: `-O2` costs
+  almost nothing to compile, `-std=c++23` costs ~1.3s more per compile than
+  `c++17`).
+- `sync_read_only()` only calls `view.set_read_only()` when the value changes.
+- Regression checks: 158 -> 166.
 
 ## v1.4.16 notes
 
