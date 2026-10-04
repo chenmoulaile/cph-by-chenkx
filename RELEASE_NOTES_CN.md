@@ -5,6 +5,26 @@
 
 ---
 
+# v2.1.1
+
+## 修复
+
+收录审查（Package Control 的自动检查）报出的两项：
+
+- **`messages.json` 的版本号不合法** —— 键 `"2.0"` 只有两段，不是有效的语义化版本
+  （必须是 `主.次.修` 三段）。已改为 `"2.0.0"`；升级提示文件本身没变。
+- **Windows 上会闪控制台窗口** —— 保存后自动格式化、以及机器速度校准启动时
+  没有隐藏窗口（`startupinfo`）。三处 `Popen` 现在都带上
+  `STARTF_USESHOWWINDOW`，编译/运行/校准都不再闪黑框。
+
+## 说明
+
+- `tests/run_tests.py` 新增两条守卫，防止再犯：`messages.json` 的每个键必须是
+  `install` 或三段版本号；源码里每一处 `subprocess.Popen` 都必须传 `startupinfo`。
+  261 项全部通过。
+
+---
+
 # v2.1.0
 
 ## 修复

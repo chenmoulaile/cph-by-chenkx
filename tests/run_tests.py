@@ -1764,6 +1764,47 @@ def main():
           and verdict.get_verdict_by_code(124, 10, 2000, 256, '', '', 'x\n')['name'] == 'TLE'
           and verdict.get_verdict_by_code(1, 10, 2000, 256, '', '', 'x\n')['name'] == 'RE')
 
+    # --- two more findings from the channel reviewer ---
+    # 5. messages.json keys must be "install" or a full semantic version;
+    #    "2.0" (two components) was rejected as an invalid version.
+    messages_json = json.loads(open(os.path.join(ROOT, 'messages.json'),
+                                    encoding='utf-8').read())
+    bad_keys = [k for k in messages_json
+                if k != 'install'
+                and not re.match(r'^\d+\.\d+\.\d+$', k)]
+    check('every messages.json key is install or a semantic version',
+          not bad_keys, str(bad_keys))
+    check('every message file referenced by messages.json exists',
+          all(os.path.isfile(os.path.join(ROOT, v))
+              for v in messages_json.values()))
+    # 6. A console window must not flash on Windows: every subprocess.Popen
+    #    call has to pass startupinfo (STARTF_USESHOWWINDOW).
+    missing_si = []
+    for dirpath, dirnames, filenames in os.walk(ROOT):
+        dirnames[:] = [d for d in dirnames
+                       if d not in ('.git', '__pycache__', '.workbuddy', 'tests')]
+        for name in filenames:
+            if not name.endswith('.py'):
+                continue
+            path = os.path.join(dirpath, name)
+            try:
+                tree = ast.parse(open(path, encoding='utf-8').read())
+            except Exception:
+                continue
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Call):
+                    continue
+                func = node.func
+                is_popen = (isinstance(func, ast.Attribute)
+                            and func.attr == 'Popen')
+                if not is_popen:
+                    continue
+                if not any(kw.arg == 'startupinfo' for kw in node.keywords):
+                    missing_si.append('%s:%d' % (
+                        os.path.relpath(path, ROOT), node.lineno))
+    check('every subprocess.Popen hides the console window',
+          not missing_si, str(missing_si))
+
     print('== round 9: stress testing follows the judging rules ==')
     # Comparing the two outputs line by line made stress testing useless for
     # multi-solution problems (any valid permutation "fails") and for

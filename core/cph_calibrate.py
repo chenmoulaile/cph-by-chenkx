@@ -20,6 +20,7 @@ import tempfile
 import time
 
 from .cph_i18n import t
+from .cph_checker import hidden_startupinfo
 
 #: ops/second of the reference machine. Calibrated so that a modern desktop
 #: lands near 1.0; treat the absolute value as an order-of-magnitude anchor.
@@ -101,7 +102,8 @@ def measure(workdir=None, compile_cmd=DEFAULT_COMPILE_CMD, compiler='g++'):
 	cmd = compile_cmd.replace('{src}', src).replace('{exe}', exe)
 	try:
 		proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE,
-								stderr=subprocess.STDOUT)
+								stderr=subprocess.STDOUT,
+								startupinfo=hidden_startupinfo())
 		out = proc.communicate()[0]
 	except Exception as e:
 		return None, None, None, t('calibrate_compile_failed',
@@ -114,7 +116,8 @@ def measure(workdir=None, compile_cmd=DEFAULT_COMPILE_CMD, compiler='g++'):
 	started = time.time()
 	try:
 		run = subprocess.Popen([exe], stdout=subprocess.DEVNULL,
-							   stderr=subprocess.DEVNULL)
+							   stderr=subprocess.DEVNULL,
+							   startupinfo=hidden_startupinfo())
 		run.communicate(timeout=60)
 	except Exception as e:
 		return None, None, None, t('calibrate_run_failed', error=str(e))

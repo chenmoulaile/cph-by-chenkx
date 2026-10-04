@@ -22,6 +22,26 @@ import sublime_plugin
 
 from .core.cph_settings import get_settings, is_run_supported_ext
 
+
+def _hidden_startupinfo():
+	"""STARTUPINFO that keeps a console window from flashing (Windows).
+
+	Returns None elsewhere, so it can be passed to Popen unconditionally.
+	"""
+	try:
+		import sublime
+		windows = sublime.platform() == 'windows'
+	except Exception:
+		windows = os.name == 'nt'
+	if not windows:
+		return None
+	try:
+		info = subprocess.STARTUPINFO()
+		info.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+		return info
+	except Exception:
+		return None
+
 #: file -> token; a newer save bumps the token so the older timer does nothing
 _run_tokens = {}
 _pending_locks = {}
@@ -106,7 +126,8 @@ def _format_file(view, entry, file_name):
 	def worker():
 		try:
 			subprocess.Popen(expanded, shell=True,
-							 cwd=os.path.dirname(file_name) or None).wait()
+							 cwd=os.path.dirname(file_name) or None,
+							 startupinfo=_hidden_startupinfo()).wait()
 		except Exception as e:
 			print('[cph-by-chenkx] format failed: %s' % e)
 			return

@@ -1,8 +1,18 @@
 # cph-by-chenkx — Package Control Submission Notes
 
-Package version: v2.1.0
+Package version: v2.1.1
 Repository: https://github.com/chenmoulaile/cph-by-chenkx
 Channel entry file: `repository/c/cph-by-chenkx.json` (see snippet at the bottom)
+
+## v2.1.1 notes
+
+- Fixed the two findings the channel's automated review reported on v2.1.0:
+  `messages.json` used the key `"2.0"`, which is not a valid semantic version
+  (now `"2.0.0"`), and three `subprocess.Popen` calls did not hide the console
+  window on Windows (`startupinfo` with `STARTF_USESHOWWINDOW`).
+- Two regression guards were added so neither can come back: every
+  `messages.json` key must be `install` or a three-part version, and every
+  `subprocess.Popen` call in the package must pass `startupinfo`.
 
 ## v2.1.0 notes
 
