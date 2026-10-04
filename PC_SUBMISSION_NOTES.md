@@ -1,8 +1,25 @@
 # cph-by-chenkx — Package Control Submission Notes
 
-Package version: v2.0
+Package version: v2.0.1
 Repository: https://github.com/chenmoulaile/cph-by-chenkx
 Channel entry file: `repository/c/cph-by-chenkx.json` (see snippet at the bottom)
+
+## v2.0.1 notes (bug fix)
+
+Four defects found by driving every feature through its real command path in a
+Sublime simulator (.workbuddy/sim_sublime.py + .workbuddy/harness_features.py):
+
+- the program's stdin was never closed, so anything that reads to EOF
+  (`sys.stdin.read()`, `while (cin >> x)`) hung and was reported TLE;
+  `ProcessManager.close_stdin()` is called after a stored sample now (and only
+  then - the manual paste flow and the interactor keep stdin open);
+- a command-style checker/interactor (`"python checker.py"`) was pushed through
+  the compile command and never ran;
+- `cwd=os.path.dirname(exe)` raised TypeError for a command-style interactor,
+  so every interaction was UKE;
+- the interactor's stderr was never drained (invisible testlib quitf messages,
+  and a full pipe would block the interactor).
+- Regression checks: 233 -> 243; the feature harness has 46 assertions.
 
 ## v2.0 notes
 

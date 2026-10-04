@@ -47,6 +47,20 @@ def config(run_settings, file):
 			if not interactor:
 				return None
 			src_dir = os.path.dirname(os.path.abspath(file))
+			# A value with a space is a COMMAND ("python interactor.py").
+			if ' ' in interactor:
+				parts = interactor.split()
+				path = parts[-1]
+				if not os.path.isabs(path):
+					path = os.path.join(src_dir, path)
+				return {
+					'path': os.path.normpath(path),
+					'dir': src_dir,
+					'name': os.path.splitext(os.path.basename(path))[0],
+					'compile_cmd': '',
+					'time_limit_ms': entry.get('interactor_time_limit_ms') or 20000,
+					'command': parts,
+				}
 			path = interactor
 			if not os.path.isabs(path):
 				path = os.path.join(src_dir, path)
@@ -57,6 +71,7 @@ def config(run_settings, file):
 				'name': os.path.splitext(os.path.basename(path))[0],
 				'compile_cmd': entry.get('interactor_compile_cmd') or DEFAULT_COMPILE_CMD,
 				'time_limit_ms': entry.get('interactor_time_limit_ms') or 20000,
+				'command': None,
 			}
 	return None
 
@@ -84,6 +99,11 @@ def executable(cfg):
 
 	Returns (path, error_message); error_message is '' on success.
 	"""
+	if cfg.get('command'):
+		if not os.path.isfile(cfg['path']):
+			return None, t('interactor_missing', path=cfg['path'], error='not found')
+		return cfg['command'], ''
+
 	exe = cfg['path'] + '.exe'
 	if _is_binary(cfg['path']):
 		return cfg['path'], ''
@@ -123,7 +143,8 @@ def _write(path, text):
 		f.write((text or '').encode('utf-8', 'replace'))
 
 
-def run_case(make_solution, exe, input_text, answer_text, time_limit_ms):
+def run_case(make_solution, exe, input_text, answer_text, time_limit_ms,
+			 cwd=None):
 	"""Run one interaction and return a result dict.
 
 	Same shape as cph_parallel._run_one so the panel code can be shared:
@@ -149,7 +170,7 @@ def run_case(make_solution, exe, input_text, answer_text, time_limit_ms):
 	solution = None
 	interactor = None
 	stop = threading.Event()
-	collected = {'solution': [], 'interactor': []}
+	collected = {'solution': [], 'interactor': [], 'interactor_err': []}
 
 	try:
 		solution = make_solution()
@@ -157,10 +178,16 @@ def run_case(make_solution, exe, input_text, answer_text, time_limit_ms):
 		if time_limit_ms:
 			solution.set_time_limit(time_limit_ms)
 
+		prefix = list(exe) if isinstance(exe, list) else [exe]
+		# cwd must come from the config: with a command-style interactor
+		# ("python interactor.py") `exe` is a LIST and os.path.dirname() on it
+		# raised TypeError, so every interaction ended as UKE.
+		if cwd is None and isinstance(exe, str):
+			cwd = os.path.dirname(exe) or None
 		interactor = subprocess.Popen(
-			[exe, in_path, out_path, ans_path], shell=False,
+			prefix + [in_path, out_path, ans_path], shell=False,
 			stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-			stderr=subprocess.PIPE, cwd=os.path.dirname(exe) or None,
+			stderr=subprocess.PIPE, cwd=cwd,
 			startupinfo=hidden_startupinfo())
 
 		started = time.time()
@@ -197,8 +224,25 @@ def run_case(make_solution, exe, input_text, answer_text, time_limit_ms):
 				except Exception:
 					return
 
+		def pump_interactor_err():
+			"""Drain the interactor's stderr.
+
+			An interactor explains itself there (testlib's quitf writes to
+			stderr), and an unread pipe fills up and blocks the interactor
+			once the buffer is full - a deadlock that looked like a TLE.
+			"""
+			while not stop.is_set():
+				try:
+					chunk = interactor.stderr.read(1)
+				except Exception:
+					return
+				if not chunk:
+					return
+				collected['interactor_err'].append(decode_output(chunk))
+
 		threads = [threading.Thread(target=pump_solution),
-				   threading.Thread(target=pump_interactor)]
+				   threading.Thread(target=pump_interactor),
+				   threading.Thread(target=pump_interactor_err)]
 		for thread in threads:
 			thread.daemon = True
 			thread.start()
@@ -218,6 +262,7 @@ def run_case(make_solution, exe, input_text, answer_text, time_limit_ms):
 		runtime = int((time.time() - started) * 1000)
 		solution_output = ''.join(collected['solution'])
 		interactor_output = ''.join(collected['interactor'])
+		interactor_error = ''.join(collected['interactor_err']).strip()
 
 		if timed_out:
 			try:
@@ -255,8 +300,10 @@ def run_case(make_solution, exe, input_text, answer_text, time_limit_ms):
 		)
 		if verdict in ('wrong_answer', 'presentation_error',
 					   'partially_correct', 'unknown_error', 'runtime_error'):
-			# The interactor's own message is the only explanation available.
-			result['message'] = interactor_output.strip()[-1000:]
+			# The interactor's own message is the only explanation available:
+			# prefer its stderr (that is where testlib writes quitf), and fall
+			# back to the prompts it sent when it stayed silent.
+			result['message'] = (interactor_error or interactor_output.strip())[-1000:]
 	except Exception as e:
 		result['error'] = '%s: %s' % (type(e).__name__, e)
 		result['verdict'] = get_verdict('unknown_error')

@@ -1,0 +1,38 @@
+cph-by-chenkx 2.0.1
+====================
+
+Fixed - all four were found by running every feature through its real command
+path in a Sublime simulator, not by reading the code:
+
+* A program that reads to the END of stdin hung and was reported TLE. The
+  plugin wrote the sample but never closed the program's stdin, so
+  `sys.stdin.read()`, `for line in sys.stdin` and C++'s `while (cin >> x)`
+  waited forever - while on the judge, where stdin is a file that ends, they
+  are perfectly fine. Stdin is now closed after a *stored* sample; an empty
+  sample (the placeholder waiting for a paste) keeps it open, so pasting input
+  by hand still works.
+
+* Script checkers could not be used at all: the `checker` value was always
+  treated as a source path to compile, so `"checker": "python checker.py"` was
+  pushed through the C++ compile command and failed. A value containing a space
+  is now recognised as a COMMAND and run as is; the same applies to
+  `interactor`.
+
+* Every interaction was judged UKE: with a command-style interactor `exe` is a
+  list, and `cwd=os.path.dirname(exe)` raised TypeError before the dialogue
+  started. The working directory now comes from the config.
+
+* The interactor's stderr was never read. testlib writes its verdict message
+  there, so it was invisible - and a chatty interactor would fill the pipe and
+  block (which looked like a TLE again). A dedicated thread drains it and the
+  text ends up in the detail view.
+
+Notes:
+
+* New .workbuddy/sim_sublime.py: a Sublime simulator that really executes the
+  plugin's commands (real buffers, real command dispatch, one command instance
+  per view, a virtual clock, working built-in commands).
+* New .workbuddy/harness_features.py: per-feature integration tests that drive
+  every command the way a user would - 46 assertions, all passing.
+* tests/run_tests.py gained round 8 (including a real subprocess case for the
+  EOF fix): 233 -> 243 checks.

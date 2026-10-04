@@ -880,6 +880,11 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 			input_text = tests[id].test_string
 			self.process_manager.run()
 			self.process_manager.write(input_text)
+			# The stored sample is the whole input, so the program must see
+			# EOF - exactly like on the judge. An EMPTY sample is the
+			# placeholder waiting for the user to paste, so stdin stays open.
+			if input_text and input_text.strip():
+				self.process_manager.close_stdin()
 			if self._clock_start is None and input_text and input_text.strip():
 				self._clock_start = time()
 			self.on_insert(input_text)
@@ -1504,7 +1509,8 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 
 				def case_runner(index, input_text, expected):
 					return interactive_run_case(make_manager, exe, input_text,
-												expected, cfg['time_limit_ms'])
+												expected, cfg['time_limit_ms'],
+												cwd=cfg.get('dir'))
 
 		label = 'interactive_running' if interactive else 'parallel_running'
 		self.set_compile_bar(t(label, done=0, total=len(cases)))

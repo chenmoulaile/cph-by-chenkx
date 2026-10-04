@@ -57,6 +57,24 @@ def config(run_settings, file, settings=None):
 			if not checker:
 				return None
 			src_dir = os.path.dirname(os.path.abspath(file))
+			# A value with a space is a COMMAND, not a source path:
+			# "python checker.py" is the natural way to write a script
+			# checker, and forcing it through a C++ compile command failed.
+			if ' ' in checker:
+				parts = shlex.split(checker)
+				head = parts[0]
+				path = parts[-1] if len(parts) > 1 else head
+				if not os.path.isabs(path):
+					path = os.path.join(src_dir, path)
+				return {
+					'path': os.path.normpath(path),
+					'dir': src_dir,
+					'name': os.path.splitext(os.path.basename(path))[0],
+					'style': (entry.get('checker_style') or 'testlib').strip().lower(),
+					'compile_cmd': '',
+					'time_limit_ms': entry.get('checker_time_limit_ms') or 10000,
+					'command': parts,
+				}
 			path = checker
 			if not os.path.isabs(path):
 				path = os.path.join(src_dir, path)
@@ -67,6 +85,7 @@ def config(run_settings, file, settings=None):
 				'style': (entry.get('checker_style') or 'testlib').strip().lower(),
 				'compile_cmd': entry.get('checker_compile_cmd') or DEFAULT_COMPILE_CMD,
 				'time_limit_ms': entry.get('checker_time_limit_ms') or 10000,
+				'command': None,
 			}
 	return None
 
@@ -98,6 +117,12 @@ def executable(cfg):
 
 	Returns (path, error_message). error_message is '' on success.
 	"""
+	if cfg.get('command'):
+		# Nothing to build: the command itself is the checker.
+		if not os.path.isfile(cfg['path']):
+			return None, t('checker_missing', path=cfg['path'], error='not found')
+		return cfg['command'], ''
+
 	exe = cfg['path'] + '.exe'
 	if _is_binary(cfg['path']):
 		return cfg['path'], ''
@@ -183,12 +208,16 @@ def judge(cfg, exe, input_text, output_text, expected_text):
 	_write(out_path, output_text)
 	_write(ans_path, expected_text)
 
-	argv = [exe]
+	if isinstance(exe, list):
+		prefix = list(exe)
+	else:
+		prefix = [exe]
+	argv = prefix
 	if cfg['style'] == 'stdin':
 		payload = '\n---\n'.join([input_text or '', output_text or '',
 								  expected_text or ''])
 	else:
-		argv = [exe, in_path, out_path, ans_path]
+		argv = prefix + [in_path, out_path, ans_path]
 		payload = None
 
 	try:

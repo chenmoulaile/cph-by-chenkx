@@ -50,6 +50,9 @@ def _run_one(make_manager, input_text, expected, time_limit_ms, memory_limit_mb,
         manager.run_file()
         if input_text:
             manager.insert(input_text)
+            # EOF after the stored sample: a program that reads until the end
+            # of stdin would otherwise hang and be reported TLE.
+            manager.close_stdin()
 
         limit_s = float(time_limit_ms or 10000) / 1000.0
         deadline = started + limit_s + _GRACE_SECONDS

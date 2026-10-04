@@ -525,6 +525,28 @@ class ProcessManager(object):
 								   % t('process_already_exited'))
 			print('[cph-by-chenkx] stdin closed (%s), input dropped' % e)
 
+	def close_stdin(self):
+		"""Signal EOF: the program's input is complete.
+
+		Programs that read *to EOF* - `sys.stdin.read()`, `for line in
+		sys.stdin`, C++'s `while (cin >> x)` - otherwise block forever
+		waiting for more input, and the watchdog reports a TLE for a program
+		that runs fine on the judge, where stdin is a file that simply ends.
+
+		Called only after a *stored* test input was written. The manual flow
+		(pasting into the panel) and the interactor must keep stdin open.
+		"""
+		proc = getattr(self, 'process', None)
+		if proc is None or proc.poll() is not None:
+			return
+		if getattr(self, 'stdin_closed', False):
+			return
+		try:
+			proc.stdin.close()
+			self.stdin_closed = True
+		except Exception:
+			pass
+
 	def is_stopped(self):
 		"""Exit code, or None while still running.
 

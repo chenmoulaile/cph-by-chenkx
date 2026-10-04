@@ -1676,6 +1676,82 @@ def main():
           'checker' in shipped['run_settings'][0]
           and 'interactor' in shipped['run_settings'][0])
 
+    print('== round 8: bugs found by the feature harness ==')
+    # 1. A program that reads to EOF (python's sys.stdin.read(), C++'s
+    #    while (cin >> x)) hung forever and was reported TLE, because the
+    #    plugin never closed the program's stdin. The stored sample IS the
+    #    whole input, so the runner must signal EOF after writing it.
+    pm_src = open(os.path.join(ROOT, 'Modules', 'ProcessManager.py'),
+                  encoding='utf-8').read()
+    check('ProcessManager can signal EOF', 'def close_stdin(self)' in pm_src)
+    check('the serial run closes stdin after a stored sample',
+          'self.process_manager.close_stdin()' in tm_src
+          and 'if input_text and input_text.strip():' in tm_src)
+    par_src = open(os.path.join(ROOT, 'core', 'cph_parallel.py'),
+                   encoding='utf-8').read()
+    check('the parallel run closes stdin too', 'manager.close_stdin()' in par_src)
+    check('an empty sample keeps stdin open for a manual paste',
+          "if input_text and input_text.strip():\n\t\t\t\tself.process_manager.close_stdin()"
+          in tm_src)
+    # ...and the real thing: a reader-to-EOF must not be a TLE any more
+    pm_mod = importlib.import_module(pkg + '.Modules.ProcessManager')
+    tmp = tempfile.mkdtemp()
+    script = os.path.join(tmp, 'reader.py')
+    with open(script, 'w', encoding='utf-8') as f:
+        f.write('import sys\nprint(sum(int(x) for x in sys.stdin.read().split()))\n')
+    entry = [{'name': 'Python', 'extensions': ['py'], 'compile_cmd': None,
+              'run_cmd': sys.executable.replace('\\', '/') + ' "{source_file}"',
+              'time_limit_ms': 3000, 'memory_limit_mb': 256}]
+    manager = pm_mod.ProcessManager(script, 'source.python', run_settings=entry)
+    manager.set_separate_stderr(True)
+    manager.set_time_limit(3000)
+    # The fake sublime reports 'linux' (the rest of the suite assumes it), but
+    # this case really spawns a process, so it has to match the host - on
+    # Windows the POSIX branch reaches for os.setsid, which does not exist.
+    real_platform = 'windows' if os.name == 'nt' else 'linux'
+    saved_platform = sys.modules['sublime'].platform
+    sys.modules['sublime'].platform = lambda: real_platform
+    try:
+        manager.run_file()
+        manager.insert('1 2\n')
+        manager.close_stdin()
+        deadline = time.time() + 15
+        while manager.is_stopped() is None and time.time() < deadline:
+            time.sleep(0.02)
+        out = manager.read()
+        code = manager.is_stopped()
+    finally:
+        sys.modules['sublime'].platform = saved_platform
+        manager.close_stderr()
+    check('a program that reads to EOF finishes instead of hanging',
+          code == 0 and out.strip() == '3', 'rc=%s out=%r' % (code, out))
+    shutil.rmtree(tmp, ignore_errors=True)
+
+    # 2. A script checker ("python checker.py") used to be pushed through the
+    #    C++ compile command, so a perfectly good Python SPJ never ran.
+    cmd_cfg = checker.config([{'name': 'Python', 'extensions': ['py'],
+                               'compile_cmd': None,
+                               'run_cmd': 'python "{source_file}"',
+                               'checker': 'python checker.py'}], 'sol.py')
+    check('a command-style checker is recognised',
+          cmd_cfg is not None and cmd_cfg['command'] == ['python', 'checker.py'],
+          str(cmd_cfg))
+    check('a path checker still has no command',
+          checker.config([{'extensions': ['cpp'], 'checker': 'c.cpp'}],
+                         'a.cpp')['command'] is None)
+    # 3. ...and the interactor had the same gap, plus a TypeError on cwd.
+    int_src = open(os.path.join(ROOT, 'core', 'cph_interactive.py'),
+                   encoding='utf-8').read()
+    check('a command-style interactor is recognised',
+          "'command': parts," in int_src and 'def run_case(' in int_src
+          and 'cwd=None' in int_src)
+    check('the interactor never derives cwd from a command list',
+          'os.path.dirname(exe)' in int_src
+          and 'isinstance(exe, str)' in int_src)
+    # 4. An interactor's stderr has to be drained: testlib writes its verdict
+    #    message there, and an unread pipe blocks the interactor.
+    check('the interactor stderr is drained', 'interactor_err' in int_src)
+
     check('the killed-by-signal exit codes keep their verdict',
           verdict.get_verdict_by_code(137, 10, 2000, 256, '', '', 'x\n')['name'] == 'MLE'
           and verdict.get_verdict_by_code(9, 10, 2000, 256, '', '', 'x\n')['name'] == 'MLE'
