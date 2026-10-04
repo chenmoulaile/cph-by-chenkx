@@ -1,8 +1,37 @@
 # cph-by-chenkx — Package Control Submission Notes
 
-Package version: v1.4.18
+Package version: v1.4.19
 Repository: https://github.com/chenmoulaile/cph-by-chenkx
 Channel entry file: `repository/c/cph-by-chenkx.json` (see snippet at the bottom)
+
+## v1.4.19 notes
+
+- **New files** (all in the root folder, so Sublime loads the commands):
+  `cph_jump.py` (the `cph_jump_to_location` command) plus `core/cph_jump.py`,
+  `core/cph_build_mode.py` and `core/cph_parallel.py`. The root module imports
+  the helpers from `core/`, which is where shared code has to live (root-level
+  plugin modules may not import each other).
+- **Clickable error locations.** `core/cph_jump.py` parses g++/clang and MSVC
+  diagnostics (capped at 20 entries) and renders them as minihtml links; the
+  targets are stored in the view setting `cph_jump_targets` because a minihtml
+  callback only receives the href string. The detail view gets a phantom at
+  the top (a plain text view cannot have links), the compile bar gets a
+  clickable list below the raw compiler output, and both now carry a phantom
+  callback.
+- **Debug/Release build mode** (`core/cph_build_mode.py`). The transform is
+  applied inside `ProcessManager.get_compile_cmd()`, so the compile, the cache
+  fingerprint and doctor all agree. The mode is per source file and lives in
+  memory only - the package still never writes the user's settings. New
+  setting `build_mode`; the run panel's status label gained a `DEBUG` chip.
+- **Parallel test execution** (`core/cph_parallel.py`, command
+  `cph_run_parallel`, setting `parallel_workers`). Each test gets its own
+  ProcessManager; the worker threads never touch a view (results come back
+  through `sublime.set_timeout`). The new `parallel` flag is threaded through
+  `CphViewTesterCommand.run` -> `create_opd` -> `make_opd` exactly like
+  `run_all`/`run_failed`.
+- Two new shipped bindings (`ctrl+alt+g`, `ctrl+alt+shift+p`), both behind the
+  `cph_keybindings_enabled` context key, plus two new command palette entries.
+- Regression checks: 168 -> 188.
 
 ## v1.4.18 notes (hotfix)
 

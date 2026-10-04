@@ -5,6 +5,47 @@
 
 ---
 
+# v1.4.19
+
+## 新增
+
+- **错误位置可点击（`文件:行:列` → 直接跳过去）**
+  - **运行错误**：`find_crash_location` 解析出的位置现在渲染成链接，显示在详情视图顶部；
+  - **编译错误**：编译器输出里的每条诊断（g++/clang 的 `文件:行:列: error:`、MSVC 的
+    `文件(行,列): error Cxxxx:`）都会列成可点条目（最多 20 条，模板错误不会刷屏），
+    点一下跳到那一行；
+  - 跳转优先复用**已经打开**的标签（布局和未保存内容都不受影响），文件没打开时才用
+    `ENCODED_POSITION` 打开并定位。
+- **Debug / Release 一键切换（`Ctrl+Alt+G`）**
+  - 以前 README 只能让你手动往 `compile_cmd` 里加 `-fsanitize`：加了程序慢几十倍、本地
+    时限就失去意义。现在做成一个开关：
+    - **release**（默认）：保证带 `-O2`，去掉 sanitizer 参数 —— 计时用；
+    - **debug**：去掉优化、加 `-g -fsanitize=address,undefined -fno-omit-frame-pointer`
+      —— 崩溃时 sanitizer 打印 `文件:行:列`，配合上面的跳转直接定位。
+  - 模式按**源文件**记忆且只存在内存里（**不写你的设置文件**）；新文件由 `build_mode`
+    设置决定初始模式。当前模式显示在运行面板状态栏（如 `C++ · TL 2000ms · ML 256MB · DEBUG`）。
+  - 切换后编译缓存自动失效（缓存键里含编译命令），下一次运行会重新编译。
+- **测试点并行运行（`Ctrl+Alt+Shift+P`）**
+  - 每个测试点用**独立的进程**（独立 ProcessManager、管道、stderr 临时文件），由
+    `parallel_workers`（默认 4）个 worker 同时跑，全部算完后一次性回写面板
+    —— 工作线程不碰视图。
+  - 判定口径与串行完全一致：被我们杀掉且带崩溃特征 → RE，否则 TLE；超时、MLE、
+    RE 位置、内存峰值都照常。
+  - 实测（真实子进程，2 个 TLE 用例）：串行 7.4s → **并行 4.1s**；测试点越多、TLE 越多
+    收益越大。面板会显示 `并行运行测试点：3/10` 的进度。
+
+## 说明
+
+- 回归测试 168 → **188 项**，新增覆盖：诊断解析（g++/clang/MSVC、忽略噪声行、20 条上限）、
+  链接与目标列表、HTML 转义、编译模式双向转换与按文件记忆、并行 runner 的 worker 数与异常
+  兜底、新命令出现在命令面板且带 `cph_keybindings_enabled` 门。
+- 新增真进程验证台 `.workbuddy/harness_parallel.py`：验证 AC/WA/RE/TLE 判定、
+  每个测试点独立 stderr、以及并行确实省时间。
+- 两个新快捷键 `Ctrl+Alt+G`、`Ctrl+Alt+Shift+P` 随包提供（与其余绑定一样带
+  `cph_keybindings_enabled` 门，禁用插件即自动归还键位）。
+
+---
+
 # v1.4.18
 
 ## 修复

@@ -1441,6 +1441,100 @@ def main():
     # An exit code that names how the process was killed must keep its
     # verdict: is_crash_exit_code() covers 128..192, so checking it first
     # made the MLE/TLE branches unreachable.
+    print('== round 6: click-to-jump, build mode, parallel runner ==')
+    jump = importlib.import_module(pkg + '.core.cph_jump')
+    build_mode = importlib.import_module(pkg + '.core.cph_build_mode')
+    parallel = importlib.import_module(pkg + '.core.cph_parallel')
+
+    # Compiler diagnostics -> clickable (file, line) links.
+    gcc = ("main.cpp:12:5: error: 'x' was not declared in this scope\n"
+           "D:/a/b/main.cpp:7:1: warning: unused variable 'y'\n"
+           "  12 | int x = ;\n"
+           "main.cpp:9: fatal error: bits/nope.h: No such file\n")
+    parsed = jump.diagnostics(gcc)
+    check('g++/clang diagnostics are parsed',
+          len(parsed) == 3
+          and parsed[0][:3] == ('main.cpp', 12, 5)
+          and parsed[1][0] == 'D:/a/b/main.cpp' and parsed[1][3] == 'warning'
+          and parsed[2][1] == 9 and parsed[2][2] == 0, str(parsed))
+    check('non-diagnostic lines are ignored',
+          jump.diagnostics('int x = ;\n  12 | int x = ;\n') == [])
+    check('the diagnostic list is capped',
+          len(jump.diagnostics('\n'.join('f.cpp:%d:1: error: e' % i
+                                         for i in range(50)))) == 20)
+    check('MSVC style diagnostics are parsed',
+          jump.diagnostics('main.cpp(12,5): error C2065: undeclared')[0][:3]
+          == ('main.cpp', 12, 5))
+    html, targets = jump.links_html(jump.diagnostics(gcc), base_dir='D:/a/b')
+    check('links carry an index and the targets are absolute',
+          'href="jump:0"' in html and 'href="jump:2"' in html
+          and targets[0][0].endswith('main.cpp') and targets[0][1] == 12
+          and targets[1][0] == os.path.normpath('D:/a/b/main.cpp'), str(targets))
+    html1, targets1 = jump.one_link('D:/a/b/main.cpp', 12)
+    check('a single location becomes one link',
+          'href="jump:0"' in html1
+          and targets1 == [[os.path.normpath('D:/a/b/main.cpp'), 12]], str(targets1))
+    check('html is escaped for minihtml',
+          '&lt;' in jump.esc('<x>') and jump.esc('a & b') == 'a &amp; b')
+
+    # Debug / Release compile mode.
+    base = 'g++ "{source_file}" -std=c++17 -O2 -o "{file_name}.exe" -DLOCAL'
+    release = build_mode.transform(base, build_mode.MODE_RELEASE)
+    debug = build_mode.transform(base, build_mode.MODE_DEBUG)
+    check('release keeps -O2 and drops the sanitizer',
+          '-O2' in release and '-fsanitize' not in release, release)
+    check('release adds -O2 when the command has none',
+          build_mode.transform('g++ a.cpp -o a.exe', build_mode.MODE_RELEASE)
+          .endswith('-O2'))
+    check('debug drops -O2 and adds -g -fsanitize',
+          '-O2' not in debug and '-g' in debug
+          and '-fsanitize=address,undefined' in debug
+          and '-fno-omit-frame-pointer' in debug, debug)
+    check('switching back to release removes the sanitizer',
+          '-fsanitize' not in build_mode.transform(debug, build_mode.MODE_RELEASE))
+    check('the mode is per file and toggles',
+          build_mode.get_mode('x.cpp') == build_mode.MODE_RELEASE
+          and build_mode.toggle('x.cpp') == build_mode.MODE_DEBUG
+          and build_mode.get_mode('x.cpp') == build_mode.MODE_DEBUG
+          and build_mode.get_mode('y.cpp') == build_mode.MODE_RELEASE
+          and build_mode.toggle('x.cpp') == build_mode.MODE_RELEASE)
+    check('the label only shows in debug mode',
+          build_mode.label('x.cpp') == ''
+          and (build_mode.toggle('x.cpp'), build_mode.label('x.cpp'))[1] == 'DEBUG')
+    build_mode.toggle('x.cpp')
+    check('the build mode setting is shipped and documented',
+          '"build_mode"' in settings_text and '"parallel_workers"' in settings_text)
+
+    # Parallel runner: shape + worker clamping (the real-process behaviour is
+    # covered by .workbuddy/harness_parallel.py).
+    check('the parallel runner reports its worker count',
+          parallel.run_batch(lambda: None, [('a', 'b')], workers=8,
+                             on_done=lambda r: None) == 1)
+    check('an empty batch finishes immediately',
+          parallel.run_batch(lambda: None, [], workers=4,
+                             on_done=lambda r: None) == 0)
+    check('a failed worker becomes a result, not an exception',
+          parallel._run_one(lambda: (_ for _ in ()).throw(RuntimeError('boom')),
+                            'in', 'out', 1000, 256, 0, False)['verdict']['name']
+          == 'UKE')
+
+    # The new commands must be reachable: palette + shipped bindings.
+    commands_text = open(os.path.join(ROOT, 'Default.sublime-commands'),
+                         encoding='utf-8').read()
+    check('the new commands are in the command palette',
+          'cph_toggle_build_mode' in commands_text
+          and 'cph_run_parallel' in commands_text
+          and 'cph_jump_to_location' in commands_text)
+    with open(os.path.join(ROOT, 'Default (Windows).sublime-keymap'), encoding='utf-8') as f:
+        bindings = json.load(f)
+    for command, key in (('cph_toggle_build_mode', 'ctrl+alt+g'),
+                         ('cph_run_parallel', 'ctrl+alt+shift+p')):
+        entry = [e for e in bindings if e.get('command') == command]
+        check('%s ships with %s' % (command, key),
+              bool(entry) and entry[0]['keys'] == [key]
+              and any(i.get('key') == 'cph_keybindings_enabled'
+                      for i in (entry[0].get('context') or [])))
+
     check('the killed-by-signal exit codes keep their verdict',
           verdict.get_verdict_by_code(137, 10, 2000, 256, '', '', 'x\n')['name'] == 'MLE'
           and verdict.get_verdict_by_code(9, 10, 2000, 256, '', '', 'x\n')['name'] == 'MLE'

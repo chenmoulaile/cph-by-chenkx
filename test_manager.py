@@ -13,6 +13,10 @@ import threading
 from .Modules.ProcessManager import ProcessManager
 from .core.cph_settings import base_name, get_settings, get_tests_paths, load_all_tests, save_tests, is_run_supported_ext, get_problem_limits
 from .core.cph_target import visible as context_menu_visible
+from .core.cph_jump import (diagnostics as parse_diagnostics,
+							links_html, one_link, set_targets, handle_event as handle_jump_event)
+from .core.cph_build_mode import label as build_mode_label
+from .core.cph_parallel import run_batch as run_parallel_batch
 from .core.cph_resources import read_resource
 from .Highlight.test_interface import get_test_styles
 from .core.cph_verdict import get_verdict, get_verdict_by_code, get_verdict_by_name, build_line_diff, outputs_equal, find_crash_location, looks_like_crash
@@ -123,6 +127,9 @@ def run_view_status_label(run_file, time_limit_ms, memory_limit_mb):
 			parts.append('TL %dms' % int(tl))
 		if ml:
 			parts.append('ML %dMB' % int(ml))
+		mode = build_mode_label(run_file)
+		if mode:
+			parts.append(mode)
 		return ' · '.join(parts)
 	except Exception:
 		return ''
@@ -292,6 +299,10 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 			# told us where it died (Python traceback / Java stack trace /
 			# -fsanitize diagnostic).
 			self.crash_line = ''
+			# The same location split into its parts, so the detail view can
+			# turn it into a clickable jump link (cph_jump).
+			self.crash_path = ''
+			self.crash_lineno = 0
 			self.time_limit_ms = None
 			self.memory_limit_mb = None
 
@@ -385,6 +396,8 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 			self.stderr = ''
 			self.message = ''
 			self.crash_line = ''
+			self.crash_path = ''
+			self.crash_lineno = 0
 			self.rtcode = '0'
 
 		def set_memory(self, memory):
@@ -1249,6 +1262,131 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 		except Exception:
 			pass
 
+	def run_parallel_batch(self):
+		"""Judge every test at once with a small worker pool.
+
+		Serial execution costs roughly TL x tests when several tests time out;
+		with 4 workers that becomes about TL x tests / 4. Each test gets its
+		OWN ProcessManager (own process, pipes and stderr file), so the
+		workers share nothing.
+		"""
+		tester = self.tester
+		if tester is None or not tester.tests:
+			return
+		settings = get_settings()
+		try:
+			workers = int(settings.get('parallel_workers', 4) or 4)
+		except (TypeError, ValueError):
+			workers = 4
+
+		time_limit_ms = None
+		memory_limit_mb = None
+		try:
+			time_limit_ms = tester.process_manager.get_time_limit_ms()
+			memory_limit_mb = tester.process_manager.get_memory_limit_mb()
+		except Exception:
+			pass
+
+		run_settings = settings.get('run_settings')
+		separate_stderr = bool(settings.get('ignore_stderr', True))
+
+		def make_manager():
+			manager = ProcessManager(self.dbg_file, self.build_sys,
+									 run_settings=run_settings)
+			if separate_stderr:
+				manager.set_separate_stderr(True)
+			if time_limit_ms is not None:
+				manager.set_time_limit(time_limit_ms)
+			if memory_limit_mb is not None:
+				manager.set_memory_limit(memory_limit_mb)
+			return manager
+
+		cases = []
+		for test in tester.tests:
+			expected = ''
+			if test.correct_answers:
+				expected = next(iter(test.correct_answers))
+			elif test.expected_output:
+				expected = test.expected_output
+			cases.append((test.test_string, expected))
+
+		self.set_compile_bar(t('parallel_running', done=0, total=len(cases)))
+		run_parallel_batch(
+			make_manager, cases, workers=workers,
+			time_limit_ms=time_limit_ms, memory_limit_mb=memory_limit_mb,
+			float_tolerance=settings.get('float_tolerance', 0) or 0,
+			regard_pe_as_ac=bool(settings.get('regard_pe_as_ac', False)),
+			on_done=self.apply_parallel_results,
+			on_progress=lambda done, total: self.set_compile_bar(
+				t('parallel_running', done=done, total=total)))
+
+	def store_parallel_result(self, i, result):
+		"""Copy one parallel result onto its Test (same shape as on_stop)."""
+		tester = self.tester
+		test = tester.tests[i]
+		verdict = result.get('verdict')
+		if verdict:
+			test.set_verdict(verdict)
+		test.set_stdout(result.get('stdout') or '')
+		test.set_stderr(result.get('stderr') or '')
+		test.set_cur_runtime(result.get('runtime') or 0)
+		rtcode = result.get('rtcode')
+		test.set_cur_rtcode(rtcode if rtcode is not None else 0)
+		test.rtcode = str(rtcode if rtcode is not None else 0)
+		memory = result.get('memory')
+		if memory:
+			test.set_memory(memory)
+		crash = result.get('crash')
+		if crash:
+			test.crash_line = '%s:%d' % crash
+			test.crash_path = crash[0]
+			test.crash_lineno = crash[1]
+			test.message = t('runtime_error_at', location=test.crash_line)
+		if result.get('error'):
+			test.message = result['error']
+		while len(tester.prog_out) <= i:
+			tester.prog_out.append('')
+		tester.prog_out[i] = result.get('stdout') or ''
+
+	def apply_parallel_results(self, results):
+		"""Write a finished parallel batch into the panel (main thread)."""
+		v = self.view
+		tester = self.tester
+		if tester is None or not results:
+			return
+		tests = tester.tests
+		blocks = []
+		regions = []
+		offset = 0
+		for i, test in enumerate(tests):
+			if i < len(results) and results[i]:
+				self.store_parallel_result(i, results[i])
+			block = test.test_string + '\n' + tester.output_at(i).rstrip() + '\n\n'
+			regions.append((offset, offset + len(test.test_string)))
+			blocks.append(block)
+			offset += len(block)
+
+		# One replace for the whole panel: the block layout matches what
+		# get_tie_pos()/update_configs() expect for an unfolded test.
+		v.run_command('cph_test_manager', {
+			'action': 'replace',
+			'region': [0, v.size()],
+			'text': ''.join(blocks),
+		})
+		for i, (begin, end) in enumerate(regions):
+			tests[i].fold = False
+			v.add_regions(self.REGION_BEGIN_KEY % i, [Region(begin)],
+						  *self.REGION_BEGIN_PROP)
+			v.add_regions('test_end_%d' % i, [Region(end, end)],
+						  *self.REGION_END_PROP)
+		tester.test_iter = len(tests)
+		v.sel().clear()
+		v.sel().add(Region(v.size()))
+		self.set_compile_bar(t('parallel_done', total=len(tests)))
+		self.update_configs()
+		sublime.status_message('[cph-by-chenkx] '
+							   + t('parallel_done', total=len(tests)))
+
 	def is_skippable(self, i):
 		"""True when a test must not be executed in the current chain.
 
@@ -1357,6 +1495,17 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 
 			tester.run_test(i)
 			self.update_configs()
+
+	def jump_for(self, test):
+		"""[path, line, label] when this test has a located runtime error.
+
+		The detail view turns it into a clickable link (see core/cph_jump).
+		"""
+		path = getattr(test, 'crash_path', '') or ''
+		line = getattr(test, 'crash_lineno', 0) or 0
+		if not path or not line:
+			return None
+		return [path, line, '%s:%d' % (path, line)]
 
 	def get_detail_view_name(self, i):
 		return path.split(self.dbg_file)[1] + ' - test %d detail' % (i + 1)
@@ -1524,7 +1673,9 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 		# Deliberately NO custom syntax here: the detail stays plain text
 		# (default syntax). Per user feedback the syntax-based coloring was
 		# removed; the content format/layout is unchanged.
-		detail_view.run_command('cph_test_detail_view', {'text': self.build_detail_content(i, test)})
+		detail_view.run_command('cph_test_detail_view', {
+			'text': self.build_detail_content(i, test),
+			'jump': self.jump_for(test)})
 		window.focus_view(detail_view)
 
 	def show_test_detail_phantom(self, i):
@@ -1953,6 +2104,9 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 			if location:
 				crash_line = '%s:%d' % location
 				self.tester.tests[test_id].crash_line = crash_line
+				# kept apart as well: the detail view turns them into a link
+				self.tester.tests[test_id].crash_path = location[0]
+				self.tester.tests[test_id].crash_lineno = location[1]
 				self.tester.tests[test_id].message = t('runtime_error_at',
 													   location=crash_line)
 				sublime.status_message('[cph-by-chenkx] '
@@ -2059,7 +2213,9 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 							content = self.build_detail_content(test_id, tester.tests[test_id])
 						except Exception:
 							break
-						wv.run_command('cph_test_detail_view', {'text': content})
+						wv.run_command('cph_test_detail_view', {
+							'text': content,
+							'jump': self.jump_for(tester.tests[test_id])})
 						break
 
 	def change_process_status(self, status):
@@ -2106,12 +2262,30 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 		# escape html specials so compiler output shows up correctly in minihtml
 		cmd_escaped = (cmd or '').replace('&', '&amp;') \
 			.replace('<', '&lt;').replace('>', '&gt;')
+
+		# Compiler diagnostics carry file:line:col, so turn each one into a
+		# clickable link instead of leaving a wall of text the user has to
+		# read a path out of. Nothing is removed: the raw output stays above.
+		base_dir = os.path.dirname(self.dbg_file or '') or None
+		entries = parse_diagnostics(cmd or '')
+		diag_html = ''
+		if entries:
+			diag_html, targets = links_html(entries, base_dir=base_dir)
+			set_targets(view, targets)
+		else:
+			set_targets(view, [])
+
 		content = read_resource('Highlight/compile.html').format(
 			cmd=cmd_escaped,
-			compilation_error_label=t('compilation_error')
+			compilation_error_label=t('compilation_error'),
+			diagnostics=diag_html,
 		)
 		content = '<style>' + styles + '</style>' + content
-		phantom = Phantom(Region(0), content, sublime.LAYOUT_BLOCK)
+
+		def onclick(event):
+			handle_jump_event(view, event)
+
+		phantom = Phantom(Region(0), content, sublime.LAYOUT_BLOCK, onclick)
 		self.test_phantoms[0].update([phantom])
 
 	def get_view_by_id(self, id):
@@ -2135,7 +2309,7 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 	def make_opd(self, edit, run_file=None, build_sys=None, clr_tests=False, \
 		sync_out=False, code_view_id=None, load_session=False,
 		time_limit_ms=None, memory_limit_mb=None,
-		run_all=False, run_failed=False, force_compile=False):
+		run_all=False, run_failed=False, force_compile=False, parallel=False):
 
 		v = self.view
 
@@ -2193,6 +2367,7 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 				'run_all': run_all,
 				'run_failed': run_failed,
 				'force_compile': force_compile,
+				'parallel': parallel,
 				'action': 'make_opd'
 			}
 
@@ -2269,6 +2444,7 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 				'memory_limit_mb': memory_limit_mb,
 			}
 			self.dbg_file = run_file
+			self.build_sys = build_sys
 			self.code_view_id = code_view_id
 
 		self.prepare_code_view()
@@ -2368,7 +2544,11 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 				# Which tests were AC *before* this run started (see above).
 				self.tester.previously_accepted = previously_accepted
 				v.settings().set('edit_mode', False)
-				if run_failed or run_all:
+				if parallel:
+					# Judge every test at once with a small worker pool
+					# (see core/cph_parallel).
+					self.run_parallel_batch()
+				elif run_failed or run_all:
 					# These modes pick their own starting test and may skip
 					# already-accepted ones, so drive the chain explicitly.
 					self.advance_chain()
@@ -2572,7 +2752,8 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 			sync_out=False, code_view_id=None, var_name=None, pos=None, \
 			load_session=False, region=None, frame_id=None, data=None, id=None, dir=1,
 			time_limit_ms=None, memory_limit_mb=None,
-			run_all=False, run_failed=False, force_compile=False, part=None):
+			run_all=False, run_failed=False, force_compile=False, part=None,
+			parallel=False):
 
 		v = self.view
 
@@ -2618,7 +2799,8 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 				sync_out=sync_out, code_view_id=code_view_id,
 				load_session=load_session, time_limit_ms=time_limit_ms,
 				memory_limit_mb=memory_limit_mb,
-				run_all=run_all, run_failed=run_failed, force_compile=force_compile)
+				run_all=run_all, run_failed=run_failed, force_compile=force_compile,
+				parallel=parallel)
 
 		elif action == 'close':
 			# CphTestManagerCommand has no .process_manager attribute; the
@@ -2638,6 +2820,19 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 
 		elif action == 'erase_all':
 			v.replace(edit, Region(0, v.size()), '\n')
+
+		elif action == 'refresh_status':
+			# Recompute the run panel's status label (language + limits +
+			# build mode). Used by the Debug/Release toggle so the new mode
+			# shows up immediately instead of only on the next run.
+			try:
+				tl = ml = None
+				if self.tester is not None:
+					tl = self.tester.process_manager.get_time_limit_ms()
+					ml = self.tester.process_manager.get_memory_limit_mb()
+			except Exception:
+				tl = ml = None
+			v.set_status('opd_info', run_view_status_label(self.dbg_file, tl, ml))
 
 		elif action == 'kill_proc':
 			# Ctrl+X is also the default cut shortcut: only take it over
@@ -2690,7 +2885,11 @@ class CphTestDetailViewCommand(sublime_plugin.TextCommand):
 	A real view is used instead of a phantom so the text is selectable,
 	comparable and copyable."""
 
-	def run(self, edit, text=''):
+	def __init__(self, view):
+		self.view = view
+		self.phantoms = PhantomSet(view, 'cph-detail-jump')
+
+	def run(self, edit, text='', jump=None):
 		v = self.view
 		v.set_scratch(True)
 		v.set_read_only(False)
@@ -2698,6 +2897,30 @@ class CphTestDetailViewCommand(sublime_plugin.TextCommand):
 		v.set_read_only(True)
 		v.sel().clear()
 		v.sel().add(Region(0))
+		self.set_jump(jump)
+
+	def set_jump(self, jump):
+		"""Clickable 'jump to the source line' chip above the detail.
+
+		The detail view is a real (plain text) view, and a plain text view has
+		no links - a phantom is the only way to make the location clickable.
+		`jump` is [path, line, label] or None.
+		"""
+		v = self.view
+		if not jump or not jump[0]:
+			self.phantoms.update([])
+			return
+		label = jump[2] if len(jump) > 2 else None
+		html, targets = one_link(jump[0], jump[1], label=label)
+		set_targets(v, targets)
+		content = '<style>' + get_test_styles(v) + '</style>' + html
+
+		def onclick(event):
+			handle_jump_event(v, event)
+
+		self.phantoms.update([
+			Phantom(Region(0), content, sublime.LAYOUT_BLOCK, onclick)
+		])
 
 
 class ModifiedListener(sublime_plugin.EventListener):
@@ -2750,7 +2973,8 @@ class CloseListener(sublime_plugin.EventListener):
 class CphViewTesterCommand(sublime_plugin.TextCommand):
 	def create_opd(self, clr_tests=False, sync_out=None,
 				   time_limit_ms=None, memory_limit_mb=None,
-				   run_all=False, run_failed=False, force_compile=False):
+				   run_all=False, run_failed=False, force_compile=False,
+				   parallel=False):
 		v = self.view
 		if v.is_dirty():
 			v.run_command('save')
@@ -2833,6 +3057,7 @@ class CphViewTesterCommand(sublime_plugin.TextCommand):
 			'run_all': run_all,
 			'run_failed': run_failed,
 			'force_compile': force_compile,
+			'parallel': parallel,
 		})
 
 	def is_enabled(self, action=None, **kwargs):
@@ -2881,7 +3106,7 @@ class CphViewTesterCommand(sublime_plugin.TextCommand):
 
 	def run(self, edit, action=None, clr_tests=False, text=None, sync_out=None, \
 			time_limit_ms=None, memory_limit_mb=None, \
-			run_all=False, run_failed=False, force_compile=False):
+			run_all=False, run_failed=False, force_compile=False, parallel=False):
 		v = self.view
 		# Per-view state: these used to be class attributes, so two windows
 		# with a run panel shared (and clobbered) each other's view handles.
@@ -2900,6 +3125,7 @@ class CphViewTesterCommand(sublime_plugin.TextCommand):
 					'run_all': run_all,
 					'run_failed': run_failed,
 					'force_compile': force_compile,
+					'parallel': parallel,
 				})
 			else:
 				self.close_opds()
@@ -2907,7 +3133,8 @@ class CphViewTesterCommand(sublime_plugin.TextCommand):
 								time_limit_ms=time_limit_ms,
 								memory_limit_mb=memory_limit_mb,
 								run_all=run_all, run_failed=run_failed,
-								force_compile=force_compile)
+								force_compile=force_compile,
+								parallel=parallel)
 		elif action == 'sync_opdebugs':
 			w = v.window()
 			layout = w.get_layout()

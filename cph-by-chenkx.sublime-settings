@@ -74,6 +74,20 @@
 	// 因为每个字符都要刷新一次视图。默认关闭。
 	"sync_output": false,
 
+	// ================= 并行运行测试点 =================
+	// "Run all tests in parallel"（Ctrl+Alt+Shift+P）用的 worker 数。
+	// 串行跑时，5 个点里有 2 个 TLE 就要干等 2×时限；并行大约只要 1/4。
+	// 每个测试点用独立的进程，互不影响。设为 1 即退回串行。
+	"parallel_workers": 4,
+
+	// ================= 编译模式（Debug / Release） =================
+	// 新打开的文件用哪种编译模式；随时可用 Ctrl+Alt+G 切换（按文件记忆，
+	// 不会写进这个设置文件）。
+	//   release：保证带 -O2，去掉 sanitizer 参数 —— 计时用，速度与评测机可比
+	//   debug  ：去掉优化，加 -g -fsanitize=address,undefined
+	//            —— 崩溃时输出 文件:行:列，详情视图里可以直接点着跳过去
+	"build_mode": "release",
+
 	// ================= 编译缓存 =================
 	// 源文件（含 extra_sources）和编译命令都没变时跳过编译直接运行。
 	// 需要强制重新编译时执行命令 "Run (force recompile)"。

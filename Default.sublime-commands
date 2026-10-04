@@ -122,5 +122,20 @@
 	{
 		"caption": "cph-by-chenkx: Test actions (run / detail / edit a test)",
 		"command": "cph_test_menu"
+	},
+	{
+		"caption": "cph-by-chenkx: Toggle Debug / Release build mode",
+		"command": "cph_toggle_build_mode"
+	},
+	{
+		"caption": "cph-by-chenkx: Run all tests in parallel",
+		"command": "cph_run_parallel"
+	},
+	{
+		"caption": "cph-by-chenkx: Jump to the last error location",
+		"command": "cph_jump_to_location",
+		"args": {
+			"target": "0"
+		}
 	}
 ]

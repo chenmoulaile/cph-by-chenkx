@@ -1,0 +1,40 @@
+cph-by-chenkx 1.4.19
+====================
+
+New:
+
+* Error locations are clickable. The `file:line:col` of a runtime error (shown
+  at the top of the detail view) and every compiler diagnostic (g++/clang
+  `file:line:col: error:` and MSVC `file(line,col): error Cxxxx:`) are rendered
+  as links; clicking one jumps straight to that line. An already-open tab is
+  reused, so the layout and any unsaved changes survive.
+
+* Debug / Release switch (Ctrl+Alt+G). The README used to tell you to add
+  -fsanitize to compile_cmd by hand, which makes the program tens of times
+  slower and destroys the point of a local time limit. It is a toggle now:
+    - release (default): guarantees -O2 and removes the sanitizer flags;
+    - debug: drops the optimisation and adds
+      -g -fsanitize=address,undefined -fno-omit-frame-pointer, so a crash
+      prints file:line and the link above jumps to it.
+  The mode is remembered per source file, in memory only - your settings file
+  is never touched. A new file starts from the `build_mode` setting, and the
+  run panel's status bar shows the current mode
+  (e.g. "C++ - TL 2000ms - ML 256MB - DEBUG"). Switching invalidates the
+  compile cache, so the next run rebuilds.
+
+* Run all tests in parallel (Ctrl+Alt+Shift+P). Every test gets its OWN process
+  (own ProcessManager, pipes and stderr file) and `parallel_workers`
+  (default 4) workers run them at once; the results are written back to the
+  panel in one go from the main thread. Verdicts follow exactly the same rules
+  as the serial path (killed by us plus a crash signature -> RE, otherwise
+  TLE). Measured with real child processes and two TLE cases: 7.4s serial ->
+  4.1s parallel. The panel shows progress as "running tests in parallel: 3/10".
+
+Notes:
+
+* Regression checks: 168 -> 188.
+* Two new bindings ship with the package (Ctrl+Alt+G, Ctrl+Alt+Shift+P), both
+  behind the same cph_keybindings_enabled gate as the others, so disabling the
+  package releases the keys.
+* New real-process harness .workbuddy/harness_parallel.py verifies the
+  AC/WA/RE/TLE verdicts, per-test stderr isolation and the speed-up.

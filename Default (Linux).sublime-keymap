@@ -461,5 +461,43 @@
 				"operand": true
 			}
 		]
+	},
+	{
+		"keys": [
+			"ctrl+alt+g"
+		],
+		"command": "cph_toggle_build_mode",
+		"context": [
+			{
+				"key": "selector",
+				"operator": "not_equal",
+				"operand": "source.TestSyntax",
+				"match_all": true
+			},
+			{
+				"key": "cph_keybindings_enabled",
+				"operator": "equal",
+				"operand": true
+			}
+		]
+	},
+	{
+		"keys": [
+			"ctrl+alt+shift+p"
+		],
+		"command": "cph_run_parallel",
+		"context": [
+			{
+				"key": "selector",
+				"operator": "not_equal",
+				"operand": "source.TestSyntax",
+				"match_all": true
+			},
+			{
+				"key": "cph_keybindings_enabled",
+				"operator": "equal",
+				"operand": true
+			}
+		]
 	}
 ]

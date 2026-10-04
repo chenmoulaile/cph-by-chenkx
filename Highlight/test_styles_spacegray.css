@@ -136,3 +136,20 @@ a {
 	color: color(var(--foreground) alpha(0.6));
 	padding: 1px 2px;
 }
+
+/* Clickable compiler diagnostics / runtime-error location (cph_jump). */
+.diag-list {
+	margin-top: 2px;
+}
+.diag {
+	color: color(var(--bluish));
+	text-decoration: underline;
+	font-family: monospace;
+}
+.diag-error, .diag-fatal-error { color: var(--redish); }
+.diag-warning { color: var(--yellowish); }
+.diag-note { color: color(var(--foreground) alpha(0.7)); }
+.diag-msg {
+	color: color(var(--foreground) alpha(0.75));
+	padding-left: 6px;
+}

@@ -5,13 +5,29 @@ cph-by-chenkx - 运行模式命令（跑完全部 / 只重跑失败 / 强制重�
 命令面板与快捷键上。
 """
 
+import os
+
 import sublime
 import sublime_plugin
+
+from .core.cph_build_mode import MODE_DEBUG, MODE_RELEASE, get_mode, toggle as toggle_build_mode
 
 
 def _is_run_view(view):
 	"""The -run panel is a scratch view tagged with this setting."""
 	return bool(view.settings().get('cph_run_view'))
+
+
+def _paired_run_view(view, file_name):
+	"""The '<name> -run' view of this source file, if it is open."""
+	window = view.window()
+	if window is None or not file_name:
+		return None
+	target = os.path.split(file_name)[-1] + ' -run'
+	for other in window.views():
+		if (other.name() or '') == target:
+			return other
+	return None
 
 
 class _RunModeMixin(object):
@@ -56,6 +72,55 @@ class CphRunForceRecompileCommand(_RunModeMixin, sublime_plugin.TextCommand):
 	"""Run ignoring the compile cache (force a fresh compile)."""
 
 	flags = {'force_compile': True}
+
+
+class CphRunParallelCommand(_RunModeMixin, sublime_plugin.TextCommand):
+	"""Judge every test at the same time with a small worker pool.
+
+	Serial execution costs roughly the time limit times the number of tests
+	when several of them time out; with the default 4 workers that drops to
+	about a quarter. See core/cph_parallel and the `parallel_workers` setting.
+	"""
+
+	flags = {'parallel': True}
+
+
+class CphToggleBuildModeCommand(sublime_plugin.TextCommand):
+	"""Switch the compile command between release (-O2) and debug.
+
+	Debug mode adds ``-g -fsanitize=address,undefined`` and drops the
+	optimisation, so a crash prints ``file:line`` and the detail view can jump
+	straight to it. Release mode guarantees ``-O2`` and removes the sanitizer
+	flags again, so local timings mean something. The mode is remembered per
+	source file in memory only - the user's settings file is never touched.
+	"""
+
+	def run(self, edit):
+		view = self.view
+		file_name = view.file_name()
+		if not file_name:
+			sublime.status_message('[cph-by-chenkx] save the file first')
+			return
+		mode = toggle_build_mode(file_name)
+		if mode == MODE_DEBUG:
+			detail = 'debug (-O0 -g -fsanitize) - crash lines are clickable'
+		else:
+			detail = 'release (-O2) - timings match the judge'
+		sublime.status_message('[cph-by-chenkx] build mode: %s  |  %s' % (mode, detail))
+
+		# The compile cache key includes the command, so the next run
+		# recompiles automatically; just refresh the panel's status label.
+		target = view if _is_run_view(view) else _paired_run_view(view, file_name)
+		if target is not None:
+			target.run_command('cph_test_manager', {'action': 'refresh_status'})
+
+	def is_enabled(self):
+		return _is_run_view(self.view) or bool(self.view.file_name())
+
+	def description(self):
+		file_name = self.view.file_name()
+		mode = get_mode(file_name) if file_name else MODE_RELEASE
+		return 'Debug/Release build mode (now: %s)' % mode
 
 
 class CphTestMenuCommand(sublime_plugin.TextCommand):

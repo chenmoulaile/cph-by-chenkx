@@ -1,0 +1,174 @@
+"""cph-by-chenkx - 并行跑全部测试点
+
+串行跑的时候，总耗时 ≈ 时限 × 测试点数：5 个点里有 2 个 TLE，就得干等 2×TL。
+这里用一个小的 worker 池（默认 4）同时跑，墙钟时间大约降到 1/4。
+
+设计要点：
+
+- **每个测试点一个独立的 ProcessManager**：各自一个进程、各自的管道和 stderr
+  临时文件，worker 之间不共享任何可变状态（串行路径里复用的那个实例在这里
+  不能用）。
+- 时限由我们自己看门：超时就 terminate，判定沿用主流程的口径
+  （被我们杀掉 + 崩溃特征 → RE，否则 TLE）。
+- 结果全部算完后再用 ``sublime.set_timeout`` 回主线程写 UI，工作线程不碰视图。
+
+放在 core/ 是因为根级插件模块之间不允许互相 import（Package Control 审查规则）。
+ProcessManager 由调用方以工厂函数传入，core 不反向依赖 Modules。
+"""
+
+import threading
+import time
+
+import sublime
+
+from .cph_verdict import (get_verdict, get_verdict_by_code, find_crash_location,
+                          looks_like_crash)
+
+#: Extra allowance on top of the time limit before we kill a run. Kept tiny so
+#: the semantics match the serial path (whose watchdog kills at exactly the
+#: limit, measured from before Popen); this only covers the 10ms poll step.
+_GRACE_SECONDS = 0.05
+
+
+def _run_one(make_manager, input_text, expected, time_limit_ms, memory_limit_mb,
+             float_tolerance, regard_pe_as_ac):
+    """Run one test in this thread. Never raises: errors become a result."""
+    result = {
+        'rtcode': None, 'stdout': '', 'stderr': '', 'runtime': 0,
+        'memory': None, 'verdict': None, 'crash': None, 'error': None,
+    }
+    manager = None
+    try:
+        manager = make_manager()
+        manager.set_separate_stderr(True)
+        if time_limit_ms:
+            manager.set_time_limit(time_limit_ms)
+        if memory_limit_mb:
+            manager.set_memory_limit(memory_limit_mb)
+
+        started = time.time()
+        manager.run_file()
+        if input_text:
+            manager.insert(input_text)
+
+        limit_s = float(time_limit_ms or 10000) / 1000.0
+        deadline = started + limit_s + _GRACE_SECONDS
+        killed = False
+        while manager.is_stopped() is None:
+            if time.time() > deadline:
+                killed = True
+                try:
+                    manager.terminate()
+                except Exception:
+                    pass
+                break
+            time.sleep(0.01)
+
+        # Measure the runtime the moment the process is gone - before
+        # read()/get_stderr()/finish_memory_sampling(), which can take a
+        # noticeable moment on Windows and used to be billed to the program.
+        runtime = int((time.time() - started) * 1000)
+        stdout = manager.read()
+        stderr = manager.get_stderr()
+        try:
+            memory = manager.finish_memory_sampling()
+        except Exception:
+            memory = None
+        rtcode = manager.is_stopped()
+
+        result.update(rtcode=rtcode, stdout=stdout, stderr=stderr,
+                      runtime=runtime, memory=memory)
+
+        if killed:
+            # Same rule as the serial path: a crash signature means the
+            # process died on its own and our kill was collateral.
+            if looks_like_crash(stderr or stdout):
+                result['verdict'] = get_verdict('runtime_error')
+            else:
+                result['verdict'] = get_verdict('time_limit_exceed')
+        else:
+            result['verdict'] = get_verdict_by_code(
+                rtcode=int(rtcode) if rtcode is not None else 0,
+                runtime=runtime,
+                time_limit_ms=time_limit_ms,
+                memory_limit_mb=memory_limit_mb,
+                stderr=stderr,
+                stdout=stdout,
+                expected_output=expected,
+                ignore_error=True,
+                regard_pe_as_ac=regard_pe_as_ac,
+                memory_used_mb=memory,
+                float_tolerance=float_tolerance,
+            )
+
+        if result['verdict']['name'] == 'RE':
+            result['crash'] = find_crash_location(stderr or stdout)
+    except Exception as e:
+        result['error'] = '%s: %s' % (type(e).__name__, e)
+        result['verdict'] = get_verdict('unknown_error')
+    finally:
+        if manager is not None:
+            try:
+                manager.close_stderr()
+            except Exception:
+                pass
+    return result
+
+
+def run_batch(make_manager, cases, workers=4, time_limit_ms=None,
+              memory_limit_mb=None, float_tolerance=0, regard_pe_as_ac=False,
+              on_done=None, on_progress=None):
+    """Judge every case in `cases` concurrently.
+
+    `cases` is a list of (input_text, expected_output) pairs.
+    `on_done(results)` and `on_progress(done, total)` are called on the MAIN
+    thread (via sublime.set_timeout), so they may touch views.
+    Returns the number of worker threads started.
+    """
+    total = len(cases)
+    if total == 0:
+        if on_done:
+            sublime.set_timeout(lambda: on_done([]), 0)
+        return 0
+
+    workers = max(1, min(int(workers or 1), total))
+    results = [None] * total
+    state = {'next': 0, 'done': 0}
+    lock = threading.Lock()
+
+    def report():
+        with lock:
+            state['done'] += 1
+            done = state['done']
+        if on_progress:
+            sublime.set_timeout(lambda done=done: on_progress(done, total), 0)
+
+    def worker():
+        while True:
+            with lock:
+                if state['next'] >= total:
+                    return
+                index = state['next']
+                state['next'] += 1
+            input_text, expected = cases[index]
+            results[index] = _run_one(
+                make_manager, input_text, expected, time_limit_ms,
+                memory_limit_mb, float_tolerance, regard_pe_as_ac)
+            report()
+
+    def supervise():
+        threads = []
+        for _ in range(workers):
+            thread = threading.Thread(target=worker)
+            thread.daemon = True
+            thread.start()
+            threads.append(thread)
+        for thread in threads:
+            thread.join()
+        if on_done:
+            sublime.set_timeout(lambda: on_done(results), 0)
+
+    controller = threading.Thread(target=supervise)
+    controller.daemon = True
+    controller.start()
+    return workers

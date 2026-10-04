@@ -131,6 +131,9 @@ copy-paste reference if you want to change one.
 - **输出上限**：`max_output_bytes`（默认 8MB）防止疯狂输出卡死编辑器，超出部分会被截断并给出提示
 - **多文件编译**：`run_settings` 里用 `extra_sources`（glob）与 `include_dirs`，编译命令中用 `{extra_sources}` / `{include_dirs}` 占位符
 - **面板汇总行**：底部显示 `4/5 通过 · 首个失败 test 3 · 总用时 1.24s`
+- **错误位置可点击**：RE 的 `文件:行:号` 和编译器的每条诊断都会渲染成链接，点一下直接跳到源码那一行（已经打开的标签会被复用，不会新开一个）
+- **Debug / Release 一键切换**（`Ctrl+Alt+G`）：Debug 去掉优化并加 `-g -fsanitize=address,undefined`，崩溃时能给出精确行号；Release 保证 `-O2` 并去掉 sanitizer，计时与评测机可比。按文件记忆，**不写你的设置文件**；当前模式显示在运行面板状态栏
+- **并行运行**（`Ctrl+Alt+Shift+P`）：每个测试点一个独立进程、`parallel_workers`（默认 4）个 worker 同时跑。串行时 5 个点里有 2 个 TLE 要等 2×时限，并行约 1/4
 - **环境自检**：`Ctrl+Alt+D` 检查编译器是否在 PATH、端口占用、测试路径可写、资源可加载，并给出一段可粘贴到 issue 的 Markdown 报告
 - **纯键盘流**：`Ctrl+Alt+M` 选测试点 → 运行 / 详情 / 编辑 / 接受 / 拒绝 / 删除
 - **对拍反例入库**：对拍发现反例自动保存为正式测试点（可用 `stress_save_counterexample` 关闭）
@@ -212,7 +215,9 @@ copy-paste reference if you want to change one.
 | `Ctrl+Alt+E` (Mac: `Cmd+Alt+E`) | 把全部测试导出成 `1.in` / `1.out` 文件对 |
 | `Ctrl+Alt+R` (Mac: `Cmd+Alt+R`) | 只重跑失败的测试点（已 AC 的自动跳过） |
 | `Ctrl+Alt+Shift+B` | 跑完全部测试点（不因失败中断） |
+| `Ctrl+Alt+Shift+P` | **并行**跑完全部测试点（多进程，TLE 多时总时长约 1/4） |
 | `Ctrl+Alt+Shift+R` | 强制重新编译后运行（忽略编译缓存） |
+| `Ctrl+Alt+G` (Mac: `Cmd+Alt+G`) | 切换 Debug / Release 编译模式（状态栏显示当前模式） |
 | `Ctrl+Alt+D` (Mac: `Cmd+Alt+D`) | 环境自检（编译器 / 端口 / 路径 / 资源） |
 | `Ctrl+Alt+M` (Mac: `Cmd+Alt+M`) | 键盘选择测试点并运行 / 详情 / 编辑（不用鼠标） |
 | `Enter` (在 TestSyntax 中) | 插入行 |

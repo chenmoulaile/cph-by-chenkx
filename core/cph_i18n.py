@@ -102,6 +102,14 @@ STRINGS = {
         'zh': '测试面板还没准备好（编译失败或尚未编译）',
         'en': 'the test panel is not ready yet (nothing compiled)',
     },
+    'parallel_running': {
+        'zh': '并行运行测试点：{done}/{total}',
+        'en': 'running tests in parallel: {done}/{total}',
+    },
+    'parallel_done': {
+        'zh': '并行运行完成：{total} 个测试点',
+        'en': 'parallel run finished: {total} tests',
+    },
     'tle_debug_build': {
         'zh': '编译命令里有 -DLOCAL/-DDEBUG：调试宏通常会把 debug() 输出打到不缓冲的 '
               'stderr，循环里调用时输出量是 O(n²)，本地会比评测机慢几十倍——'

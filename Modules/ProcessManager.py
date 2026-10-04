@@ -16,6 +16,7 @@ import shlex
 from .memprobe import MemorySampler, bytes_to_mb, sample_memory_bytes
 from .build_artifact import output_path_from_compile_cmd, resolve_artifact, retarget_command
 from ..core.cph_i18n import t
+from ..core.cph_build_mode import get_mode as _build_mode, transform as _apply_build_mode
 
 
 def _hidden_startupinfo():
@@ -281,7 +282,11 @@ class ProcessManager(object):
 			if file_ext in x['extensions']:
 				if x['compile_cmd'] is None:
 					return None
-				return self.format_command(self._expand_optional(x['compile_cmd'], x))
+				cmd = self.format_command(self._expand_optional(x['compile_cmd'], x))
+				# Debug / Release switch (see core/cph_build_mode). Applied
+				# here so every consumer - the run itself, the compile cache
+				# fingerprint and doctor - sees the same command.
+				return _apply_build_mode(cmd, _build_mode(self.file))
 		else:
 			return -1
 
