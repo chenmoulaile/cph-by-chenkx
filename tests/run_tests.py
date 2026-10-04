@@ -1465,15 +1465,25 @@ def main():
     check('MSVC style diagnostics are parsed',
           jump.diagnostics('main.cpp(12,5): error C2065: undeclared')[0][:3]
           == ('main.cpp', 12, 5))
-    html, targets = jump.links_html(jump.diagnostics(gcc), base_dir='D:/a/b')
-    check('links carry an index and the targets are absolute',
+    html, targets = jump.links_html(jump.diagnostics(gcc))
+    check('links carry an index and the targets match the diagnostics',
           'href="jump:0"' in html and 'href="jump:2"' in html
+          and len(targets) == 3
           and targets[0][0].endswith('main.cpp') and targets[0][1] == 12
-          and targets[1][0] == os.path.normpath('D:/a/b/main.cpp'), str(targets))
-    html1, targets1 = jump.one_link('D:/a/b/main.cpp', 12)
+          and targets[2][1] == 9, str(targets))
+    # base_dir only applies to a path that is relative *on this platform*
+    # (the compiler normally emits an absolute one).
+    relative_dir = os.path.join('some', 'dir')
+    _, rel_targets = jump.links_html(
+        jump.diagnostics('main.cpp:3:1: error: e'), base_dir=relative_dir)
+    check('a relative diagnostic is resolved against the base dir',
+          rel_targets[0][0] == os.path.normpath(
+              os.path.join(relative_dir, 'main.cpp')), str(rel_targets))
+    html1, targets1 = jump.one_link(os.path.join('some', 'dir', 'main.cpp'), 12)
     check('a single location becomes one link',
           'href="jump:0"' in html1
-          and targets1 == [[os.path.normpath('D:/a/b/main.cpp'), 12]], str(targets1))
+          and targets1 == [[os.path.normpath(
+              os.path.join('some', 'dir', 'main.cpp')), 12]], str(targets1))
     check('html is escaped for minihtml',
           '&lt;' in jump.esc('<x>') and jump.esc('a & b') == 'a &amp; b')
 
@@ -1507,12 +1517,12 @@ def main():
 
     # Parallel runner: shape + worker clamping (the real-process behaviour is
     # covered by .workbuddy/harness_parallel.py).
+    # on_done/on_progress are None on purpose: they go through
+    # sublime.set_timeout, which the fake module does not provide.
     check('the parallel runner reports its worker count',
-          parallel.run_batch(lambda: None, [('a', 'b')], workers=8,
-                             on_done=lambda r: None) == 1)
+          parallel.run_batch(lambda: None, [('a', 'b')], workers=8) == 1)
     check('an empty batch finishes immediately',
-          parallel.run_batch(lambda: None, [], workers=4,
-                             on_done=lambda r: None) == 0)
+          parallel.run_batch(lambda: None, [], workers=4) == 0)
     check('a failed worker becomes a result, not an exception',
           parallel._run_one(lambda: (_ for _ in ()).throw(RuntimeError('boom')),
                             'in', 'out', 1000, 256, 0, False)['verdict']['name']
