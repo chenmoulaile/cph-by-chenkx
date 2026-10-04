@@ -1,8 +1,30 @@
 # cph-by-chenkx — Package Control Submission Notes
 
-Package version: v1.4.17
+Package version: v1.4.18
 Repository: https://github.com/chenmoulaile/cph-by-chenkx
 Channel entry file: `repository/c/cph-by-chenkx.json` (see snippet at the bottom)
+
+## v1.4.18 notes (hotfix)
+
+- **v1.4.17 could not compile or run anything.** `make_opd()` iterated the
+  tests with `for t in tests:`, and `t` is the i18n helper imported at module
+  level. Python makes a name local for the whole function as soon as it is
+  assigned anywhere in it, so the later
+  `self.set_compile_bar(t('compiling'))` raised
+  `UnboundLocalError: local variable 't' referenced before assignment`.
+  The loop variable is renamed; the same latent pattern in
+  `_source_fingerprint()` (a loop variable named `path`, shadowing
+  `from os import path`) is fixed too.
+- **New static guard for the whole bug class**: `tests/run_tests.py` walks
+  every plugin file with `ast` and fails when a function both assigns to a name
+  and calls it, while that name is also a module-level import/definition.
+  Verified by injection (renaming the loop variable back to `t` is caught).
+  `make_opd.__code__.co_varnames` is also pinned to contain no local `t`.
+- Removed unused imports / dead locals (`sys`, `subprocess`, `shlex`,
+  `VERDICTS`, `set_lang`, ... in `test_manager.py`; `cph_stress.py`,
+  `cph_language.py`, `cph_tests_io.py`, `test_edit.py`). pyflakes reports no
+  shadowing/undefined problem in the files touched by this release.
+- Regression checks: 166 -> 168.
 
 ## v1.4.17 notes
 
