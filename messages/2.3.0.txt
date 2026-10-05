@@ -47,7 +47,7 @@ The shipped default C++/C settings no longer contain "-DLOCAL" either.
 
 Notes:
 
-* tests/run_tests.py: 275 -> 293 checks; the stress flow harness now drives
+* tests/run_tests.py: 275 -> 294 checks; the stress flow harness now drives
   two sessions at once and verifies both finish cleanly.
 * The stress page reuse, the per-file guard and the session registry are
   covered by regression tests, as are the quoted-space fix and the

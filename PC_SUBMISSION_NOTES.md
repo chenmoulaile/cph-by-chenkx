@@ -24,7 +24,7 @@ Channel entry file: `repository/c/cph-by-chenkx.json` (see snippet at the bottom
 - Stress builds drop `-DLOCAL` / `-DDEBUG` from the compile command (the
   user's own Run keeps it), and the shipped default C++/C commands no longer
   carry `-DLOCAL`.
-- tests/run_tests.py: 275 -> 293 checks.
+- tests/run_tests.py: 275 -> 294 checks.
 
 ## v2.1.1 notes
 

@@ -1941,9 +1941,18 @@ def main():
     check('two runs can be live side by side',
           len(stress._running_sessions()) >= 2)
     check('a start for a file already running is refused (per file)',
-          stress._running_for('D:/a/MAIN.CPP') is sess_a)
+          stress._running_for('D:/a/main.cpp') is sess_a)
     check('another file is not blocked by the running one',
           stress._running_for('D:/c/main.cpp') is None)
+    # Paths are compared the way the platform does: only Windows folds case,
+    # so the case-insensitive half of the check is guarded (a plain assertion
+    # here failed on the Linux/macOS runners).
+    if os.path.normcase('A') == 'a':
+        check('the running file is recognised regardless of case (Windows)',
+              stress._running_for('D:/a/MAIN.CPP') is sess_a)
+    else:
+        check('case matters where the platform says it does',
+              stress._running_for('D:/a/MAIN.CPP') is None)
     check('sessions are registered so the Stop key can find them',
           stress._sessions[sess_a['stress_view_id']] is sess_a)
     for leftover in (sess_a, sess_b):
