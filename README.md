@@ -189,6 +189,14 @@ copy-paste reference if you want to change one.
   你粘贴样例的占位），不会写进测试文件。
 - **`PE`（Presentation Error）**：只有「token 完全相同但空白/换行不同」才算 PE，默认与 WA 分别显示；若你的 OJ 把 PE 也算通过，把 `regard_pe_as_ac` 设为 `true`。
 - 输出超过 `max_output_bytes`（默认 8MB）时超出部分会被丢弃，并插入一行截断提示。
+- **抓题没有页面体积上限**：`core/cph_fetch.py` 直接 `response.read()` 把整页一次性读进
+  内存，不按字节截断——题库整页嵌入、大图多的站点会照单全收，内存占用只跟页面大小成正比。
+  唯一的闸门是 `fetch(url, timeout=25)` 的 **25 秒**：超时按抓取失败报 `抓取失败：…`（英文环境
+  是 `fetch failed: ...`），不会给你半页题面。题面本身不做任何长度裁剪，样例、标题、题面正文
+  有多长就写多长（该模块里唯一的定长函数 `first_lines(text, limit=200)` 目前**没有任何调用方**，
+  是留给以后做摘要的死代码，所以状态栏与消息里也没有 200 字的截断）。
+  题面转 Markdown 时会丢掉 `<script>` / `<style>` / 注释，所以靠内嵌脚本渲染的题目
+  （少数动态 OJ）会解析成空，此时提示「题面解析为空（可能需要在浏览器里登录）」。
 - **非 ASCII 文件名靠自动识别**：Windows 上编译器按 ANSI 代码页写出的 `中文.exe`
   在磁盘上会变成另一个名字（GBK 字节被当成 latin-1 读），插件编译后会核对产物、
   按真实的文件名去运行，并在控制台说明（`the binary is ... on disk, not ...`）。
@@ -210,7 +218,8 @@ copy-paste reference if you want to change one.
 | --- | --- |
 | `Ctrl+Alt+B` (Mac: `Cmd+Alt+B`) | 运行测试 |
 | `Ctrl+Alt+I` (Mac: `Cmd+Alt+I`) | 从文件导入测试 |
-| `Ctrl+Alt+S` / `Ctrl+Alt+Shift+S` (Mac: `Cmd+Alt+S` / `Cmd+Alt+Shift+S`) | 开始 / 停止对拍 |
+| `Ctrl+Alt+S` (Mac: `Cmd+Alt+S`) | 开始对拍（对拍输出页上也按它 = 重新跑该文件的这场对拍） |
+| `Ctrl+Alt+Shift+S` (Mac: `Cmd+Alt+Shift+S`) | 停止对拍，**只在对拍输出页生效**；多个文件同时对拍时停的是当前页这一场 |
 | `Ctrl+Alt+L` / `Ctrl+Alt+Shift+L` (Mac: `Cmd+Alt+L` / `Cmd+Alt+Shift+L`) | 开启 / 停止 Competitive Companion 监听 |
 | `Ctrl+Alt+P` 或 `Ctrl+K, Ctrl+P` (Mac: `Cmd+Alt+P` 或 `Cmd+K, Cmd+P`) | 收缩 / 恢复右侧测试面板 |
 | `Ctrl+Alt+T` (Mac: `Cmd+Alt+T`) | 展开模板片段（光标停在关键字后，如 `fastio`） |
@@ -284,7 +293,8 @@ int main() {
 - **发现不一致**时立即停止，展示：输入数据、你的输出、std 输出、逐行差异（`user:` vs `std:`）
 - 跑满最大轮数全部一致则显示对拍通过；全部轮次超时会明确提示「未比较任何输出」
 - 结束时一定会报告一行「对拍结束，用时 X 秒」，状态栏同步显示当前轮次，跑得慢和卡住能分清
-- 中途可用 `Stop stress test`（`Ctrl+Alt+Shift+S`）停止，**立即生效**：正在跑的那个进程会被直接结束，不用等这一轮的时限走完
+- 中途可用 `Stop stress test`（`Ctrl+Alt+Shift+S`）停止，**立即生效**：正在跑的那个进程会被直接结束，不用等这一轮的时限走完。**这个快捷键只在对拍输出页生效**，切到哪个对拍页就停哪一个，不会影响其它操作
+- **支持多个文件同时对拍**：每个文件有自己的 `xxx -stress` 输出页，同一文件重复开始会复用它自己的页面；关闭某个对拍页会自动停止它对应的那场对拍
 - **多解题 / 浮点题也能对拍**：`run_settings` 里配了 `checker` 时由 checker 判定
   （不再逐行比对，输出任意合法方案都不会被误报），checker 的 `quitf` 消息会跟着反例
   一起显示；没配 checker 时 `float_tolerance` 同样生效，最后一位小数的差异不再算不一致
@@ -294,6 +304,9 @@ int main() {
 - 三个程序都从 stdin 读、往 stdout 写，调试信息请用 `cerr`（配合 `"ignore_stderr": true`）
 - Python 文件也可以直接作为你的程序 / std / gen 参与对拍
 - 对拍会使用 `run_settings` 里的编译命令；失败的反例可自动存为正式测试点
+- **对拍的编译命令会自动去掉 `-DLOCAL` / `-DDEBUG`**：这两个宏会把本地评测用的调试输出
+  （`#ifdef LOCAL` 里的 `cerr`、读文件等）带进对拍，白白拖慢每一轮；你自己的 Run/编译
+  仍然用设置里完整的命令。插件自带的默认设置也不再包含 `-DLOCAL`
 - 对拍的可执行文件编译在独立的临时目录里，**不会占用你源码目录下的 `.exe`**：
   对拍跑着的时候照样可以编译运行同一个文件
 - 需要给整轮对拍设总时长上限时用 `stress_max_wall_seconds`（默认 0 表示不限）
@@ -303,7 +316,10 @@ int main() {
 - **`-DLOCAL` + 循环里的 `debug()` 会让本地运行超时**：`std::cerr` 默认不缓冲，把整个
   数组丢给 `cerr` 的调试语句放在主循环里时，输出量是 O(n²)，本地 n=2000 就要 20 秒以上
   （实测同一份代码不加 `-DLOCAL` 只要 0.02 秒）。提交前记得删掉这类调试输出，或把编译
-  命令里的 `-DLOCAL` 去掉。
+  命令里的 `-DLOCAL` 去掉（对拍已经自动去掉，普通运行仍然按你的设置来）。
+- **文件名里有连续空格也没问题**：`P2517  ZJOI 2010, 基站选址.cpp` 这类名字会被原样传给
+  编译器。以前「美化编译命令」时会把引号内的连续空格折叠成一个，导致 cc1plus 报
+  `No such file or directory`（磁盘上明明有这个文件）
 
 ## 致谢
 

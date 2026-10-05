@@ -6,6 +6,7 @@ import sublime
 import sublime_plugin
 import os
 import random
+import re
 import shlex
 import shutil
 import subprocess
@@ -15,7 +16,8 @@ import time
 
 from .core.cph_settings import get_settings, load_all_tests, save_tests
 from .core.cph_tests_merge import merge_tests
-from .core.cph_state import set_stress_running
+from .core.cph_state import (set_stress_running, register_stress_view,
+                             unregister_stress_view)
 from .core.cph_target import context_menu_enabled, visible as context_menu_visible
 from .core.cph_i18n import t
 from .core.cph_verdict import normalize_lines, outputs_equal
@@ -30,23 +32,71 @@ class _Aborted(Exception):
     """Raised when the user stops a stress test mid-round."""
 
 
-_stress_state = {
-    'running': False,
-    'stop_requested': False,
-    'std_file': None,
-    'generator_file': None,
-    'user_file': None,
-    'time_limit': 2,
-    'max_rounds': 1000,
-    'current_round': 0,
-    'last_diff': None,
-    # The program running right now, so Stop can kill it instead of waiting
-    # out its time limit.
-    'current_proc': None,
-    # Scratch directory the stress binaries are built into.
-    'build_root': None,
-    'build_seq': 0,
-}
+# One session per stress run, keyed by the id of its output view. Several
+# files can be stress tested at the same time; each gets its own page, its
+# own scratch build directory and its own Stop.
+_sessions = {}
+
+
+def _sync_stress_state():
+    """Mirror 'any session running' into the shared state (keybindings)."""
+    set_stress_running(any(s['running'] for s in _sessions.values()))
+
+
+def _new_session(user_file, std_file, gen_file, time_limit, max_rounds,
+                 view_id=None):
+    sess = {
+        'running': True,
+        'stop_requested': False,
+        'std_file': std_file,
+        'generator_file': gen_file,
+        'user_file': user_file,
+        'time_limit': time_limit,
+        'max_rounds': max_rounds,
+        'current_round': 0,
+        'current_seed': None,
+        # The program running right now, so Stop can kill it instead of
+        # waiting out its time limit.
+        'current_proc': None,
+        # Scratch directory the stress binaries are built into.
+        'build_root': None,
+        'build_seq': 0,
+        'last_diff': None,
+        'last_counterexample': None,
+        'stress_view_id': view_id,
+    }
+    if view_id is not None:
+        _sessions[view_id] = sess
+        register_stress_view(view_id, user_file=user_file)
+    _sync_stress_state()
+    return sess
+
+
+def _running_for(user_file):
+    """The session currently stress testing this exact file, or None."""
+    key = os.path.normcase(user_file or '')
+    for sess in _sessions.values():
+        if sess['running'] and                 os.path.normcase(sess.get('user_file') or '') == key:
+            return sess
+    return None
+
+
+def _running_sessions():
+    return [s for s in _sessions.values() if s['running']]
+
+
+def _session_for_view(view):
+    """The session this view belongs to: its own page, or its source file."""
+    sess = _sessions.get(view.id())
+    if sess is not None:
+        return sess
+    file_name = view.file_name()
+    if file_name:
+        key = os.path.normcase(file_name)
+        for sess in _sessions.values():
+            if os.path.normcase(sess.get('user_file') or '') == key:
+                return sess
+    return None
 
 
 #: Hints for the two programs a stress test needs, matched against the stem
@@ -262,17 +312,24 @@ def _pick_file(window, start_dir, title, candidates, on_done):
     _open_file_dialog(window, start_dir, title, on_done)
 
 
-def _open_stress_view(view):
+def _open_stress_view(view, user_file):
+    """Open (or reuse) the stress page of this exact source file.
+
+    The page is matched by its full name '<basename> -stress', so starting a
+    stress test for another file opens another page instead of hijacking the
+    one that is already open - several files can be tested at once.
+    """
     window = view.window()
+    wanted = os.path.basename(user_file) + ' -stress'
     stress_view = None
     for v in window.views():
-        if v.name() and v.name().endswith(' -stress'):
+        if v.name() == wanted:
             stress_view = v
             break
 
     if stress_view is None:
         stress_view = window.new_file()
-        stress_view.set_name(os.path.basename(view.file_name() or 'stress') + ' -stress')
+        stress_view.set_name(wanted)
         stress_view.set_scratch(True)
         stress_view.run_command('set_setting', {'setting': 'word_wrap', 'value': True})
         stress_view.run_command('set_setting', {'setting': 'fold_buttons', 'value': False})
@@ -281,28 +338,20 @@ def _open_stress_view(view):
     window.focus_view(stress_view)
     stress_view.run_command('select_all')
     stress_view.run_command('left_delete')
-    _stress_state['stress_view_id'] = stress_view.id()
+    return stress_view
 
 
 def _launch(view, user_file, std_file, gen_file, time_limit, max_rounds):
-    _stress_state['running'] = True
-    _stress_state['stop_requested'] = False
-    set_stress_running(True)
-    _stress_state['std_file'] = std_file
-    _stress_state['generator_file'] = gen_file
-    _stress_state['user_file'] = user_file
-    _stress_state['time_limit'] = time_limit
-    _stress_state['max_rounds'] = max_rounds
-    _stress_state['current_round'] = 0
-    _stress_state['last_diff'] = None
+    window = view.window()
+    if window is None:
+        return
+    stress_view = _open_stress_view(view, user_file)
+    sess = _new_session(user_file, std_file, gen_file, time_limit, max_rounds,
+                        view_id=stress_view.id())
 
     sublime.status_message(t('stress_running'))
-    _open_stress_view(view)
 
-    worker = threading.Thread(
-        target=_run_stress_loop,
-        args=(user_file, std_file, gen_file, time_limit, max_rounds)
-    )
+    worker = threading.Thread(target=_run_stress_loop, args=(sess,))
     worker.daemon = True
     worker.start()
 
@@ -336,19 +385,20 @@ class CphStressWithOptionsCommand(sublime_plugin.TextCommand):
 def _start_flow(view, choose=False):
     user_file = view.file_name()
     if not user_file:
-        # The stress panel is a scratch view and it takes focus when a
-        # run starts, so pressing the key again used to answer "save the
-        # file first" instead of restarting the test.
-        last = _stress_state.get('user_file')
-        if last and os.path.exists(last):
-            user_file = last
+        # The stress page is a scratch view and it takes focus when a run
+        # starts, so pressing the key again used to answer "save the file
+        # first" instead of restarting the test of its own file.
+        sess = _sessions.get(view.id())
+        if sess and sess.get('user_file') and os.path.exists(sess['user_file']):
+            user_file = sess['user_file']
     if not user_file:
         sublime.error_message(t('save_file_first'))
         return
 
-    # Re-entrancy guard: a second Start used to silently overwrite the
-    # state of the loop that is still running.
-    if _stress_state.get('running'):
+    # Re-entrancy guard, per file: a second Start for the same file used to
+    # silently overwrite the state of the loop that is still running. Other
+    # files are free to start their own run next to it.
+    if _running_for(user_file):
         sublime.status_message('cph-by-chenkx: ' + t('stress_already_running'))
         return
 
@@ -443,12 +493,27 @@ class CphStopStressTestCommand(sublime_plugin.TextCommand):
         """
         if event is not None and not context_menu_enabled():
             return False
-        return bool(_stress_state.get('running'))
+        return bool(_running_sessions())
 
     def run(self, edit):
-        if _stress_state['running']:
-            _stress_state['stop_requested'] = True
-            proc = _stress_state.get('current_proc')
+        # The Stop key is bound to the stress page only, so on that page it
+        # stops exactly the run the user is looking at.
+        sess = _session_for_view(self.view)
+        if sess is None:
+            running = _running_sessions()
+            if len(running) == 1:
+                sess = running[0]
+            elif running:
+                sublime.status_message(
+                    'cph-by-chenkx: ' + t('stress_multi_running', n=len(running)))
+                return
+            else:
+                sublime.status_message(
+                    'cph-by-chenkx: ' + t('stress_none_running'))
+                return
+        if sess['running']:
+            sess['stop_requested'] = True
+            proc = sess.get('current_proc')
             if proc is not None:
                 # Kill the program that is running right now instead of
                 # waiting for the round's time limit to expire: with a 10s
@@ -458,10 +523,11 @@ class CphStopStressTestCommand(sublime_plugin.TextCommand):
                 killer.start()
             sublime.status_message('cph-by-chenkx: ' + t('process_terminated'))
         else:
-            # Nothing is running, but if a panel or the running flag was left
-            # behind by an earlier run, clear it so starting works again.
-            _finish_stress()
-            sublime.status_message('cph-by-chenkx: no stress test running')
+            # This run is already over; clear anything it left behind so
+            # starting works again.
+            _finish_stress(sess)
+            sublime.status_message(
+                'cph-by-chenkx: ' + t('stress_none_running'))
 
 
 def _hidden_startupinfo():
@@ -506,7 +572,26 @@ def _format_cmd(template, file, drop_args=True):
     return cmd.format_map(values)
 
 
-def _compile_program(file, time_limit=30):
+_QUOTED_OR_PLAIN = re.compile(r'("[^"]*"|\'[^\']*\')')
+_LOCAL_DEFINE = re.compile(r'(^|\s)-D(?:LOCAL|DEBUG)(?=\s|$)')
+
+
+def _strip_local_define(cmd):
+    """Drop -DLOCAL (and -DDEBUG) from a stress build command.
+
+    Those defines switch the user's own template into local judging mode:
+    `#ifdef LOCAL` blocks read from files or print debug output. During a
+    stress run that output goes into a pipe nobody reads and slows every
+    single round, so the stress binaries are built without them. The main
+    Run path keeps the user's command exactly as configured.
+    """
+    parts = _QUOTED_OR_PLAIN.split(cmd)
+    for i in range(0, len(parts), 2):
+        parts[i] = _LOCAL_DEFINE.sub(r'\1', parts[i])
+    return ''.join(parts).strip()
+
+
+def _compile_program(file, time_limit=30, sess=None):
     """Build a stress-test program using the SAME config as the main flow.
 
     Previously this was hardcoded to `g++ -std=c++11 -O2`, so the stress
@@ -533,10 +618,11 @@ def _compile_program(file, time_limit=30):
         return True, file, ''
 
     cmd = _format_cmd(template, file)
+    cmd = _strip_local_define(cmd)
     # Build into a scratch directory: the same .exe is the one the user
     # rebuilds by hand, and running it for thousands of rounds made that
     # rebuild fail with "Permission denied" until the run was over.
-    out_dir = _build_dir()
+    out_dir = _build_dir(sess)
     exe_path = None
     if out_dir:
         cmd, exe_path = isolate_output(cmd, out_dir)
@@ -551,8 +637,10 @@ def _compile_program(file, time_limit=30):
 
     started_at = time.time()
     try:
-        rc, out, err = _popen_capture(cmd, src_dir, shell=True, timeout=time_limit,
-                                      abort=_stress_abort)
+        rc, out, err = _popen_capture(
+            cmd, src_dir, shell=True, timeout=time_limit,
+            abort=(lambda: sess['stop_requested']) if sess is not None else None,
+            sess=sess)
         if rc != 0:
             print_safe('[cph-by-chenkx] Compile error in %s:\n%s' % (file, err))
             detail = (err or out or '').strip().splitlines()
@@ -689,12 +777,8 @@ def _communicate_abortable(proc, data, timeout, abort):
     return b''.join(out_parts), b''.join(err_parts)
 
 
-def _stress_abort():
-    return bool(_stress_state.get('stop_requested'))
-
-
 def _popen_capture(cmd, cwd, input_text=None, shell=False, timeout=30, env=None,
-                   abort=None):
+                   abort=None, sess=None):
     """Run a command and capture its output as text.
 
     Uses Popen instead of subprocess.run: Sublime's plugin host is Python
@@ -718,12 +802,14 @@ def _popen_capture(cmd, cwd, input_text=None, shell=False, timeout=30, env=None,
         stderr=subprocess.PIPE,
         startupinfo=_hidden_startupinfo()
     )
-    _stress_state['current_proc'] = proc
+    if sess is not None:
+        sess['current_proc'] = proc
     data = input_text.encode('utf-8', 'replace') if isinstance(input_text, str) else input_text
     try:
         out, err = _communicate_abortable(proc, data, timeout, abort)
     finally:
-        _stress_state['current_proc'] = None
+        if sess is not None:
+            sess['current_proc'] = None
     return (proc.returncode,
             (out or b'').decode('utf-8', 'replace'),
             (err or b'').decode('utf-8', 'replace'))
@@ -760,7 +846,8 @@ def _program_argv(file):
     return parts
 
 
-def _run_program(program, input_data, cwd=None, time_limit=2.0, env=None):
+def _run_program(program, input_data, cwd=None, time_limit=2.0, env=None,
+                 sess=None):
     """Run a program with the run_settings command; program is a source file."""
     argv = _program_argv(program) if not isinstance(program, list) else program
     if not argv:
@@ -770,7 +857,9 @@ def _run_program(program, input_data, cwd=None, time_limit=2.0, env=None):
     try:
         rc, out, err = _popen_capture(argv, cwd, input_text=input_data,
                                      timeout=time_limit, env=env,
-                                     abort=_stress_abort)
+                                     abort=(lambda: sess['stop_requested'])
+                                     if sess is not None else None,
+                                     sess=sess)
         return (rc, out, err, False)
     except subprocess.TimeoutExpired:
         return (-1, '', '', True)
@@ -782,13 +871,13 @@ def _run_program(program, input_data, cwd=None, time_limit=2.0, env=None):
         return (-1, '', str(e), False)
 
 
-def _build_dir():
+def _build_dir(sess=None):
     """A fresh scratch directory for one stress binary."""
-    root = _stress_state.get('build_root')
+    root = sess.get('build_root') if sess is not None else None
     if not root:
         return None
-    seq = _stress_state.get('build_seq', 0) + 1
-    _stress_state['build_seq'] = seq
+    seq = (sess.get('build_seq') or 0) + 1
+    sess['build_seq'] = seq
     path = os.path.join(root, str(seq))
     try:
         os.makedirs(path)
@@ -808,60 +897,65 @@ def _program_command(exe, source_file):
     return None
 
 
-def _finish_stress():
+def _finish_stress(sess):
     """Release everything a run owned, whether it ended or was stopped."""
-    root = _stress_state.get('build_root')
+    root = sess.get('build_root')
     if root:
         try:
             shutil.rmtree(root, ignore_errors=True)
         except Exception:
             pass
-    _stress_state['build_root'] = None
-    _stress_state['build_seq'] = 0
-    _stress_state['current_proc'] = None
-    _stress_state['current_round'] = 0
-    _stop_stress()
+    sess['build_root'] = None
+    sess['build_seq'] = 0
+    sess['current_proc'] = None
+    sess['current_round'] = 0
+    _stop_stress(sess)
 
 
-def _run_stress_loop(user_file, std_file, gen_file, time_limit, max_rounds):
+def _run_stress_loop(sess):
+    user_file = sess['user_file']
+    std_file = sess['std_file']
+    gen_file = sess['generator_file']
+    time_limit = sess['time_limit']
+    max_rounds = sess['max_rounds']
     wall_start = time.time()
-    _stress_state['build_seq'] = 0
-    _stress_state['build_root'] = None
+    sess['build_seq'] = 0
+    sess['build_root'] = None
     try:
         # Every stress binary gets its own scratch directory, so the .exe in
         # the source directory stays free for the user to rebuild.
-        _stress_state['build_root'] = tempfile.mkdtemp(prefix='cph-stress-')
+        sess['build_root'] = tempfile.mkdtemp(prefix='cph-stress-')
     except Exception:
-        _stress_state['build_root'] = None
+        sess['build_root'] = None
     try:
         sublime.set_timeout(
-            lambda: _append_stress('[cph-by-chenkx] Compiling programs...\n'), 0)
+            lambda: _append_stress(sess, '[cph-by-chenkx] Compiling programs...\n'), 0)
 
-        ok1, user_exe, why1 = _compile_program(user_file)
+        ok1, user_exe, why1 = _compile_program(user_file, sess=sess)
         if not ok1:
             sublime.set_timeout(
-                lambda w=why1: _append_stress(
+                lambda w=why1: _append_stress(sess, 
                     '[cph-by-chenkx] Failed to compile user program: '
                     + os.path.basename(user_file) + (': ' + w if w else '') + '\n'), 0)
-            _stop_stress()
+            _stop_stress(sess)
             return
 
-        ok2, std_exe, why2 = _compile_program(std_file)
+        ok2, std_exe, why2 = _compile_program(std_file, sess=sess)
         if not ok2:
             sublime.set_timeout(
-                lambda w=why2: _append_stress(
+                lambda w=why2: _append_stress(sess, 
                     '[cph-by-chenkx] Failed to compile std: '
                     + os.path.basename(std_file) + (': ' + w if w else '') + '\n'), 0)
-            _stop_stress()
+            _stop_stress(sess)
             return
 
-        ok3, gen_exe, why3 = _compile_program(gen_file)
+        ok3, gen_exe, why3 = _compile_program(gen_file, sess=sess)
         if not ok3:
             sublime.set_timeout(
-                lambda w=why3: _append_stress(
+                lambda w=why3: _append_stress(sess, 
                     '[cph-by-chenkx] Failed to compile generator: '
                     + os.path.basename(gen_file) + (': ' + w if w else '') + '\n'), 0)
-            _stop_stress()
+            _stop_stress(sess)
             return
 
         # Run the binaries that were just built instead of looking the run
@@ -894,9 +988,9 @@ def _run_stress_loop(user_file, std_file, gen_file, time_limit, max_rounds):
             exe, why = cph_checker.executable(checker_cfg)
             if not exe:
                 sublime.set_timeout(
-                    lambda w=why: _append_stress(
+                    lambda w=why: _append_stress(sess, 
                         '[cph-by-chenkx] Failed to build checker: %s\n' % w), 0)
-                _stop_stress()
+                _stop_stress(sess)
                 return
             checker_exe = exe
 
@@ -914,7 +1008,7 @@ def _run_stress_loop(user_file, std_file, gen_file, time_limit, max_rounds):
             started_extra += '  float tolerance: %g\n' % float_tol
 
         sublime.set_timeout(
-            lambda: _append_stress(
+            lambda: _append_stress(sess, 
                 '[cph-by-chenkx] Stress test started\n'
                 '  user: %s\n  std:  %s\n  gen:  %s\n'
                 '  time limit: %ss/round, generator limit: %ss, max rounds: %d\n'
@@ -934,15 +1028,15 @@ def _run_stress_loop(user_file, std_file, gen_file, time_limit, max_rounds):
         gen_timeouts = 0
         tle_hint_shown = False
         for round_count in range(1, max_rounds + 1):
-            if _stress_state['stop_requested']:
+            if sess['stop_requested']:
                 sublime.set_timeout(
-                    lambda: _append_stress('\n[cph-by-chenkx] ' + t('process_terminated') + ' at round %d\n' % round_count), 0)
+                    lambda: _append_stress(sess, '\n[cph-by-chenkx] ' + t('process_terminated') + ' at round %d\n' % round_count), 0)
                 break
             if wall_limit > 0 and time.time() - wall_start >= wall_limit:
                 # A run that is still going after this long is not going to
                 # finish any time soon; say so instead of hanging.
                 sublime.set_timeout(
-                    lambda l=wall_limit: _append_stress(
+                    lambda l=wall_limit: _append_stress(sess, 
                         '\n[cph-by-chenkx] ' + t('stress_wall_limit', limit=l) + '\n'), 0)
                 break
             if round_count == 1 or round_count % 10 == 0:
@@ -953,13 +1047,13 @@ def _run_stress_loop(user_file, std_file, gen_file, time_limit, max_rounds):
                         'cph-by-chenkx: ' + t('stress_round', round=r)
                         + ' / %d' % max_rounds), 0)
 
-            _stress_state['current_round'] = round_count
+            sess['current_round'] = round_count
             # A fresh seed per round, handed to the generator through the
             # environment (CPH_SEED) so a counterexample can be replayed:
             # "found a counterexample" is only actionable when you can make
             # the generator produce exactly that test again.
             seed = random.randrange(1, 2147483647)
-            _stress_state['current_seed'] = seed
+            sess['current_seed'] = seed
 
             # The generator gets its own, larger budget. Generating the test
             # is legitimately slower than solving it, and measuring it with
@@ -969,31 +1063,31 @@ def _run_stress_loop(user_file, std_file, gen_file, time_limit, max_rounds):
             ret, inp, gen_err, gen_tle = _run_program(
                 gen_argv or gen_file, '', cwd=gen_cwd,
                 time_limit=generator_limit,
-                env={'CPH_SEED': str(seed)})
+                env={'CPH_SEED': str(seed)}, sess=sess)
             if gen_tle:
                 gen_timeouts += 1
                 sublime.set_timeout(
-                    lambda r=round_count, l=generator_limit: _append_stress(
+                    lambda r=round_count, l=generator_limit: _append_stress(sess, 
                         '[cph-by-chenkx] ' + t('stress_generator_tle', round=r, limit=l) + '\n'), 0)
                 if gen_timeouts >= 3:
                     sublime.set_timeout(
-                        lambda l=generator_limit: _append_stress(
+                        lambda l=generator_limit: _append_stress(sess, 
                             '[cph-by-chenkx] ' + t('stress_generator_limit_hint', limit=l) + '\n'), 0)
                     break
                 continue
             if ret != 0:
                 # Say *why*: exit code plus whatever the generator printed.
                 sublime.set_timeout(
-                    lambda r=round_count, rc=ret, e=gen_err: _append_stress(
+                    lambda r=round_count, rc=ret, e=gen_err: _append_stress(sess, 
                         '[cph-by-chenkx] ' + t('stress_generator_failed', round=r, code=rc)
                         + ('\n  ' + e.strip()[:500] if e.strip() else '') + '\n'), 0)
                 break
 
             ret1, user_out, user_err, tle1 = _run_program(
-                user_argv or user_file, inp, cwd=user_cwd, time_limit=time_limit)
+                user_argv or user_file, inp, cwd=user_cwd, time_limit=time_limit, sess=sess)
             if tle1:
                 sublime.set_timeout(
-                    lambda r=round_count: _append_stress(
+                    lambda r=round_count: _append_stress(sess, 
                         '[cph-by-chenkx] Round %d: user program TLE\n' % r), 0)
                 if not tle_hint_shown:
                     # By far the most common cause on a correct solution: the
@@ -1002,29 +1096,29 @@ def _run_stress_loop(user_file, std_file, gen_file, time_limit, max_rounds):
                     # once saves a long hunt (and a stderr dump would be huge).
                     tle_hint_shown = True
                     sublime.set_timeout(
-                        lambda: _append_stress(
+                        lambda: _append_stress(sess, 
                             '[cph-by-chenkx] ' + t('stress_tle_hint') + '\n'), 0)
                 continue
             if ret1 < 0 and user_err:
                 # The program never started (missing binary, bad command):
                 # comparing its empty output as a wrong answer hid this.
                 sublime.set_timeout(
-                    lambda e=user_err: _append_stress(
+                    lambda e=user_err: _append_stress(sess, 
                         '[cph-by-chenkx] ' + t('stress_cannot_run',
                                                program=os.path.basename(user_file),
                                                reason=e.strip()[:300]) + '\n'), 0)
                 break
 
             ret2, std_out, std_err, tle2 = _run_program(
-                std_argv or std_file, inp, cwd=std_cwd, time_limit=time_limit)
+                std_argv or std_file, inp, cwd=std_cwd, time_limit=time_limit, sess=sess)
             if tle2:
                 sublime.set_timeout(
-                    lambda r=round_count: _append_stress(
+                    lambda r=round_count: _append_stress(sess, 
                         '[cph-by-chenkx] Round %d: std program TLE\n' % r), 0)
                 continue
             if ret2 < 0 and std_err:
                 sublime.set_timeout(
-                    lambda e=std_err: _append_stress(
+                    lambda e=std_err: _append_stress(sess, 
                         '[cph-by-chenkx] ' + t('stress_cannot_run',
                                                program=os.path.basename(std_file),
                                                reason=e.strip()[:300]) + '\n'), 0)
@@ -1045,7 +1139,7 @@ def _run_stress_loop(user_file, std_file, gen_file, time_limit, max_rounds):
                 is_diff = not outputs_equal(user_out, std_out, float_tol)
 
             if is_diff:
-                _stress_state['last_diff'] = {
+                sess['last_diff'] = {
                     'round': round_count,
                     'input': inp,
                     'user_output': user_out,
@@ -1054,33 +1148,33 @@ def _run_stress_loop(user_file, std_file, gen_file, time_limit, max_rounds):
                 }
                 sublime.set_timeout(
                     lambda m=checker_msg: _on_stress_failed(
-                        round_count, inp, user_out, std_out, m), 0)
+                        round_count, inp, user_out, std_out, m, sess), 0)
                 break
 
             if round_count <= 10 or round_count % 10 == 0:
                 sublime.set_timeout(
-                    lambda r=round_count: _append_stress(
+                    lambda r=round_count: _append_stress(sess, 
                         t('stress_round', round=r) + ' ... OK\n'
                     ), 0)
 
         else:
             if compared:
                 sublime.set_timeout(
-                    lambda: _append_stress(
+                    lambda: _append_stress(sess, 
                         '\n[cph-by-chenkx] ' + t('stress_passed', rounds=round_count) + '\n'
                     ), 0)
             else:
                 # Every round hit `continue` (TLE), so nothing was ever
                 # compared: the for/else used to still announce "passed".
                 sublime.set_timeout(
-                    lambda: _append_stress(
+                    lambda: _append_stress(sess, 
                         '\n[cph-by-chenkx] ' + t('stress_all_timeout') + '\n'
                     ), 0)
         # Always say the run is over: a panel that just stopped growing is
         # what "it never ends" looked like.
         elapsed = time.time() - wall_start
         sublime.set_timeout(
-            lambda e=elapsed: _append_stress(
+            lambda e=elapsed: _append_stress(sess, 
                 '\n[cph-by-chenkx] ' + t('stress_finished', seconds='%.1f' % e) + '\n'
             ), 0)
         sublime.set_timeout(
@@ -1088,40 +1182,44 @@ def _run_stress_loop(user_file, std_file, gen_file, time_limit, max_rounds):
                 'cph-by-chenkx: ' + t('stress_finished', seconds='%.1f' % e)), 0)
     except _Aborted:
         sublime.set_timeout(
-            lambda: _append_stress('\n[cph-by-chenkx] ' + t('process_terminated') + '\n'), 0)
+            lambda: _append_stress(sess, '\n[cph-by-chenkx] ' + t('process_terminated') + '\n'), 0)
     except Exception as e:
         # Bind `e` as a default argument: Python deletes the except-variable
         # when the block ends, so a bare `lambda: ... % e` raised NameError
         # by the time the deferred callback actually ran (the message never
         # appeared and the real error was swallowed).
         sublime.set_timeout(
-            lambda e=e: _append_stress('[cph-by-chenkx] Error: %s\n' % str(e)), 0)
+            lambda e=e: _append_stress(sess, '[cph-by-chenkx] Error: %s\n' % str(e)), 0)
     finally:
-        _finish_stress()
+        _finish_stress(sess)
 
 
-def _stop_stress():
-    _stress_state['running'] = False
-    _stress_state['stop_requested'] = False
-    set_stress_running(False)
+def _stop_stress(sess):
+    sess['running'] = False
+    sess['stop_requested'] = False
+    _sync_stress_state()
 
 
-def _append_stress(text):
-    if 'stress_view_id' not in _stress_state:
+def _append_stress(sess, text):
+    if sess is None:
+        return
+    view_id = sess.get('stress_view_id')
+    if view_id is None:
         return
     for window in sublime.windows():
         for v in window.views():
-            if v.id() == _stress_state.get('stress_view_id'):
+            if v.id() == view_id:
                 v.run_command('append', {'characters': text})
                 v.show(v.size())
                 return
 
 
-def _on_stress_failed(round_count, inp, user_out, std_out, checker_message=''):
+def _on_stress_failed(round_count, inp, user_out, std_out, checker_message='',
+                       sess=None):
     # Keep everything needed to reproduce this counterexample later
     # ('Stress: replay last counterexample').
-    _stress_state['last_counterexample'] = {
-        'seed': _stress_state.get('current_seed'),
+    sess['last_counterexample'] = {
+        'seed': sess.get('current_seed'),
         'input': inp,
         'user_out': user_out,
         'std_out': std_out,
@@ -1131,7 +1229,7 @@ def _on_stress_failed(round_count, inp, user_out, std_out, checker_message=''):
     text = '\n' + '=' * 60 + '\n'
     text += '[cph-by-chenkx] ' + t('stress_failed', round=round_count) + '\n'
     text += '=' * 60 + '\n\n'
-    seed = _stress_state.get('current_seed')
+    seed = sess.get('current_seed')
     if seed is not None:
         # Without the seed the counterexample cannot be regenerated; say it
         # out loud so it can be replayed (or set CPH_SEED by hand).
@@ -1163,7 +1261,7 @@ def _on_stress_failed(round_count, inp, user_out, std_out, checker_message=''):
     # counterexample is only useful if it comes back as a regression test.
     try:
         if get_settings().get('stress_save_counterexample', True):
-            user_file = _stress_state.get('user_file')
+            user_file = sess.get('user_file')
             if user_file:
                 answer = std_out.strip()
                 merged, _conflicts = merge_tests(load_all_tests(user_file), [{
@@ -1171,15 +1269,15 @@ def _on_stress_failed(round_count, inp, user_out, std_out, checker_message=''):
                     'correct_answers': [answer] if answer else [],
                     # Keep the generator seed with the counterexample so
                     # 'Stress: replay last seed' can reproduce it exactly.
-                    'seed': _stress_state.get('current_seed')}])
+                    'seed': sess.get('current_seed')}])
                 if save_tests(user_file, merged):
                     text += '\n[cph-by-chenkx] ' + \
                         t('stress_counterexample_added', total=len(merged)) + '\n'
     except Exception as e:
         print_safe('[cph-by-chenkx] failed to save counterexample: %s' % e)
 
-    _append_stress(text)
-    _stop_stress()
+    _append_stress(sess, text)
+    _stop_stress(sess)
 
 
 class CphStressReplayCommand(sublime_plugin.TextCommand):
@@ -1191,54 +1289,81 @@ class CphStressReplayCommand(sublime_plugin.TextCommand):
 	"""
 
 	def run(self, edit):
-		state = _stress_state.get('last_counterexample')
+		# Replay belongs to the page it was invoked on: with several stress
+		# pages open, each keeps its own last counterexample.
+		sess = _sessions.get(self.view.id())
+		state = sess.get('last_counterexample') if sess else None
 		if not state or state.get('seed') is None:
 			sublime.status_message('[cph-by-chenkx] ' + t('stress_no_counterexample'))
 			return
-		gen_file = get_settings().get('stress_generator_file') or _stress_state.get('gen_file')
-		user_file = _stress_state.get('user_file')
-		std_file = get_settings().get('stress_std_file') or _stress_state.get('std_file')
+		gen_file = sess.get('generator_file')
+		user_file = sess.get('user_file')
+		std_file = sess.get('std_file')
 		if not (gen_file and user_file and std_file):
 			sublime.status_message('[cph-by-chenkx] ' + t('stress_no_counterexample'))
 			return
 
 		seed = state['seed']
-		_append_stress('\n[cph-by-chenkx] ' + t('stress_replaying', seed=seed) + '\n')
+		_append_stress(sess, '\n[cph-by-chenkx] ' + t('stress_replaying', seed=seed) + '\n')
 
 		def worker():
 			try:
-				ok, gen_exe, why = _compile_program(gen_file)
+				ok, gen_exe, why = _compile_program(gen_file, sess=sess)
 				if not ok:
-					_append_stress('[cph-by-chenkx] generator: %s\n' % (why or 'failed'))
+					_append_stress(sess, '[cph-by-chenkx] generator: %s\n' % (why or 'failed'))
 					return
 				rc, inp, err, tle = _run_program(
 					gen_exe, '', time_limit=float(
 						get_settings().get('stress_generator_time_limit_seconds', 10) or 10),
-					env={'CPH_SEED': str(seed)})
+					env={'CPH_SEED': str(seed)}, sess=sess)
 				if rc != 0 or tle:
-					_append_stress('[cph-by-chenkx] generator failed: rc=%s %s\n'
+					_append_stress(sess, '[cph-by-chenkx] generator failed: rc=%s %s\n'
 								   % (rc, err[:200]))
 					return
-				_append_stress('[cph-by-chenkx] regenerated %d bytes\n' % len(inp))
-				ok1, user_exe, why1 = _compile_program(user_file)
-				ok2, std_exe, why2 = _compile_program(std_file)
+				_append_stress(sess, '[cph-by-chenkx] regenerated %d bytes\n' % len(inp))
+				ok1, user_exe, why1 = _compile_program(user_file, sess=sess)
+				ok2, std_exe, why2 = _compile_program(std_file, sess=sess)
 				if not (ok1 and ok2):
-					_append_stress('[cph-by-chenkx] compile failed: %s%s\n'
+					_append_stress(sess, '[cph-by-chenkx] compile failed: %s%s\n'
 								   % (why1 or '', why2 or ''))
 					return
 				limit = float(get_settings().get('stress_time_limit_seconds', 2) or 2)
-				_rc1, user_out, _e1, tle1 = _run_program(user_exe, inp, time_limit=limit)
-				_rc2, std_out, _e2, _tle2 = _run_program(std_exe, inp, time_limit=limit)
+				_rc1, user_out, _e1, tle1 = _run_program(user_exe, inp, time_limit=limit, sess=sess)
+				_rc2, std_out, _e2, _tle2 = _run_program(std_exe, inp, time_limit=limit, sess=sess)
 				if tle1:
-					_append_stress('[cph-by-chenkx] ' + t('stress_replay_tle') + '\n')
+					_append_stress(sess, '[cph-by-chenkx] ' + t('stress_replay_tle') + '\n')
 					return
 				if normalize_lines(user_out) == normalize_lines(std_out):
-					_append_stress('[cph-by-chenkx] ' + t('stress_replay_same') + '\n')
+					_append_stress(sess, '[cph-by-chenkx] ' + t('stress_replay_same') + '\n')
 				else:
-					_on_stress_failed(state.get('round') or 0, inp, user_out, std_out)
+					_on_stress_failed(state.get('round') or 0, inp, user_out, std_out,
+										  sess=sess)
 			except Exception as e:
-				_append_stress('[cph-by-chenkx] replay error: %s\n' % e)
+				_append_stress(sess, '[cph-by-chenkx] replay error: %s\n' % e)
 
 		thread = threading.Thread(target=worker)
 		thread.daemon = True
 		thread.start()
+
+
+class CphStressEvents(sublime_plugin.EventListener):
+    """Keep sessions in sync with their pages.
+
+    Closing a stress page stops its run (if any) and drops the session, so
+    the Stop keybinding and the cph_stress_view context never point at a
+    detached view.
+    """
+
+    def on_close(self, view):
+        sess = _sessions.pop(view.id(), None)
+        if sess is None:
+            return
+        unregister_stress_view(view.id())
+        _sync_stress_state()
+        if sess['running']:
+            sess['stop_requested'] = True
+            proc = sess.get('current_proc')
+            if proc is not None:
+                killer = threading.Thread(target=_kill_tree, args=(proc,))
+                killer.daemon = True
+                killer.start()

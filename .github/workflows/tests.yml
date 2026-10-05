@@ -42,6 +42,15 @@ jobs:
       - name: Python 3.3 host compatibility guard
         run: python tests/check_py33.py
 
+      # The regression suite only checks that every file messages.json names
+      # exists, so it cannot see a released version that has no message file
+      # at all (that is how v1.4.7 and v2.1.1 shipped). This compares the
+      # release notes headings with the messages.json keys in both directions.
+      # It has to live in tests/: .workbuddy/ is export-ignored and never
+      # uploaded, so nothing under it can be run here.
+      - name: Release notes and messages.json agree
+        run: python tests/check_messages.py
+
       - name: Regression tests (no Sublime required)
         run: python tests/run_tests.py
 

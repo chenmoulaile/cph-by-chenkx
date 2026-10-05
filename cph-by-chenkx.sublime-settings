@@ -27,7 +27,7 @@
 			//   正确代码也会被判 TLE；实测 -O2 几乎不增加编译时间。
 			// -std 用 c++17：实测比 c++23 每次编译快约 1.2 秒
 			//   （3.4s vs 4.7s，含 <bits/stdc++.h>），也是多数 OJ 的口径。
-			"compile_cmd": "g++ \"{source_file}\" {extra_sources} {include_dirs} -std=c++17 -O2 -o \"{file_name}.exe\" -DLOCAL",
+			"compile_cmd": "g++ \"{source_file}\" {extra_sources} {include_dirs} -std=c++17 -O2 -o \"{file_name}.exe\"",
 			// 运行命令（编译产物在源代码目录下）
 			"run_cmd": "\"{source_file_dir}/{file_name}.exe\" {args}",
 			// 单个测试的时间限制(毫秒) / 内存限制(MB)，超限判 TLE / MLE
@@ -83,7 +83,7 @@
 		{
 			"name": "C",
 			"extensions": ["c"],
-			"compile_cmd": "gcc \"{source_file}\" {extra_sources} {include_dirs} -std=c17 -O2 -o \"{file_name}.exe\" -DLOCAL",
+			"compile_cmd": "gcc \"{source_file}\" {extra_sources} {include_dirs} -std=c17 -O2 -o \"{file_name}.exe\"",
 			"run_cmd": "\"{source_file_dir}/{file_name}.exe\" {args}",
 			"time_limit_ms": 2000,
 			"memory_limit_mb": 256,

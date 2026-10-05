@@ -11,6 +11,10 @@
 # 对拍是否正在运行（cph_stress 写，快捷键上下文读）
 state = {
 	'stress_running': False,
+	# 对拍输出页注册表：view id -> {'user_file': 被测源文件}
+	# 多个文件可同时对拍，每个输出页一个会话；快捷键上下文靠它判断
+	# "当前视图是不是对拍页"。
+	'stress_views': {},
 	# Competitive Companion 监听器
 	'listener_running': False,
 	'listener_port': None,
@@ -24,6 +28,18 @@ def set_stress_running(running):
 
 def is_stress_running():
 	return bool(state.get('stress_running'))
+
+
+def register_stress_view(view_id, user_file=None):
+	state.setdefault('stress_views', {})[view_id] = {'user_file': user_file}
+
+
+def unregister_stress_view(view_id):
+	state.setdefault('stress_views', {}).pop(view_id, None)
+
+
+def is_stress_view(view_id):
+	return view_id in state.get('stress_views', {})
 
 
 def set_listener(server, port=None, view_id=None):

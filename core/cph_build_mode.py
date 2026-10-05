@@ -21,6 +21,21 @@ import re
 
 from .cph_settings import get_settings
 
+#: A quoted segment ("...") or a single-quoted one. A plain path with
+#: spaces lives inside the quotes, so whitespace runs there are part of
+#: the file name - collapsing them made cc1plus look for
+#: "P2517 ZJOI.cpp" while the file on disk was "P2517  ZJOI.cpp".
+_QUOTED = re.compile('("[^"]*"|\'[^\']*\')')
+_WS_RUN = re.compile('[ \\t]{2,}')
+
+def _tidy(cmd):
+	"""Collapse runs of spaces/tabs outside quotes only."""
+	parts = _QUOTED.split(cmd)
+	for i in range(0, len(parts), 2):
+		parts[i] = _WS_RUN.sub(' ', parts[i])
+	return ''.join(parts).strip()
+
+
 MODE_RELEASE = 'release'
 MODE_DEBUG = 'debug'
 MODES = (MODE_RELEASE, MODE_DEBUG)
@@ -92,8 +107,7 @@ def transform(cmd, mode):
 		out = _FRAME_POINTER.sub('', out)
 		if not _OPT.search(out):
 			out = out.rstrip() + ' -O2'
-		return re.sub(r'[ \t]{2,}', ' ', out).strip()
-
+		return _tidy(out)
 	# debug: no optimisation, plus the sanitizer + debug symbols
 	out = _OPT.sub('', cmd)
 	out = _SANITIZER.sub('', out)
@@ -101,8 +115,7 @@ def transform(cmd, mode):
 	if not _DEBUG_SYM.search(out):
 		out = out.rstrip() + ' -g'
 	out = out.rstrip() + ' ' + _SANITIZE + ' -fno-omit-frame-pointer'
-	return re.sub(r'[ \t]{2,}', ' ', out).strip()
-
+	return _tidy(out)
 
 def label(file):
 	"""Short status-bar label, or '' in the default (release) mode."""

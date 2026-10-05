@@ -2479,11 +2479,16 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 				v.erase_regions('line_%d' % i)
 				v.erase_regions('test_error_%d' % i)
 
-	def set_compile_bar(self, cmd, type=''):
+	def set_compile_bar(self, cmd, type='', chip_text=None):
 		view = self.view
 		styles = get_test_styles(view)
 		# escape html specials so compiler output shows up correctly in minihtml
-		cmd_escaped = (cmd or '').replace('&', '&amp;') \
+		# chip_text: short text for the panel chip. Compile failures keep the
+		# full stderr OUT of the chip - the plain text below already carries
+		# it (and it is copyable there), showing it twice just pushed the
+		# test cards further down.
+		display = cmd if chip_text is None else chip_text
+		cmd_escaped = (display or '').replace('&', '&amp;') \
 			.replace('<', '&lt;').replace('>', '&gt;')
 
 		# Compiler diagnostics carry file:line:col, so turn each one into a
@@ -2782,7 +2787,8 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 					v.run_command('cph_test_manager', {'action': 'new_test'})
 			else:
 				v.run_command('cph_test_manager', {'action': 'insert_opd_out', 'text': '\n' + cmp_data[1]})
-				self.set_compile_bar(cmp_data[1])
+				self.set_compile_bar(cmp_data[1],
+									 chip_text=t('compilation_error'))
 
 		self.set_compile_bar(t('compiling'))
 		# Mark compile start only now - the terminate/rerun path above

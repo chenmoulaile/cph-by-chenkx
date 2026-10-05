@@ -2,6 +2,7 @@
 	"install": "messages/install.txt",
 	"1.4.5": "messages/1.4.5.txt",
 	"1.4.6": "messages/1.4.6.txt",
+	"1.4.7": "messages/1.4.7.txt",
 	"1.4.8": "messages/1.4.8.txt",
 	"1.4.9": "messages/1.4.9.txt",
 	"1.4.10": "messages/1.4.10.txt",
@@ -17,5 +18,7 @@
 	"2.0.0": "messages/2.0.txt",
 	"2.0.1": "messages/2.0.1.txt",
 	"2.1.0": "messages/2.1.0.txt",
-	"2.2.0": "messages/2.2.0.txt"
+	"2.1.1": "messages/2.1.1.txt",
+	"2.2.0": "messages/2.2.0.txt",
+	"2.3.0": "messages/2.3.0.txt"
 }

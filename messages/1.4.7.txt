@@ -1,0 +1,36 @@
+cph-by-chenkx 1.4.7
+===================
+
+Fixed:
+
+* Adding a test from the clipboard (or exporting) inside the run panel left the
+  cards stale until the next run.
+* Pasting input after the program exited no longer throws or repeats the status
+  message.
+* Re-sending the same sample from the browser could overwrite an answer you had
+  accepted by hand; conflicting answers are now kept and reported.
+* A typo in a command placeholder is now listed in the compile panel instead of
+  only appearing in the console.
+
+New:
+
+* `regard_pe_as_ac` setting: pass "presentation error" as accepted, for online
+  judges that count it as correct (default stays strict).
+* Doctor now checks command placeholders and prints a copy-pasteable Markdown
+  report (Sublime build, platform, Python, per-language commands).
+* `Ctrl+Alt+M` (Cmd+Alt+M on macOS): pick a test and run / show detail / edit it
+  without touching the mouse.
+* One shared merge policy for tests coming from files, the clipboard, the
+  browser and stress-test counterexamples: deduplicated by input, answers are
+  only filled in, never overwritten.
+
+Notes:
+
+* Key bindings now only fire where they mean something (custom contexts):
+  collapsing the panel, stopping the stress test, stopping the browser listener
+  respond in the state they belong to instead of stealing keys everywhere.
+* The platform-specific settings files that did not match the package name are
+  gone; the default commands are written portably already, and run_settings can
+  still be overridden from your User settings.
+* tests/run_tests.py: 57 -> 62 checks, five of them new guards for the channel
+  review rules.

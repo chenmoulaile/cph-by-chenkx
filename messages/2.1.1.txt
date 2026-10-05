@@ -1,0 +1,18 @@
+cph-by-chenkx 2.1.1
+====================
+
+Fixed - two findings from the Package Control review:
+
+* The version key "2.0" in messages.json was not a valid semantic version (it
+  needs major.minor.patch). It is now "2.0.0"; the upgrade message itself is
+  unchanged.
+* A console window flashed on Windows. The formatter run after saving and the
+  machine speed calibration both started a process without hiding it. All three
+  Popen calls now pass STARTF_USESHOWWINDOW, so compiling, running and
+  calibrating no longer flash a black box.
+
+Notes:
+
+* tests/run_tests.py gained two guards so neither comes back: every
+  messages.json key is either "install" or a three-component version, and every
+  subprocess.Popen in the source passes startupinfo.

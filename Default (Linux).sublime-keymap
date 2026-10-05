@@ -193,7 +193,7 @@
 		"command": "cph_stop_stress_test",
 		"context": [
 			{
-				"key": "cph_stress_running",
+				"key": "cph_stress_view",
 				"operator": "equal",
 				"operand": true
 			}

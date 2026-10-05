@@ -20,7 +20,8 @@ import sublime
 import sublime_plugin
 
 from .core.cph_settings import get_settings
-from .core.cph_state import is_listener_running, is_stress_running
+from .core.cph_state import (is_listener_running, is_stress_running,
+	                         is_stress_view)
 from .core.cph_target import context_menu_enabled, supported_file
 
 
@@ -68,6 +69,10 @@ class CphContextListener(sublime_plugin.EventListener):
 			value = _has_run_panel(view)
 		elif key == 'cph_stress_running':
 			value = is_stress_running()
+		elif key == 'cph_stress_view':
+			# 当前视图是对拍输出页：停止对拍的快捷键只在这里生效，
+			# 多个文件同时对拍时停的就是眼前这一个。
+			value = is_stress_view(view.id())
 		elif key == 'cph_listener_running':
 			value = is_listener_running()
 		elif key == 'cph_supported_file':

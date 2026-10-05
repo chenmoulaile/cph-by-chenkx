@@ -1,0 +1,54 @@
+cph-by-chenkx 2.3.0
+====================
+
+Fixed - a file name with two spaces in a row could not be compiled. The
+"tidy up the compile command" step collapsed every run of spaces, including
+the ones inside a quoted path:
+
+    g++ "D:\...\P2517  ZJOI 2010, 基站选址.cpp" ...
+    -> g++ "D:\...\P2517 ZJOI 2010, 基站选址.cpp" ...
+
+which made cc1plus report
+
+    cc1plus.exe: fatal error: D:\...\P2517 ZJOI 2010, 基站选址.cpp:
+    No such file or directory
+    compilation terminated.
+
+although the file was right there. Whitespace is now tidied outside quotes
+only, so a path keeps its exact characters.
+
+Fixed - the compile error was shown twice: once in the panel above the tests
+and once as plain text. The panel now shows just the "Compilation Error"
+chip (with the usual clickable file:line diagnostics); the full compiler
+output stays as plain text, which is the copyable copy.
+
+Fixed - starting a stress test for another file jumped into the stress page
+of the previous file instead of opening one for the file you were solving.
+Each file now has its own "<name> -stress" page; running the same file again
+reuses its own page.
+
+Fixed - "cph_stop_stress_test" reported "no stress test running" when called
+from a page whose run had already finished.
+
+Added - several files can be stress tested at the same time. Every run owns
+its own page, its own scratch build directory and its own Stop; starting a
+run for a file that is already running is refused for that file only.
+Closing a stress page stops that run and cleans it up.
+
+Added - "Ctrl+Alt+Shift+S" (macOS "Cmd+Alt+Shift+S") stops the stress test
+from its own page, and does nothing anywhere else: it is bound to the
+cph_stress_view context, so it cannot swallow the combination in your code.
+
+Added - the stress build drops "-DLOCAL" and "-DDEBUG" from the compile
+command. Those defines switch your local template into judging mode
+("#ifdef LOCAL" blocks print debug output or read files), which slows every
+single round down; your own Run keeps the command exactly as configured.
+The shipped default C++/C settings no longer contain "-DLOCAL" either.
+
+Notes:
+
+* tests/run_tests.py: 275 -> 293 checks; the stress flow harness now drives
+  two sessions at once and verifies both finish cleanly.
+* The stress page reuse, the per-file guard and the session registry are
+  covered by regression tests, as are the quoted-space fix and the
+  "-DLOCAL" strip.

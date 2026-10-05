@@ -848,6 +848,14 @@ STRINGS = {
         'zh': '对拍已经在运行中',
         'en': 'a stress test is already running',
     },
+    'stress_multi_running': {
+        'zh': '有 %d 个对拍正在进行，请切换到对应的对拍页再停止',
+        'en': '%d stress tests are running - focus one of the stress pages to stop it',
+    },
+    'stress_none_running': {
+        'zh': '当前没有正在运行的对拍',
+        'en': 'no stress test running',
+    },
     'doctor_placeholder_unknown': {
         'zh': '命令里有不认识的占位符（会被当成空字符串）：{names}',
         'en': 'unknown placeholder(s) in the command (substituted with ""): {names}',

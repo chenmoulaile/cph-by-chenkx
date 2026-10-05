@@ -1091,21 +1091,21 @@ def main():
              stress._compile_program, stress._run_program, i18n.get_lang())
     try:
         fake_sublime.set_timeout = lambda fn, delay=0: fn()
-        stress._append_stress = lambda text: chunks.append(text)
-        stress._compile_program = lambda f, time_limit=30: (True, f, '')
+        stress._append_stress = lambda sess, text: chunks.append(text)
+        stress._compile_program = lambda f, time_limit=30, sess=None: (True, f, '')
         i18n.set_lang('en')
 
         def run_as(gen, user):
             del chunks[:]
-            stress._stress_state['stop_requested'] = False
-            stress._stress_state['running'] = True
+            sess = stress._new_session('u.cpp', 's.cpp', 'gen.cpp', 2.0, 3)
 
-            def fake_run(program, data, cwd=None, time_limit=2.0, env=None):
+            def fake_run(program, data, cwd=None, time_limit=2.0, env=None,
+                         sess=None):
                 # env carries the stress seed (CPH_SEED) in the real runner
                 return gen if program.endswith('gen.cpp') else user
 
             stress._run_program = fake_run
-            stress._run_stress_loop('u.cpp', 's.cpp', 'gen.cpp', 2.0, 3)
+            stress._run_stress_loop(sess)
             return ''.join(chunks)
 
         text = run_as((-1, '', '', True), (0, '1', '', False))
@@ -1133,7 +1133,8 @@ def main():
         fake_sublime.set_timeout, stress._append_stress, \
             stress._compile_program, stress._run_program = saved[:4]
         i18n.set_lang(saved[4])
-        stress._stop_stress()
+        for leftover in list(stress._sessions.values()):
+            stress._stop_stress(leftover)
 
     # Stress builds its commands with the same placeholders as the main Run
     # path, and must be just as lenient: {file} is documented, and a
@@ -1890,7 +1891,7 @@ def main():
     check('the manual stress command is in the command palette',
           'cph_stress_with_options' in commands_text)
     check('the run releases its scratch build when it ends',
-          '_finish_stress()' in stress_src and 'shutil.rmtree' in stress_src)
+          'shutil.rmtree' in stress_src and '_finish_stress(sess)' in stress_src)
     check('stop kills the program that is running',
           'current_proc' in stress_src and '_kill_tree(' in stress_src)
     check('a run that ends says how long it took',
@@ -1900,6 +1901,80 @@ def main():
     check('the file browser is translated',
           i18n.STRINGS.get('stress_browse_up', {}).get('en')
           and i18n.STRINGS.get('stress_browse_more', {}).get('zh'))
+
+    print("== round 11: filenames with consecutive spaces, -DLOCAL, multi-session ==")
+    # The build-mode tidy used to collapse runs of spaces inside quoted
+    # paths: "P2517  ZJOI.cpp" became "P2517 ZJOI.cpp" and cc1plus failed
+    # with "No such file or directory" although the file was right there.
+    build_mode = importlib.import_module(pkg + '.core.cph_build_mode')
+    spaced = 'g++ "P2517  ZJOI 2010, 基站选址.cpp" -std=c++23   -O2 -o "out.exe"'
+    tidied = build_mode.transform(spaced, 'release')
+    check('the compile command keeps consecutive spaces inside quotes',
+          'P2517  ZJOI' in tidied, tidied)
+    check('the compile command still tidies whitespace outside quotes',
+          '-std=c++23 -O2 -o' in tidied, tidied)
+    check('debug mode keeps quoted spaces too',
+          'P2517  ZJOI' in build_mode.transform(spaced, 'debug'), tidied)
+
+    # Stress builds must not carry -DLOCAL / -DDEBUG: the user's local
+    # template prints debug output under those and every round slows down.
+    stripped = stress._strip_local_define(
+        'g++ "{source_file}" -std=c++23 -O2 -o "{file_name}.exe" -DLOCAL')
+    check('the stress build drops -DLOCAL',
+          '-DLOCAL' not in stripped and '-O2' in stripped, stripped)
+    check('the stress build drops -DDEBUG as well',
+          '-DDEBUG' not in stress._strip_local_define(
+              'gcc "a.cpp" -DDEBUG -o "a.exe"'))
+    check('the stress build keeps quoted file names intact',
+          '"a  b.cpp"' in stress._strip_local_define(
+              'g++ "a  b.cpp" -DLOCAL -o "x.exe"'))
+    check('the shipped default settings have no -DLOCAL',
+          '-DLOCAL' not in io.open(os.path.join(ROOT, 'cph-by-chenkx.sublime-settings'),
+                                   encoding='utf-8').read())
+
+    # Several files can be stress tested at the same time; each run owns a
+    # session keyed by its stress page.
+    sess_a = stress._new_session('D:/a/main.cpp', 'D:/a/std.cpp',
+                                 'D:/a/gen.cpp', 2.0, 10, view_id=9001)
+    sess_b = stress._new_session('D:/b/main.cpp', 'D:/b/std.cpp',
+                                 'D:/b/gen.cpp', 2.0, 10, view_id=9002)
+    check('two runs can be live side by side',
+          len(stress._running_sessions()) >= 2)
+    check('a start for a file already running is refused (per file)',
+          stress._running_for('D:/a/MAIN.CPP') is sess_a)
+    check('another file is not blocked by the running one',
+          stress._running_for('D:/c/main.cpp') is None)
+    check('sessions are registered so the Stop key can find them',
+          stress._sessions[sess_a['stress_view_id']] is sess_a)
+    for leftover in (sess_a, sess_b):
+        stress._stop_stress(leftover)
+        stress._sessions.pop(leftover['stress_view_id'], None)
+        stress.unregister_stress_view(leftover['stress_view_id'])
+
+    # The Stop keybinding only fires on a stress page (context key), so it
+    # never steals the combination from anything else.
+    context_src = open(os.path.join(ROOT, 'cph_context.py'), encoding='utf-8').read()
+    check('the cph_stress_view context key is implemented',
+          "key == 'cph_stress_view'" in context_src and 'is_stress_view' in context_src)
+    for plat in ('Windows', 'Linux', 'OSX'):
+        keymap = open(os.path.join(ROOT, 'Default (%s).sublime-keymap' % plat),
+                      encoding='utf-8').read()
+        check('the stop key is bound to the stress page only (%s)' % plat,
+              '"cph_stress_view"' in keymap and 'cph_stop_stress_test' in keymap)
+
+    # The compile-failure panel must not repeat the whole compiler output:
+    # the plain text below it already carries it (and is copyable there).
+    compile_tpl = open(os.path.join(ROOT, 'Highlight', 'compile.html'),
+                       encoding='utf-8').read()
+    check('the compile chip no longer duplicates the full error text',
+          '{cmd}</a>' in compile_tpl
+          and '{compilation_error_label}: {cmd}' not in compile_tpl)
+    check('the compile-failure chip is a short label',
+          "chip_text=t('compilation_error')" in open(
+              os.path.join(ROOT, 'test_manager.py'), encoding='utf-8').read())
+    check('the multi-session stop messages are translated',
+          i18n.STRINGS.get('stress_multi_running', {}).get('zh')
+          and i18n.STRINGS.get('stress_none_running', {}).get('en'))
 
     print('')
     print('%d checks, %d failures' % (CHECKS[0], len(FAILURES)))

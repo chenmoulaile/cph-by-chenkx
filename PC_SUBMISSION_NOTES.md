@@ -1,8 +1,30 @@
 # cph-by-chenkx — Package Control Submission Notes
 
-Package version: v2.1.1
+Package version: v2.3.0
 Repository: https://github.com/chenmoulaile/cph-by-chenkx
 Channel entry file: `repository/c/cph-by-chenkx.json` (see snippet at the bottom)
+
+## v2.3.0 notes
+
+- Fixed a compile command that was tidied *inside* quotes as well: a file
+  named `P2517  ZJOI 2010, 基站选址.cpp` (two spaces) was passed to cc1plus
+  with one space and reported as "No such file or directory". Whitespace is
+  now tidied outside quotes only; covered by tests that keep a quoted
+  double space intact in both build modes.
+- The compile error is no longer rendered twice: the panel shows the
+  "Compilation Error" chip plus the clickable `file:line` diagnostics, and
+  the full compiler output stays as the plain, copyable text below it.
+- Every file under test gets its own `<name> -stress` page. Previously a
+  second file jumped into the page of the first one. Several files can be
+  stress tested at once now: one session per page, each with its own scratch
+  build directory and its own Stop; closing the page stops that run.
+- `Ctrl+Alt+Shift+S` (macOS `Cmd+Alt+Shift+S`) is bound to the new
+  `cph_stress_view` context key, so it stops the run of the page you are
+  looking at and does nothing elsewhere.
+- Stress builds drop `-DLOCAL` / `-DDEBUG` from the compile command (the
+  user's own Run keeps it), and the shipped default C++/C commands no longer
+  carry `-DLOCAL`.
+- tests/run_tests.py: 275 -> 293 checks.
 
 ## v2.1.1 notes
 
