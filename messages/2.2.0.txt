@@ -1,0 +1,44 @@
+cph-by-chenkx 2.2.0
+====================
+
+Fixed - you can compile while a stress test is running. The stress test
+compiled and ran the .exe in the source directory, so for hundreds of rounds
+that file was busy and rebuilding it failed with
+
+    ld.exe: cannot open output file ... .exe: Permission denied
+
+The three stress programs are now built into a scratch directory and run from
+there, leaving the .exe in your source directory free.
+
+Fixed - "Stop stress test" actually stops. It used to set a flag and then wait
+for the round that was running to hit its time limit (10s for the generator),
+which looked like the command did nothing. Stopping now ends the program that
+is running, including anything it started.
+
+Fixed - a run that ends says so. Every run now prints "stress test finished in
+Xs" and the status bar shows the current round while it runs, so a slow run
+can be told apart from a hung one.
+
+Fixed - a source file that is not on disk is reported as such, instead of
+letting the compiler fail with "No such file or directory".
+
+Added - stress testing no longer asks for the paths of std and the generator.
+It looks for them next to the file under test first (`std`, `brute`, `bf`,
+`sol`, `gen`, `data`, `maker`, `rand` ...), and when it finds them it starts
+straight away using the configured `stress_max_rounds` and
+`stress_time_limit_seconds`. When it cannot find them it asks - on Windows with
+the system file dialog, opened in the directory of the file you are solving;
+elsewhere with a quick panel. `stress_file_picker` picks `auto` / `native` /
+`panel`.
+
+Added - "cph-by-chenkx: Stress test with options (pick files, rounds)" for the
+times you want to choose the files and the limits by hand.
+
+Added - `stress_max_wall_seconds` (0 = no limit) caps how long a whole stress
+run may take; it stops on its own and says why.
+
+Notes:
+
+* The scratch directory is removed when the run ends, whether it finished, was
+  stopped or failed.
+* tests/run_tests.py: 261 -> 275 checks.

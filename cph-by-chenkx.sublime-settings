@@ -209,6 +209,16 @@
 	// 生成器的单轮时间限制(秒)。造数据比解题慢，所以单独放宽；
 	// 太小会把"生成器超时"误报成"生成器失败"。
 	"stress_generator_time_limit_seconds": 10,
+	// 对拍的最大轮数（直接开始对拍时使用；"Stress test with options" 会询问）
+	"stress_max_rounds": 1000,
+	// 对拍总时长上限(秒)，0 表示不限制。跑很久的对拍到点会自动停下并报告
+	"stress_max_wall_seconds": 0,
+	// 找不到 std / 生成器时用什么方式挑文件：
+	//   "auto"   — Windows 用系统打开文件对话框，其它平台用命令面板浏览
+	//   "native" — 总是用系统对话框
+	//   "panel"  — 总是用 Sublime 命令面板浏览
+	// 无论哪种，起始目录都是当前源文件所在的目录。
+	"stress_file_picker": "auto",
 	// 上次使用的 std 程序 / 数据生成器路径（对拍命令会自动记住）
 	"stress_std_file": "",
 	"stress_generator_file": "",

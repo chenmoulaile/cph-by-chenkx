@@ -1839,6 +1839,68 @@ def main():
           i18n.STRINGS.get('stress_checker_message', {}).get('zh')
           and i18n.STRINGS.get('stress_checker_message', {}).get('en'))
 
+    print('== round 10: a stress run keeps out of the user\'s way ==')
+    # Two things made stress testing unusable in practice: the run owned the
+    # .exe in the source directory (so the file could not be rebuilt until it
+    # was over) and it could not be stopped before the round's time limit ran
+    # out - which is what "it never ends" was.
+    stress_round = importlib.import_module(pkg + '.cph_stress')
+    artifact = importlib.import_module(pkg + '.Modules.build_artifact')
+
+    work = tempfile.mkdtemp(prefix='cph-tests-stress-')
+    try:
+        user_src = os.path.join(work, 'main.cpp')
+        std_src = os.path.join(work, 'std.cpp')
+        gen_src = os.path.join(work, 'gen.cpp')
+        for path in (user_src, std_src, gen_src,
+                     os.path.join(work, 'notes.txt')):
+            with open(path, 'w') as handle:
+                handle.write('x')
+        check('std is found next to the file under test',
+              stress_round._candidate_files(work, 'std', exclude=[user_src])
+              == [std_src],
+              str(stress_round._candidate_files(work, 'std', exclude=[user_src])))
+        check('gen is found next to the file under test',
+              stress_round._candidate_files(work, 'gen', exclude=[user_src])
+              == [gen_src],
+              str(stress_round._candidate_files(work, 'gen', exclude=[user_src])))
+        check('the file under test is never its own counterpart',
+              stress_round._candidate_files(work, 'std') == [std_src],
+              str(stress_round._candidate_files(work, 'std')))
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+    out_dir = os.path.join('tmp', 'cph-stress')
+    cmd, out = artifact.isolate_output('g++ "a.cpp" -O2 -o "a.exe"', out_dir)
+    check('the stress build goes to its own directory',
+          out is not None and os.path.dirname(out) == out_dir, str(out))
+    check('the rewritten command keeps the output flag', '-o "' in cmd, cmd)
+    cmd, out = artifact.isolate_output(
+        'javac -d "{source_file_dir}" "{source_file}"', out_dir)
+    check('a command without -o is left alone',
+          out is None and cmd.startswith('javac'), str(out))
+
+    check('the round count is a setting, not a prompt',
+          'stress_max_rounds' in shipped)
+    check('an overall time limit is a setting',
+          'stress_max_wall_seconds' in shipped)
+    check('the file picker defaults to the system dialog where there is one',
+          shipped.get('stress_file_picker') == 'auto',
+          str(shipped.get('stress_file_picker')))
+    check('the manual stress command is in the command palette',
+          'cph_stress_with_options' in commands_text)
+    check('the run releases its scratch build when it ends',
+          '_finish_stress()' in stress_src and 'shutil.rmtree' in stress_src)
+    check('stop kills the program that is running',
+          'current_proc' in stress_src and '_kill_tree(' in stress_src)
+    check('a run that ends says how long it took',
+          'stress_finished' in stress_src
+          and i18n.STRINGS.get('stress_finished', {}).get('zh')
+          and i18n.STRINGS.get('stress_finished', {}).get('en'))
+    check('the file browser is translated',
+          i18n.STRINGS.get('stress_browse_up', {}).get('en')
+          and i18n.STRINGS.get('stress_browse_more', {}).get('zh'))
+
     print('')
     print('%d checks, %d failures' % (CHECKS[0], len(FAILURES)))
     if FAILURES:

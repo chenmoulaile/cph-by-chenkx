@@ -607,6 +607,23 @@ STRINGS = {
         'zh': '需要 std 文件和 generator 文件',
         'en': 'Need both std file and generator file',
     },
+    'stress_finished': {
+        'zh': '对拍结束，用时 {seconds} 秒',
+        'en': 'stress test finished in {seconds}s',
+    },
+    'stress_wall_limit': {
+        'zh': '已达总时长上限 {limit} 秒，已停止（可调大 stress_max_wall_seconds）',
+        'en': 'reached the overall limit of {limit}s and stopped'
+              ' (raise stress_max_wall_seconds)',
+    },
+    'stress_browse_up': {
+        'zh': '..（上一层目录）',
+        'en': '.. (parent directory)',
+    },
+    'stress_browse_more': {
+        'zh': '浏览其它文件…',
+        'en': 'Browse for another file...',
+    },
     # ---- Competitive Companion persistent listener ----
     'listener_started': {
         'zh': 'Competitive Companion 监听已启动 (端口 {port}，目标: {file})，浏览器扩展可反复点击发送',

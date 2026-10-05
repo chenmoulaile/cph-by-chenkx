@@ -266,7 +266,15 @@ int main() {
 - 命令面板：`cph-by-chenkx: Start stress test`
 - 快捷键：`Ctrl+Alt+S` (Mac: `Cmd+Alt+S`)
 
-然后依次确认（直接回车用默认值）：std 文件路径（默认 `std.cpp`）→ 生成器路径（默认 `gen.cpp`）→ 每轮时间限制秒数（默认 2）→ 最大轮数（默认 1000）。选过的路径会被记住。
+**不需要填路径**：命令会先在当前源文件所在目录里按名字找 std 和生成器
+（`std` / `brute` / `bf` / `sol` / `暴力` 与 `gen` / `data` / `maker` / `rand` / `生成` 等），
+找到就直接开跑，轮数与时间限制用设置里的 `stress_max_rounds` / `stress_time_limit_seconds`。
+目录里有多个候选时会列出来让你选一个；一个都找不到时才会请你挑文件 —— Windows 上直接弹
+系统「打开文件」对话框，**起始目录就是当前源文件所在目录**，其它平台用命令面板浏览
+（`stress_file_picker` 可改成 `native` / `panel`）。
+
+想每次都自己指定，用命令面板里的 `cph-by-chenkx: Stress test with options (pick files, rounds)`，
+它会依次问 std、生成器、每轮时限和最大轮数。
 
 ### 3. 查看结果
 
@@ -275,7 +283,8 @@ int main() {
 - 每轮通过滚动显示 `第 N 轮 ... OK`
 - **发现不一致**时立即停止，展示：输入数据、你的输出、std 输出、逐行差异（`user:` vs `std:`）
 - 跑满最大轮数全部一致则显示对拍通过；全部轮次超时会明确提示「未比较任何输出」
-- 中途可用 `Stop stress test`（`Ctrl+Alt+Shift+S`）停止
+- 结束时一定会报告一行「对拍结束，用时 X 秒」，状态栏同步显示当前轮次，跑得慢和卡住能分清
+- 中途可用 `Stop stress test`（`Ctrl+Alt+Shift+S`）停止，**立即生效**：正在跑的那个进程会被直接结束，不用等这一轮的时限走完
 - **多解题 / 浮点题也能对拍**：`run_settings` 里配了 `checker` 时由 checker 判定
   （不再逐行比对，输出任意合法方案都不会被误报），checker 的 `quitf` 消息会跟着反例
   一起显示；没配 checker 时 `float_tolerance` 同样生效，最后一位小数的差异不再算不一致
@@ -285,6 +294,9 @@ int main() {
 - 三个程序都从 stdin 读、往 stdout 写，调试信息请用 `cerr`（配合 `"ignore_stderr": true`）
 - Python 文件也可以直接作为你的程序 / std / gen 参与对拍
 - 对拍会使用 `run_settings` 里的编译命令；失败的反例可自动存为正式测试点
+- 对拍的可执行文件编译在独立的临时目录里，**不会占用你源码目录下的 `.exe`**：
+  对拍跑着的时候照样可以编译运行同一个文件
+- 需要给整轮对拍设总时长上限时用 `stress_max_wall_seconds`（默认 0 表示不限）
 - **生成器有独立的时间上限**：`stress_generator_time_limit_seconds`（默认 10 秒）。
   造数据通常比解题慢，用程序本身的时限（`stress_time_limit_seconds`）卡生成器会把
   「生成器超时」误判成「生成器失败」。生成器超时会跳过该轮，连续 3 次才停止并提示。

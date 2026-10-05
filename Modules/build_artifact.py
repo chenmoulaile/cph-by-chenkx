@@ -45,6 +45,38 @@ def output_path_from_compile_cmd(cmd):
     return match.group(1)
 
 
+def isolate_output(cmd, out_dir):
+    """Point the `-o` target of a compile command at `out_dir`.
+
+    The stress test compiles the very source the user is compiling by hand.
+    Writing - and then running - the same `.exe` made the file busy for the
+    whole run, so rebuilding it failed with
+
+        ld.exe: cannot open output file ... .exe: Permission denied
+
+    and the user could not compile while a stress test was in progress.
+    Building into a scratch directory removes the clash entirely.
+
+    Returns (new_cmd, output_path); both are unchanged/None when the command
+    has no `-o` at all (javac, interpreted languages).
+    """
+    if not cmd or not out_dir:
+        return cmd, None
+    wanted = output_path_from_compile_cmd(cmd)
+    if not wanted:
+        return cmd, None
+    target = os.path.join(out_dir, os.path.basename(wanted))
+    # A function replacement keeps Windows backslashes out of the escape
+    # handling that a plain replacement string would apply to them.
+    replacement = '-o "%s"' % target
+    new_cmd, count = _OUT_FLAG_QUOTED.subn(lambda m: replacement, cmd, count=1)
+    if not count:
+        new_cmd, count = _OUT_FLAG_BARE.subn(lambda m: replacement, cmd, count=1)
+    if not count:
+        return cmd, None
+    return new_cmd, target
+
+
 def names_match(disk_name, wanted_name):
     """True when `disk_name` is `wanted_name` after a codepage round trip.
 

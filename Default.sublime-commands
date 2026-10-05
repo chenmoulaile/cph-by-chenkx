@@ -50,6 +50,10 @@
 		"command": "cph_stop_stress_test"
 	},
 	{
+		"caption": "cph-by-chenkx: Stress test with options (pick files, rounds)",
+		"command": "cph_stress_with_options"
+	},
+	{
 		"caption": "cph-by-chenkx: Switch to English",
 		"command": "cph_language_set_language",
 		"args": {
