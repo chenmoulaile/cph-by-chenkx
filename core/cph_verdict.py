@@ -134,10 +134,24 @@ def get_verdict_by_name(name):
 
 
 # Ways a crashed program reports WHERE it died. Most specific first.
+#
+# The file match is lazy (`+?`) and the class also accepts ':' and '+', so
+# Windows absolute paths ("D:/proj/c++/main.cpp:12:5") survive: a greedy
+# class without ':' truncated them at the drive letter and the resulting
+# jump link pointed at a path that does not exist.
 _CRASH_PATTERNS = (
     # gcc/clang -fsanitize=address,undefined:  main.cpp:12:5: runtime error: ...
-    re.compile(r'([A-Za-z0-9_./\\-]+\.(?:c|cc|cpp|cxx|h|hpp)):(\d+):\d+:\s*'
+    re.compile(r'([A-Za-z0-9_./\\:+-]+?\.(?:c|cc|cpp|cxx|h|hpp)):(\d+):\d+:\s*'
                r'(?:runtime error|AddressSanitizer|ERROR|SUMMARY)'),
+    # libstdc++ / glibc assertions (-D_GLIBCXX_ASSERTIONS, C assert()):
+    #   D:/.../bits/stl_vector.h:1263: ...: Assertion '__n < this->size()' failed.
+    #   main.cpp:9: int main(): Assertion `x >= 0' failed.
+    # These carry 文件:行 but no column, so the compiler-diagnostic pattern
+    # below (which demands a column) never sees them. This is the locating
+    # fallback on toolchains where the sanitizer runtime cannot link
+    # (e.g. MSYS2 mingw gcc: "cannot find -lubsan").
+    re.compile(r'([A-Za-z0-9_./\\:+-]+?\.(?:c|cc|cpp|cxx|h|hpp)):(\d+):'
+               r'[^\n]*\bAssertion\b'),
     # Python traceback:  File "main.py", line 12
     re.compile(r'File "([^"]+)", line (\d+)'),
     # Java stack trace:  at Main.main(Main.java:12)

@@ -64,6 +64,17 @@ a {
 
 .test-compiling {
 	background-color: color(var(--bluish) alpha(0.3));
+	/* Same inner side padding as the default theme: without it the chip text
+	   sat flush against its own coloured background on this theme. */
+	padding: 1px 5px;
+}
+
+.test-compiling-error {
+	background-color: color(var(--redish) alpha(0.3));
+}
+
+.test-compiling-warning {
+	background-color: color(var(--yellowish) alpha(0.3));
 }
 
 .verdict-badge {

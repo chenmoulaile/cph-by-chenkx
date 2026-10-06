@@ -1,0 +1,45 @@
+cph-by-chenkx 2.4.0
+====================
+
+Fixed - the panel stuttered while output was streaming in. Every test card
+refresh, every line of program output and every fold/unfold scheduled its own
+"measure and maybe relayout the whole window" timer, so a busy run relaid the
+window out dozens of times a second. One measurement is now kept pending at a
+time (requests that arrive meanwhile only mark the work dirty), and a relayout
+that would move the column boundary by less than 0.01 is skipped.
+
+Fixed - a failed build still showed the blue "Compiling..." chip: the chip's
+class was hard-coded in the template, so the compile state never reached it.
+The chip is now coloured by outcome - blue while compiling, red for a failed
+build, yellow for a build that only warned.
+
+Fixed - the compile chip sat flush against its own background on the Spacegray
+and Spacegray Light themes; both were missing the padding the default theme
+has.
+
+Fixed - warnings from a build that SUCCEEDED were thrown away. Only the failure
+branch ever wrote compiler output to the panel, so an integer-overflow or
+unused-variable warning was never seen, and the "Compiling..." chip stayed on
+screen for the rest of the session (on a cache hit it was the only thing that
+mentioned the compile at all). A successful build now reports its warnings too,
+as a yellow chip with the usual clickable file:line links, and the chip is
+cleared when the compiler said nothing.
+
+Fixed - "enable_keybindings turns every package binding into a no-op" was not
+true for the panel toggle ("ctrl+k ctrl+p", macOS "super+k ctrl+p"): it is
+bound to the cph_panel_toggle_ok context, which only refused input overlays.
+That binding honours the switch now too; quick panels and other widgets stay
+refused either way.
+
+Notes:
+
+* tests/run_tests.py: 294 -> 307 checks (round 12 covers all five fixes).
+* Added .workbuddy/harness_compile_bar.py: it drives the real compile path in
+  a fake Sublime host with a real g++, compiles a warning-only, a failing and
+  a clean source, records every state the chip was ever shown in, and asserts
+  the yellow/red chip, the clickable diagnostics, the coalesced auto-fit and
+  the keybinding gate actually behave - not merely that the code is written.
+* Unchanged limitation: catching a runtime integer overflow still needs
+  "-lubsan" / "-lasan", which this toolchain cannot link. The compile-time
+  alternatives ("-Woverflow", "-Wsign-overflow", "-D_GLIBCXX_ASSERTIONS") are
+  documented in the settings.

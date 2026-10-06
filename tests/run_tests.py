@@ -1985,6 +1985,51 @@ def main():
           i18n.STRINGS.get('stress_multi_running', {}).get('zh')
           and i18n.STRINGS.get('stress_none_running', {}).get('en'))
 
+    # --- round 12: the four "not done yet" items of the fix report --------
+    tm_src = open(os.path.join(ROOT, 'test_manager.py'), encoding='utf-8').read()
+
+    # (2) auto_fit_panel_width ran behind a fresh set_timeout() per
+    # update_configs(), so a burst of output relaid the window out dozens of
+    # times a second.
+    check('auto-fit is coalesced into one pending measurement',
+          'def schedule_auto_fit_panel_width(' in tm_src
+          and 'self.schedule_auto_fit_panel_width()' in tm_src
+          and 'sublime.set_timeout(self.auto_fit_panel_width, 150)' not in tm_src)
+    check('auto-fit skips a relayout that would not move the window',
+          'if last is not None and abs(target_col1 - last) < 0.01:' in tm_src)
+
+    # (4) the compile chip used to say "Compiling..." even for a failed build,
+    # and the two Spacegray themes had no inner padding on it at all.
+    check('the compile chip is coloured by compile outcome',
+          '{state}' in compile_tpl
+          and "type='error'" in tm_src and "type='compiling'" in tm_src
+          and "type='warning'" in tm_src)
+    for css_name in ('test_styles.css', 'test_styles_spacegray.css',
+                     'test_styles_spacegraylight.css'):
+        css = open(os.path.join(ROOT, 'Highlight', css_name), encoding='utf-8').read()
+        check('the compile chip keeps its side padding in %s' % css_name,
+              '.test-compiling' in css and 'padding: 1px 5px;' in css)
+        check('the failed-compile chip is red in %s' % css_name,
+              '.test-compiling-error' in css)
+    check('the compile warning label is translated',
+          i18n.STRINGS.get('compile_warning', {}).get('zh')
+          and i18n.STRINGS.get('compile_warning', {}).get('en'))
+
+    # (6) enable_keybindings claims every package binding turns into a no-op;
+    # the panel-toggle binding has to honour it too.
+    check('the panel-toggle binding honours enable_keybindings',
+          'def _panel_toggle_ok(' in context_src
+          and 'if not keybindings_enabled():\n\t\treturn False' in context_src)
+
+    # (8) warnings from a build that succeeded used to be thrown away: only
+    # the failure branch wrote the compiler output to the panel, so the
+    # "Compiling..." chip also survived a cache hit for the whole session.
+    check('a successful build still reports its warnings',
+          'chip_text=t(\'compile_warning\')' in tm_src
+          and 'if cached:\n\t\t\t\t\tself.set_compile_bar(t(\'compile_cached\'))' in tm_src)
+    check('the compile bar is cleared when the compiler said nothing',
+          tm_src.count('self.set_compile_bar(\'\')') >= 1)
+
     print('')
     print('%d checks, %d failures' % (CHECKS[0], len(FAILURES)))
     if FAILURES:

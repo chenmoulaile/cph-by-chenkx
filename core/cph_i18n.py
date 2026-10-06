@@ -62,6 +62,10 @@ STRINGS = {
         'zh': '编译错误',
         'en': 'Compilation Error',
     },
+    'compile_warning': {
+        'zh': '编译警告',
+        'en': 'Compilation Warning',
+    },
     'input': {
         'zh': '输入',
         'en': 'Input',
@@ -308,6 +312,17 @@ STRINGS = {
               'most likely waiting for input (is the sample complete?) or '
               'looping forever. If it works in a terminal, check that the '
               'whole sample was pasted.',
+    },
+    # ---- sanitizer 回退 ----
+    'sanitizer_fallback': {
+        'zh': '本机工具链缺少 sanitizer 运行库 (ld: cannot find -lubsan/-lasan), '
+              '已自动去掉 -fsanitize 参数重新编译一次; 想要 RE 崩溃行号, '
+              '请改用带 sanitizer 运行库的工具链, 或在编译命令加 -D_GLIBCXX_ASSERTIONS',
+        'en': 'The local toolchain lacks the sanitizer runtime '
+              '(ld: cannot find -lubsan/-lasan). The -fsanitize flags were '
+              'dropped and the build was retried once. For RE line numbers, '
+              'use a toolchain with sanitizer support or add '
+              '-D_GLIBCXX_ASSERTIONS to the compile command',
     },
     'diff': {
         'zh': '差异',
@@ -624,6 +639,10 @@ STRINGS = {
         'zh': '浏览其它文件…',
         'en': 'Browse for another file...',
     },
+    'stress_type_path': {
+        'zh': '输入路径…（已预填源文件所在目录，补个文件名即可）',
+        'en': 'Type a path... (pre-filled with the source directory)',
+    },
     # ---- Competitive Companion persistent listener ----
     'listener_started': {
         'zh': 'Competitive Companion 监听已启动 (端口 {port}，目标: {file})，浏览器扩展可反复点击发送',
@@ -783,6 +802,14 @@ STRINGS = {
     'stress_counterexample_added': {
         'zh': '已把对拍反例保存为测试点（共 {total} 个）',
         'en': 'saved the counterexample as a test ({total} total)',
+    },
+    'stress_counterexample_too_big': {
+        'zh': '反例输入 {size} 字节，超过 stress_max_insert_bytes={limit}，'
+              '未写入 __tests（完整输入已在上方展示；调大该设置或设为 -1 可照常保存）',
+        'en': 'the counterexample input is {size} bytes, above '
+              'stress_max_insert_bytes={limit} - not written to __tests '
+              '(the full input is printed above; raise the setting or use -1 '
+              'to save it anyway)',
     },
     'doctor_title': {
         'zh': 'cph-by-chenkx 环境自检',

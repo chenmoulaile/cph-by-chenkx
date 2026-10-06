@@ -266,6 +266,12 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 		self.phantoms = PhantomSet(view, 'test-phantoms')
 		self.test_phantoms = [PhantomSet(view, 'test-phantoms-' + str(i)) for i in range(10)]
 		self.summary_phantom = PhantomSet(view, 'cph-summary-phantom')
+		# Panel auto-fit scheduling state (see schedule_auto_fit_panel_width).
+		# The run view can be restored by hot_exit, so read them with getattr
+		# everywhere instead of relying on __init__ having run.
+		self._fit_scheduled = False
+		self._fit_dirty = False
+		self._fit_last_cols1 = None
 
 	class Test(object):
 		def __init__(self, prop, start=None, end=None):
@@ -2108,12 +2114,38 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 
 		if not hide_phantoms:
 			# Delayed so the layout/viewport settles before measuring
-			sublime.set_timeout(self.auto_fit_panel_width, 150)
+			self.schedule_auto_fit_panel_width()
 
 		# Re-anchor the summary bar here as well: expanding a folded (AC)
 		# test inserts its text and would otherwise leave the summary
 		# phantom stranded inside that test's block.
 		self.update_summary_bar()
+
+	def schedule_auto_fit_panel_width(self, delay=150):
+		"""Coalesce auto-fit requests into one pending measurement.
+
+		update_configs() runs after every card edit, every fold/unfold and
+		every output line, so calling sublime.set_timeout() directly queued a
+		full measure + possible window.set_layout() per edit. With a burst of
+		output that is dozens of relayouts a second - the stutter users
+		noticed. One timer is kept at most, and a request that arrives while
+		it is pending just marks the work dirty so the next run re-measures.
+		"""
+		if getattr(self, '_fit_scheduled', False):
+			self._fit_dirty = True
+			return
+		self._fit_scheduled = True
+		self._fit_dirty = False
+		sublime.set_timeout(self._run_auto_fit_panel_width, delay)
+
+	def _run_auto_fit_panel_width(self):
+		self._fit_scheduled = False
+		try:
+			self.auto_fit_panel_width()
+		finally:
+			if getattr(self, '_fit_dirty', False):
+				self._fit_dirty = False
+				self.schedule_auto_fit_panel_width()
 
 	def auto_fit_panel_width(self):
 		"""
@@ -2136,16 +2168,10 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 			max_ratio = 0.5
 		max_ratio = min(max(max_ratio, 0.2), 0.9)
 
-		with_memory = False
-		tester = self.tester
-		if tester is not None and getattr(tester, 'tests', None):
-			with_memory = any(
-				x.memory != '-' and x.memory is not None for x in tester.tests)
-
-		needed = estimate_card_width_px(v, with_memory)
-		if needed <= 0:
-			return
-
+		# Cheap layout/viewport checks run before the expensive width
+		# estimate: reading the panel viewport and comparing it against the
+		# last applied column width settles the common "nothing to do" case
+		# without touching settings or estimating text.
 		layout = w.get_layout()
 		cols = layout.get('cols') or []
 		cells = layout.get('cells')
@@ -2160,6 +2186,16 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 			return
 		if viewport_px <= 0:
 			return
+
+		with_memory = False
+		tester = self.tester
+		if tester is not None and getattr(tester, 'tests', None):
+			with_memory = any(
+				x.memory != '-' and x.memory is not None for x in tester.tests)
+
+		needed = estimate_card_width_px(v, with_memory)
+		if needed <= 0:
+			return
 		try:
 			em = v.em_width()
 		except Exception:
@@ -2173,6 +2209,13 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 		target_col1 = 1.0 - target_frac
 		if target_col1 >= cols[1] - 1e-3:
 			return  # change too small or would only narrow - never shrink
+		# Sub-pixel rounding made the target wobble by a fraction of a
+		# percent between refreshes; relayouting the whole window for that
+		# is what produced the visible stutter. Only a real change counts.
+		last = getattr(self, '_fit_last_cols1', None)
+		if last is not None and abs(target_col1 - last) < 0.01:
+			return
+		self._fit_last_cols1 = target_col1
 		try:
 			w.set_layout({
 				'cols': [cols[0], target_col1, cols[2]],
@@ -2491,6 +2534,14 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 		cmd_escaped = (display or '').replace('&', '&amp;') \
 			.replace('<', '&lt;').replace('>', '&gt;')
 
+		# Compile state drives the chip colour: blue while compiling, red when
+		# the compiler failed, yellow when it only warned. A failed compile used
+		# to leave the same blue "Compiling..." chip on screen, so the panel
+		# gave no hint that anything had gone wrong.
+		state = {'compiling': ' test-compiling-compiling',
+				 'error': ' test-compiling-error',
+				 'warning': ' test-compiling-warning'}.get(type, '')
+
 		# Compiler diagnostics carry file:line:col, so turn each one into a
 		# clickable link instead of leaving a wall of text the user has to
 		# read a path out of. Nothing is removed: the raw output stays above.
@@ -2505,6 +2556,7 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 
 		content = read_resource('Highlight/compile.html').format(
 			cmd=cmd_escaped,
+			state=state,
 			compilation_error_label=t('compilation_error'),
 			diagnostics=diag_html,
 		)
@@ -2533,6 +2585,65 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 		if code_view:
 			if code_view.is_dirty():
 				code_view.run_command('save')
+
+	def _recover_session_from_run_view(self, v):
+		"""Rebuild the in-memory session lost after a plugin reload/restart.
+
+		The run view is named '<source file name> -run'. When Sublime reloads
+		the plugin (or hot_exit restores the -run tab) the OLD results are
+		still on screen but this command instance is brand new, so
+		self.session is None - and make_opd used to clear_all() the old
+		results away first and only then discover there was nothing to
+		restore ("cant restore session"), which is exactly the reported
+		"old result page disappears and the new UI never appears". Recover
+		the session from the view name instead, so the press rebuilds and
+		re-runs like every other press.
+
+		Returns the session dict, or None when the source view cannot be
+		found (then the original fallback message still applies).
+		"""
+		name = v.name() or ''
+		if not name.endswith(' -run') or not name[:-len(' -run')]:
+			return None
+		base = name[:-len(' -run')]
+		window = v.window()
+		if window is None:
+			return None
+		code = None
+		try:
+			code = window.find_open_file(base)
+		except Exception:
+			code = None
+		if code is None:
+			# Fallback for hosts without Window.find_open_file: scan views.
+			try:
+				for cand in window.views():
+					fname = cand.file_name() or ''
+					if os.path.split(fname)[1] == base:
+						code = cand
+						break
+			except Exception:
+				return None
+		if code is None or not code.file_name():
+			return None
+		code_file = code.file_name()
+		try:
+			limits = get_problem_limits(code_file) or {}
+		except Exception:
+			limits = {}
+		try:
+			scope = code.scope_name(0).split()[0]
+		except Exception:
+			scope = ''
+		return {
+			'run_file': code_file,
+			'build_sys': scope,
+			'clr_tests': False,
+			'sync_out': bool(get_settings().get('sync_output', False)),
+			'code_view_id': code.id(),
+			'time_limit_ms': limits.get('time_limit_ms'),
+			'memory_limit_mb': limits.get('memory_limit_mb'),
+		}
 
 	def make_opd(self, edit, run_file=None, build_sys=None, clr_tests=False, \
 		sync_out=False, code_view_id=None, load_session=False,
@@ -2628,6 +2739,18 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 
 		if v.settings().get('edit_mode'):
 			self.apply_edit_changes()
+
+		# Re-run on a restored/reloaded run view: the in-memory session dies
+		# with the old command instance while the OLD RESULTS are still on
+		# screen. Recover it from the view name BEFORE clear_all() wipes
+		# them, so this press rebuilds and re-runs instead of leaving the
+		# panel empty behind a "cant restore session" note (issue 3).
+		if load_session and self.session is None:
+			recovered = self._recover_session_from_run_view(v)
+			if recovered is not None:
+				self.session = recovered
+				self.dbg_file = recovered['run_file']
+				self.code_view_id = recovered['code_view_id']
 
 		v.set_scratch(True)
 		v.run_command('set_setting', {'setting': 'fold_buttons', 'value': False})
@@ -2763,6 +2886,26 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 			self.delta_input = 0
 			if cmp_data is None or cmp_data[0] == 0:
 				remember_compile(process_manager)
+				# The success path never touched the compile bar, so the
+				# "Compiling..." chip set before this ran stayed on screen for
+				# the whole session - including a cache hit, where it was the
+				# only thing that ever mentioned the compile at all. Replace it
+				# with the outcome: warnings (an overflowing constant, an unused
+				# result, ...) are the compiler telling you about code the run
+				# is about to exercise, and they used to be dropped on the floor
+				# because only the failure branch wrote them to the panel.
+				note = cmp_data[1] if cmp_data else ''
+				if cached:
+					self.set_compile_bar(t('compile_cached'))
+				elif not (note or '').strip():
+					self.set_compile_bar('')
+				elif 'warning' in (note or '').lower():
+					# Clickable file:line entries come with the text; a yellow
+					# chip keeps a warning from reading like a failure.
+					self.set_compile_bar(note, type='warning',
+										 chip_text=t('compile_warning'))
+				else:
+					self.set_compile_bar(note)
 				self.tester_epoch = getattr(self, 'tester_epoch', 0) + 1
 				self.tester = self.Tester(process_manager, \
 					self.on_insert, self.on_out, self.on_stop, self.change_process_status, \
@@ -2787,10 +2930,10 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 					v.run_command('cph_test_manager', {'action': 'new_test'})
 			else:
 				v.run_command('cph_test_manager', {'action': 'insert_opd_out', 'text': '\n' + cmp_data[1]})
-				self.set_compile_bar(cmp_data[1],
+				self.set_compile_bar(cmp_data[1], type='error',
 									 chip_text=t('compilation_error'))
 
-		self.set_compile_bar(t('compiling'))
+		self.set_compile_bar(t('compiling'), type='compiling')
 		# Mark compile start only now - the terminate/rerun path above
 		# must never be blocked by this guard on its re-entry
 		self.compiling_since = time()

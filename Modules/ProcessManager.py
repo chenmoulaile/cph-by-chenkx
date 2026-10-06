@@ -2,6 +2,7 @@ from os.path import dirname
 from os import path
 from subprocess import Popen, PIPE
 import os
+import re
 import sys
 import subprocess
 import shlex
@@ -18,6 +19,16 @@ from .build_artifact import output_path_from_compile_cmd, resolve_artifact, reta
 from ..core.cph_i18n import t
 from ..core.cph_build_mode import get_mode as _build_mode, transform as _apply_build_mode
 
+#: How many bytes read() fetches from the pipe in one syscall when the
+#: caller asks for a small chunk (byte-at-a-time sync mode, interactor).
+#: One syscall then feeds the next 65536 calls instead of one syscall per
+#: byte, which was the slow path described in 问题2.
+_READ_CHUNK = 65536
+
+#: -fsanitize=... (the value may be a comma list). Matched with \S+ so
+#: `-fsanitize=address,undefined` is removed whole.
+_SANITIZE_FLAG = re.compile(r'-fsanitize=\S+')
+
 
 def _hidden_startupinfo():
 	"""STARTUPINFO that keeps helper consoles from flashing on Windows."""
@@ -26,6 +37,21 @@ def _hidden_startupinfo():
 	si = subprocess.STARTUPINFO()
 	si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
 	return si
+
+
+def _sanitizer_fallback_note():
+	"""One-line explanation shown when a sanitizer build had to be retried.
+
+	t() returns the key itself while the string is not in core/cph_i18n.py
+	yet, so a literal fallback keeps the message meaningful in the meantime
+	(the canonical text lands there via i18nKeysNeeded).
+	"""
+	msg = t('sanitizer_fallback')
+	if msg == 'sanitizer_fallback':
+		msg = ('本机工具链缺少 sanitizer 运行库 (ld: cannot find -lubsan/-lasan), '
+			   '已自动去掉 -fsanitize 参数重新编译一次; 想要 RE 崩溃行号, 请改用'
+			   '带 sanitizer 运行库的工具链, 或在编译命令加 -D_GLIBCXX_ASSERTIONS')
+	return '[cph-by-chenkx] %s\n' % msg
 
 
 _SHELL_METACHARS = set('|&;<>()`$\n*?[]{}~')
@@ -140,6 +166,14 @@ class ProcessManager(object):
 		# Set while a CR is waiting for the next chunk, so a CRLF split
 		# across two reads is still translated into a single newline.
 		self._pending_cr = False
+
+		# Small-read buffer (see read()): bytes fetched from the pipe but
+		# not yet handed to the caller (consumed through _read_pos), and
+		# whether the pipe hit EOF. Also reset in run_file() for every new
+		# process.
+		self._read_buffer = b''
+		self._read_pos = 0
+		self._read_eof = False
 
 	def set_time_limit(self, time_ms):
 		self.time_limit_override = time_ms
@@ -353,44 +387,68 @@ class ProcessManager(object):
 		else:
 			return -1
 
+	def _popen_compile(self, cmd):
+		"""Run one compile command; return (returncode, decoded output)."""
+		PIPE = subprocess.PIPE
+		# Windows: hide console window to avoid flashing
+		startupinfo = None
+		if sublime.platform() == 'windows':
+			startupinfo = subprocess.STARTUPINFO()
+			startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+		p = subprocess.Popen(
+			cmd,
+			shell=True,
+			stdin=None,
+			stdout=PIPE,
+			stderr=subprocess.STDOUT,
+			cwd=os.path.split(self.file)[0],
+			startupinfo=startupinfo
+		)
+		# Timeout so a hanging compiler doesn't freeze the plugin forever
+		try:
+			compile_result = _decode_output(p.communicate(timeout=30)[0])
+		except subprocess.TimeoutExpired:
+			try:
+				p.kill()
+			except Exception:
+				pass
+			return (1, '[cph-by-chenkx] compile timed out after 30s\n(cmd: %s)' % cmd)
+		unknown = sorted(getattr(self, 'unknown_placeholders', ()) or ())
+		if unknown:
+			# A typo like {file_nmae} silently becomes '' and the user just
+			# sees a weird command; say which name was ignored.
+			compile_result = ('[cph-by-chenkx] ignored unknown placeholder(s): %s\n' % ', '.join(unknown)) + compile_result
+		return (p.returncode, compile_result)
+
 	def compile(self, wait_close=True):
 		cmd = self.get_compile_cmd()
 		if cmd == -1:
 			return (1, '[cph-by-chenkx] no compile command configured for this file extension')
 		if cmd is not None:
 			try:
-				PIPE = subprocess.PIPE
-				# Windows: hide console window to avoid flashing
-				startupinfo = None
-				if sublime.platform() == 'windows':
-					startupinfo = subprocess.STARTUPINFO()
-					startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-				p = subprocess.Popen(
-					cmd,
-					shell=True,
-					stdin=None,
-					stdout=PIPE,
-					stderr=subprocess.STDOUT,
-					cwd=os.path.split(self.file)[0],
-					startupinfo=startupinfo
-				)
-				# Timeout so a hanging compiler doesn't freeze the plugin forever
-				try:
-					compile_result = _decode_output(p.communicate(timeout=30)[0])
-				except subprocess.TimeoutExpired:
-					try:
-						p.kill()
-					except Exception:
-						pass
-					return (1, '[cph-by-chenkx] compile timed out after 30s\n(cmd: %s)' % cmd)
-				unknown = sorted(getattr(self, 'unknown_placeholders', ()) or ())
-				if unknown:
-					# A typo like {file_nmae} silently becomes '' and the user just
-					# sees a weird command; say which name was ignored.
-					compile_result = ('[cph-by-chenkx] ignored unknown placeholder(s): %s\n' % ', '.join(unknown)) + compile_result
-				if p.returncode == 0:
+				returncode, compile_result = self._popen_compile(cmd)
+				if returncode != 0 and isinstance(cmd, str) \
+						and '-fsanitize' in cmd:
+					# The sanitizer runtimes are not part of every toolchain
+					# (MSYS2 mingw gcc 15.2 fails to link with
+					# "ld.exe: cannot find -lubsan/-lasan"), which made the
+					# debug build mode a dead mode on those machines. Drop
+					# the -fsanitize flags and retry once, and say so - the
+					# rest of the command (e.g. -g, -fno-omit-frame-pointer)
+					# links fine everywhere.
+					fallback = _SANITIZE_FLAG.sub(' ', cmd)
+					if fallback != cmd:
+						rc2, out2 = self._popen_compile(fallback)
+						note = _sanitizer_fallback_note()
+						if rc2 == 0:
+							returncode, compile_result = rc2, note + out2
+						else:
+							returncode = rc2
+							compile_result = (note + compile_result.rstrip()
+											  + '\n' + out2)
+				if returncode == 0:
 					compile_result = compile_result + self._artifact_note(cmd)
-				return (p.returncode, compile_result)
+				return (returncode, compile_result)
 			except Exception as e:
 				return (1, '[cph-by-chenkx] failed to run compile command: %s\n(cmd: %s)' % (e, cmd))
 
@@ -449,6 +507,9 @@ class ProcessManager(object):
 		# data and program output.
 		self._out_decoder = codecs.getincrementaldecoder('utf-8')('replace')
 		self._pending_cr = False
+		self._read_buffer = b''
+		self._read_pos = 0
+		self._read_eof = False
 		self.stdin_closed = False
 
 		self.process = subprocess.Popen(
@@ -585,28 +646,82 @@ class ProcessManager(object):
 		The incremental decoder matters for the byte-at-a-time sync mode:
 		a multi-byte UTF-8 character split across two reads would otherwise
 		come out as mojibake.
+
+		Small reads used to cost one os.read() syscall per call: the sync
+		listener (proc.read(bfsize=1)) and the interactor paid a syscall
+		plus a decode per single byte, which made output-heavy runs drag.
+		read() now fetches _READ_CHUNK bytes per syscall into an internal
+		buffer and serves the caller from there. The observable semantics
+		are unchanged: a call with bfsize returns at most that many bytes,
+		blocks until at least one byte is available (or EOF), and the
+		decoder flush at EOF happens exactly once the buffer is drained.
 		"""
 		try:
 			if bfsize is None:
-				data = self.process.stdout.read()
+				data = self._read_buffer[self._read_pos:] \
+					+ self.process.stdout.read()
+				self._read_buffer = b''
+				self._read_pos = 0
 			else:
-				data = self.process.stdout.read(bfsize)
+				if bfsize <= 0:
+					bfsize = 1
+				# One refill at most: like the raw pipe read before, the
+				# call returns as soon as *any* byte is available and must
+				# never block waiting for the full bfsize (an interactor
+				# partner that prints a short prompt and then waits for
+				# input would deadlock otherwise). The buffer is consumed
+				# through an offset - re-slicing it per byte would turn
+				# every call into a memmove of the rest of the chunk.
+				if self._read_pos >= len(self._read_buffer) \
+						and not self._read_eof:
+					chunk = self.process.stdout.read(
+						max(_READ_CHUNK, int(bfsize)))
+					if not chunk:
+						self._read_eof = True
+					else:
+						self._read_buffer = chunk
+						self._read_pos = 0
+				start = self._read_pos
+				data = self._read_buffer[start:start + bfsize]
+				self._read_pos = start + len(data)
 		except Exception:
 			return ''
 		if not data:
-			# EOF: flush whatever a partial sequence left in the decoder
+			# EOF (and nothing buffered): flush whatever a partial
+			# sequence left in the decoder
 			try:
 				tail = self._out_decoder.decode(b'', final=True)
 			except Exception:
 				tail = ''
 			return self._normalize_newlines(tail, final=True)
-		return self._normalize_newlines(self._out_decoder.decode(data))
+		decoded = self._out_decoder.decode(data)
+		# _normalize_newlines() only ever changes text around '\r'; with
+		# none pending and none in the chunk it is the identity, so skip
+		# its two str.replace() scans - the per-byte path in the sync
+		# listener / interactor calls this once per byte.
+		if self._pending_cr or '\r' in decoded:
+			return self._normalize_newlines(decoded)
+		return decoded
 
 	def terminate(self):
 		self.terminated = True
 		proc = getattr(self, 'process', None)
 		pid = getattr(proc, 'pid', None)
 		if pid is None:
+			self.is_run = False
+			return
+
+		try:
+			already_exited = proc.poll() is not None
+		except Exception:
+			already_exited = False
+		if already_exited:
+			# The process already exited on its own (its verdict was already
+			# delivered by the listener). Killing a dead pid is not only
+			# pointless: on Windows taskkill /F /T /PID would hit whatever
+			# process the OS has since assigned that pid to (pid reuse), and
+			# the spawn+wait happens on the UI thread in the close/re-run
+			# paths. Just clear the running marker.
 			self.is_run = False
 			return
 

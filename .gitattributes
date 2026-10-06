@@ -11,3 +11,13 @@ tests export-ignore
 ScreenShots/ export-ignore
 PC_SUBMISSION_NOTES.md export-ignore
 RELEASE_NOTES_CN.md export-ignore
+
+# Another assistant's workflow scratch: drafts and eval drivers, ~87 KB of
+# nothing the plugin needs. Not export-ignored before because nothing
+# referenced it.
+.zcode/ export-ignore
+
+# The *.bak-<date> files are whole-file snapshots taken before a risky edit,
+# so a reviewer can diff them. Useful in the repository, useless (and
+# confusing) inside the installed package.
+*.bak-* export-ignore

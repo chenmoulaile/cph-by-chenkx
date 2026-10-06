@@ -5,6 +5,9 @@ Package Control 审查要求包内快捷键必须带具体 context（不能用"�
 
 - ``cph_run_view``        当前视图就是运行面板（-run）
 - ``cph_has_run_panel``   当前视图是运行面板，或当前源文件已经有配对的运行面板
+- ``cph_panel_toggle_ok`` 收缩/展开运行面板的快捷键（ctrl+k ctrl+p）能否在
+  当前视图触发：除输入浮层（快速面板、查找替换等 widget 视图）外全部放行，
+  对齐原版"任何视图都生效"的行为；同时受 ``enable_keybindings`` 约束
 - ``cph_stress_running``  对拍正在运行
 - ``cph_listener_running``Competitive Companion 监听器正在运行
 - ``cph_supported_file``  当前视图是本插件能处理的文件（见 core/cph_target）
@@ -59,6 +62,24 @@ def _has_run_panel(view):
 	return False
 
 
+def _panel_toggle_ok(view):
+	"""True when the toggle-panel hotkey (ctrl+k ctrl+p) may fire here.
+
+	原版对这个键没有加任何 context，任何视图都能按；Package Control 评审
+	不允许包内绑定不带 context，所以用这个专用键应答：widget 视图
+	（快速面板、查找替换等输入浮层）不放行，其余视图全部放行——
+	没跑过本插件的源文件也能收缩窗口里已经存在的三栏布局。
+
+	``enable_keybindings`` 同样在这里放行：它声称"关掉后包内快捷键全部变成
+	空操作"，那这句文档就得对包括这一条在内的所有绑定成立。
+	"""
+	if not keybindings_enabled():
+		return False
+	if bool(view.settings().get('is_widget')):
+		return False
+	return True
+
+
 class CphContextListener(sublime_plugin.EventListener):
 	"""Answer the custom context keys used by this package's key bindings."""
 
@@ -67,6 +88,8 @@ class CphContextListener(sublime_plugin.EventListener):
 			value = _is_run_view(view)
 		elif key == 'cph_has_run_panel':
 			value = _has_run_panel(view)
+		elif key == 'cph_panel_toggle_ok':
+			value = _panel_toggle_ok(view)
 		elif key == 'cph_stress_running':
 			value = is_stress_running()
 		elif key == 'cph_stress_view':

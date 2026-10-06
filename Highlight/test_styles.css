@@ -65,6 +65,21 @@ a {
 
 .test-compiling {
 	background-color: color(var(--bluish) alpha(0.3));
+	/* compile chip: restore the inner side padding the original template's
+	   whitespace used to give. The compile template cannot carry a trailing
+	   space ({cmd} must stay glued to </a>), so - like the verdict badges -
+	   the side padding lives here on the inline anchor instead. */
+	padding: 1px 5px;
+}
+
+/* Compile outcome, not the compile command: a chip that only ever said
+   "Compiling..." left a failed build looking identical to a running one. */
+.test-compiling-error {
+	background-color: color(var(--redish) alpha(0.3));
+}
+
+.test-compiling-warning {
+	background-color: color(var(--yellowish) alpha(0.3));
 }
 
 .verdict-badge {

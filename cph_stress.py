@@ -278,26 +278,101 @@ def _browse_panel(window, directory, title, on_done):
     show(directory)
 
 
+def _path_panel(window, start_dir, title, on_done):
+    """Type a path into a Sublime input panel, pre-filled with the directory.
+
+    The panel opens holding the directory of the file under test (plus its
+    trailing separator), so using a differently named std / generator - or
+    rotating several - is a matter of typing the file name. Typing a folder
+    name and pressing enter moves the panel into that folder; Esc cancels.
+    """
+    initial = start_dir or ''
+    if initial:
+        initial = os.path.abspath(initial)
+        if os.path.basename(initial):
+            # A drive root ("C:\") already ends with its separator.
+            initial += os.sep
+
+    def accept(value):
+        path = (value or '').strip().strip('"').strip("'")
+        if not path:
+            # Nothing typed: reopen the panel instead of failing silently.
+            _path_panel(window, start_dir, title, on_done)
+            return
+        if not os.path.isabs(path) and start_dir:
+            path = os.path.join(start_dir, path)
+        path = os.path.expanduser(path)
+        try:
+            path = os.path.abspath(path)
+            is_dir = os.path.isdir(path)
+            exists = os.path.exists(path)
+        except Exception:
+            is_dir = exists = False
+        if is_dir:
+            # Stepping into a typed folder: reopen the panel inside it.
+            _path_panel(window, path, title, on_done)
+        elif exists:
+            on_done(path)
+        else:
+            sublime.error_message(t('file_not_found') + ': ' + path)
+            # Reopen with the same starting point so a typo can be fixed
+            # without going through the whole flow again.
+            _path_panel(window, start_dir, title, on_done)
+
+    # The callback must not be named `on_done`: that name would shadow the
+    # parameter and turn the `on_done(path)` call into infinite recursion.
+    window.show_input_panel(title, initial, accept, None, None)
+
+
+def _typed_or_browse(window, start_dir, title, on_done):
+    """The system dialog was cancelled (or there is none): offer both ways.
+
+    The typed-path panel comes first: it starts at the source directory, so
+    picking any file is one word of typing rather than a dialog hunt.
+    """
+    items = [t('stress_type_path'), t('stress_browse_more')]
+
+    def on_select(index):
+        if index == 0:
+            _path_panel(window, start_dir, title, on_done)
+        elif index == 1:
+            _browse_panel(window, start_dir, title, on_done)
+
+    window.show_quick_panel(items, on_select)
+
+
 def _open_file_dialog(window, start_dir, title, on_done):
-    """Pick a file: the system dialog where there is one, a panel otherwise."""
+    """Pick a file: the system dialog where there is one, a panel otherwise.
+
+    Every path also reaches the typed-path panel, pre-filled with the source
+    directory; "panel" skips the system dialog and starts there right away.
+    """
     mode = str(get_settings().get('stress_file_picker', 'auto') or 'auto').lower()
 
     def fallback():
-        _browse_panel(window, start_dir, title, on_done)
+        _typed_or_browse(window, start_dir, title, on_done)
 
+    if mode == 'panel':
+        _path_panel(window, start_dir, title, on_done)
+        return
     if mode in ('auto', 'native'):
         if _native_pick(window, start_dir, title, on_done, fallback):
             return
     fallback()
 
 
-def _pick_file(window, start_dir, title, candidates, on_done):
-    """One file: an exact hit is used silently, otherwise ask."""
-    if len(candidates) == 1:
+def _pick_file(window, start_dir, title, candidates, on_done, ask=False):
+    """One file: an exact hit is used silently, otherwise ask.
+
+    `ask` (the "with options" flow) shows the choice even for a single hit,
+    with a typed-path entry for any file name the naming hints do not know.
+    """
+    if len(candidates) == 1 and not ask:
         on_done(candidates[0])
         return
     if candidates:
         items = [os.path.basename(c) for c in candidates]
+        items.append(t('stress_type_path'))
         items.append(t('stress_browse_more'))
 
         def on_select(index):
@@ -305,6 +380,8 @@ def _pick_file(window, start_dir, title, candidates, on_done):
                 return
             if index < len(candidates):
                 on_done(candidates[index])
+            elif index == len(candidates):
+                _path_panel(window, start_dir, title, on_done)
             else:
                 _open_file_dialog(window, start_dir, title, on_done)
         window.show_quick_panel(items, on_select)
@@ -452,9 +529,10 @@ def _start_flow(view, choose=False):
             _pick_file(window, src_dir, t('choose_generator_file'),
                        [g for g in gen_hits
                         if os.path.normcase(g) != os.path.normcase(std_file)],
-                       lambda gen_file: begin(std_file, gen_file))
+                       lambda gen_file: begin(std_file, gen_file), ask=choose)
 
-        _pick_file(window, src_dir, t('choose_std_file'), std_hits, pick_gen)
+        _pick_file(window, src_dir, t('choose_std_file'), std_hits, pick_gen,
+                   ask=choose)
         return
 
     begin(std_hits[0], gen_hits[0])
@@ -1214,6 +1292,22 @@ def _append_stress(sess, text):
                 return
 
 
+def _insert_limit():
+    """The stress_max_insert_bytes cap for __tests (bytes; -1 = no limit)."""
+    try:
+        return int(get_settings().get('stress_max_insert_bytes', 2000))
+    except (TypeError, ValueError):
+        return 2000
+
+
+def _utf8_size(text):
+    """The size of `text` in bytes, the unit of stress_max_insert_bytes."""
+    try:
+        return len(text.encode('utf-8'))
+    except Exception:
+        return len(text)
+
+
 def _on_stress_failed(round_count, inp, user_out, std_out, checker_message='',
                        sess=None):
     # Keep everything needed to reproduce this counterexample later
@@ -1259,20 +1353,31 @@ def _on_stress_failed(round_count, inp, user_out, std_out, checker_message='',
 
     # Save the counterexample as a permanent test case: finding a
     # counterexample is only useful if it comes back as a regression test.
+    # A huge multi-case sample is misery to debug inside __tests, though, so
+    # stress_max_insert_bytes keeps oversized inputs out of the tests file
+    # (they are still printed above, and their seed can still be replayed).
     try:
         if get_settings().get('stress_save_counterexample', True):
             user_file = sess.get('user_file')
             if user_file:
-                answer = std_out.strip()
-                merged, _conflicts = merge_tests(load_all_tests(user_file), [{
-                    'test': inp,
-                    'correct_answers': [answer] if answer else [],
-                    # Keep the generator seed with the counterexample so
-                    # 'Stress: replay last seed' can reproduce it exactly.
-                    'seed': sess.get('current_seed')}])
-                if save_tests(user_file, merged):
+                limit = _insert_limit()
+                size = _utf8_size(inp)
+                if limit >= 0 and size > limit:
+                    # Say why nothing was saved instead of failing silently.
                     text += '\n[cph-by-chenkx] ' + \
-                        t('stress_counterexample_added', total=len(merged)) + '\n'
+                        t('stress_counterexample_too_big', size=size,
+                          limit=limit) + '\n'
+                else:
+                    answer = std_out.strip()
+                    merged, _conflicts = merge_tests(load_all_tests(user_file), [{
+                        'test': inp,
+                        'correct_answers': [answer] if answer else [],
+                        # Keep the generator seed with the counterexample so
+                        # 'Stress: replay last seed' can reproduce it exactly.
+                        'seed': sess.get('current_seed')}])
+                    if save_tests(user_file, merged):
+                        text += '\n[cph-by-chenkx] ' + \
+                            t('stress_counterexample_added', total=len(merged)) + '\n'
     except Exception as e:
         print_safe('[cph-by-chenkx] failed to save counterexample: %s' % e)
 

@@ -180,7 +180,7 @@
 		},
 		"context": [
 			{
-				"key": "cph_has_run_panel",
+				"key": "cph_panel_toggle_ok",
 				"operator": "equal",
 				"operand": true
 			}
