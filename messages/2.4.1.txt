@@ -1,0 +1,37 @@
+cph-by-chenkx 2.4.1
+====================
+
+Fixed - a runtime error in C++ could be reported as "wrong answer" instead.
+Reading a std::vector out of bounds is undefined behaviour: with -O2 nothing
+crashes, the program prints whatever was in memory and exits 0, so the judge
+has nothing to call it but WA. Debug builds now always define
+-D_GLIBCXX_ASSERTIONS, which turns that silent read into an abort, so the run
+is judged RE (runtime error) instead.
+
+Fixed - switching to the debug build turned that RE into TLE. On Windows an
+aborting program is already dead at t=0 but Windows Error Reporting reaps it
+about 4.5 seconds later, so the assertion text never reached the panel before
+the 2-second watchdog killed the run and empty stderr means "timed out". A run
+that the watchdog killed without a message is now replayed once under gdb; if
+the program really died, the verdict becomes RE.
+
+Fixed - the RE was located in a header the user does not own. abort points at
+libstdc++ (stl_vector.h), never at the line that made the mistake. The RE
+report (and the parallel-runner result) now replays the binary under gdb and
+quotes the frame in the source under test: "std.cpp:20". The replay is skipped
+when no debugger is installed - the report degrades to the header line rather
+than failing.
+
+Notes:
+
+* Ctrl+Alt+G toggles the build mode; switch to debug before judging a C++
+  program, because a release build cannot report a runtime error at all.
+* The replay's stdout is never fed into the answer comparison: it exists only
+  to walk the stack.
+* tests/run_tests.py: 310 -> 327 checks (round 13 covers the gdb replay). Added .workbuddy/harness_crash_line.py
+  (17 checks, real g++ and real gdb): the release build must stay WA with no
+  crash line, the debug build must be RE at the user's own line, a correct
+  program must stay AC, and a machine without gdb must degrade quietly.
+* Unchanged limitation: integer-overflow detection still needs -fsanitize
+  (UBSan/ASan), which this toolchain cannot link; gdb replays a crash, it
+  cannot instrument a silent one.

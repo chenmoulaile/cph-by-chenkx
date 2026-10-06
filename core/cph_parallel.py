@@ -23,11 +23,25 @@ import sublime
 
 from .cph_verdict import (get_verdict, get_verdict_by_code, find_crash_location,
                           looks_like_crash)
+from .cph_gdb_trace import names_source as _names_source
 
 #: Extra allowance on top of the time limit before we kill a run. Kept tiny so
 #: the semantics match the serial path (whose watchdog kills at exactly the
 #: limit, measured from before Popen); this only covers the 10ms poll step.
 _GRACE_SECONDS = 0.05
+
+
+def _replay_crash(manager, source_file, stdin_text, time_limit_ms):
+    """(file, line) from a gdb replay of the binary, or None. Never raises."""
+    try:
+        timeout = 5.0
+        if time_limit_ms:
+            timeout = min(5.0, max(2.0, float(time_limit_ms) / 1000.0))
+        payload = stdin_text.encode('utf-8', 'replace') if isinstance(stdin_text, str) else b''
+        return manager.locate_crash(source_file=source_file,
+                                    stdin_bytes=payload, timeout=timeout)
+    except Exception:
+        return None
 
 
 def _run_one(make_manager, input_text, expected, time_limit_ms, memory_limit_mb,
@@ -84,8 +98,17 @@ def _run_one(make_manager, input_text, expected, time_limit_ms, memory_limit_mb,
 
         if killed:
             # Same rule as the serial path: a crash signature means the
-            # process died on its own and our kill was collateral.
-            if looks_like_crash(stderr or stdout):
+            # process died on its own and our kill was collateral. When
+            # nothing was printed, ask gdb instead - on Windows an aborting
+            # program is dead at t=0 but reaped ~4.5s later (WER), so its
+            # assertion text never reaches us before the deadline.
+            replayed = None
+            if not looks_like_crash(stderr or stdout):
+                replayed = _replay_crash(manager, getattr(manager, 'file', None),
+                                         input_text, time_limit_ms)
+            if replayed:
+                result['crash'] = replayed
+            if replayed or looks_like_crash(stderr or stdout):
                 result['verdict'] = get_verdict('runtime_error')
             else:
                 result['verdict'] = get_verdict('time_limit_exceed')
@@ -120,7 +143,16 @@ def _run_one(make_manager, input_text, expected, time_limit_ms, memory_limit_mb,
                 result['message'] = 'checker: %s: %s' % (type(e).__name__, e)
 
         if result['verdict']['name'] == 'RE':
-            result['crash'] = find_crash_location(stderr or stdout)
+            source_file = getattr(manager, 'file', None)
+            location = find_crash_location(stderr or stdout, source_file)
+            # A C++ abort names a libstdc++ header, not the user's line; one
+            # gdb replay is what turns it into the frame they have to fix.
+            if not _names_source(location, source_file):
+                replayed = _replay_crash(manager, source_file, input_text,
+                                         time_limit_ms)
+                if replayed:
+                    location = replayed
+            result['crash'] = location
     except Exception as e:
         result['error'] = '%s: %s' % (type(e).__name__, e)
         result['verdict'] = get_verdict('unknown_error')

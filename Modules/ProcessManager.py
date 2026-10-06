@@ -18,6 +18,9 @@ from .memprobe import MemorySampler, bytes_to_mb, sample_memory_bytes
 from .build_artifact import output_path_from_compile_cmd, resolve_artifact, retarget_command
 from ..core.cph_i18n import t
 from ..core.cph_build_mode import get_mode as _build_mode, transform as _apply_build_mode
+from ..core.cph_gdb_trace import (find_gdb as _find_gdb, find_crash as _find_crash,
+                                   replay as _replay_under_gdb,
+                                   names_source as _names_source)
 
 #: How many bytes read() fetches from the pipe in one syscall when the
 #: caller asks for a small chunk (byte-at-a-time sync mode, interactor).
@@ -49,8 +52,8 @@ def _sanitizer_fallback_note():
 	msg = t('sanitizer_fallback')
 	if msg == 'sanitizer_fallback':
 		msg = ('本机工具链缺少 sanitizer 运行库 (ld: cannot find -lubsan/-lasan), '
-			   '已自动去掉 -fsanitize 参数重新编译一次; 想要 RE 崩溃行号, 请改用'
-			   '带 sanitizer 运行库的工具链, 或在编译命令加 -D_GLIBCXX_ASSERTIONS')
+			   '已自动去掉 -fsanitize 参数重新编译一次; debug 模式的 -D_GLIBCXX_ASSERTIONS '
+			   '不依赖该运行库, 越界等未定义行为仍会中止并判 RE')
 	return '[cph-by-chenkx] %s\n' % msg
 
 
@@ -370,6 +373,67 @@ class ProcessManager(object):
 			return ('[cph-by-chenkx] the binary was written as %s (the '
 					'compiler did not use the -o name)\n' % path.basename(actual))
 		return ''
+
+	def program_path(self):
+		"""The binary this compile produced, or None.
+
+		`artifact_paths()` is the authoritative answer (it already copes with
+		a non-ASCII `-o` name written through the ANSI codepage); the run
+		command is the fallback for toolchains without an `-o` at all.
+		"""
+		try:
+			wanted, actual = self.artifact_paths()
+		except Exception:
+			wanted, actual = None, None
+		if actual:
+			return actual
+		if wanted:
+			return wanted
+		try:
+			cmd = self.get_run_cmd('')
+		except Exception:
+			return None
+		if not isinstance(cmd, str) or not cmd:
+			return None
+		token = cmd.strip().split(' ')[0].strip('"')
+		return token if path.isfile(token) else None
+
+	def locate_crash(self, source_file=None, stdin_bytes=None, timeout=5.0):
+		"""(file, line) of the user's own frame when the program died, else None.
+
+		Runs the compiled binary once more under gdb (see
+		core/cph_gdb_trace). Used in two places, both of which used to point
+		at libstdc++ internals or at nothing at all:
+
+		* an abort / segfault whose own output only names a header
+		  (``stl_vector.h:1263``) - the frame the user needs is theirs.
+		* a run the watchdog killed at the time limit. On Windows an aborting
+		  program is already dead at t=0 but is only reaped ~4.5s later (WER),
+		  so the assertion text never reaches the plugin and the honest
+		  verdict was lost.
+
+		Every failure path returns None: no gdb, no binary, no symbol info -
+		the caller keeps whatever verdict it had.
+		"""
+		try:
+			program = self.program_path()
+		except Exception:
+			program = None
+		if not program:
+			return None
+		gdb = _find_gdb()
+		if not gdb:
+			return None
+		try:
+			log_path = path.join(tempfile.gettempdir(),
+								 'cph-gdb-%d.log' % os.getpid())
+			_out, log_text = _replay_under_gdb(
+				gdb, program, log_path,
+				stdin_bytes=stdin_bytes, timeout=timeout,
+				cwd=path.split(self.file)[0])
+			return _find_crash(log_text, source_file or self.file)
+		except Exception:
+			return None
 
 	def get_run_cmd(self, args):
 		opt = self.run_settings

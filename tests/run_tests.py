@@ -1502,8 +1502,24 @@ def main():
           '-O2' not in debug and '-g' in debug
           and '-fsanitize=address,undefined' in debug
           and '-fno-omit-frame-pointer' in debug, debug)
+    # An out-of-bounds std::vector read is undefined behaviour, not a crash:
+    # at -O2 it prints heap garbage and exits 0, so the judge can only say WA
+    # and never RE. The assertion macro is the only UB probe that survives on
+    # toolchains where -fsanitize cannot be linked (ld: cannot find -lubsan),
+    # so debug mode must carry it and release mode must drop it.
+    check('debug adds -D_GLIBCXX_ASSERTIONS for out-of-bounds detection',
+          '-D_GLIBCXX_ASSERTIONS' in debug, debug)
+    check('switching back to release removes the assertion macros',
+          '-D_GLIBCXX' not in build_mode.transform(debug, build_mode.MODE_RELEASE)
+          and '-D_GLIBCXX_ASSERTIONS'
+          not in build_mode.transform(base + ' -D_GLIBCXX_DEBUG',
+                                      build_mode.MODE_RELEASE))
     check('switching back to release removes the sanitizer',
           '-fsanitize' not in build_mode.transform(debug, build_mode.MODE_RELEASE))
+    check('a hand-written -D_GLIBCXX_DEBUG does not double up in debug mode',
+          build_mode.transform(base + ' -D_GLIBCXX_DEBUG', build_mode.MODE_DEBUG)
+          .count('-D_GLIBCXX') == 1,
+          build_mode.transform(base + ' -D_GLIBCXX_DEBUG', build_mode.MODE_DEBUG))
     check('the mode is per file and toggles',
           build_mode.get_mode('x.cpp') == build_mode.MODE_RELEASE
           and build_mode.toggle('x.cpp') == build_mode.MODE_DEBUG
@@ -2029,6 +2045,63 @@ def main():
           and 'if cached:\n\t\t\t\t\tself.set_compile_bar(t(\'compile_cached\'))' in tm_src)
     check('the compile bar is cleared when the compiler said nothing',
           tm_src.count('self.set_compile_bar(\'\')') >= 1)
+
+    # --- round 13: a crash must be reported at the user's own line ---------
+    # A C++ abort names a libstdc++ header (stl_vector.h:1263) or prints
+    # nothing at all, and on Windows it is only reaped ~4.5s later - past the
+    # watchdog - so the panel used to say WA (release) or TLE (debug) instead
+    # of RE, and the one line it did name was not actionable.
+    gdb_src = open(os.path.join(ROOT, 'core', 'cph_gdb_trace.py'),
+                   encoding='utf-8').read()
+    pm_src = open(os.path.join(ROOT, 'Modules', 'ProcessManager.py'),
+                  encoding='utf-8').read()
+    par_src = open(os.path.join(ROOT, 'core', 'cph_parallel.py'),
+                   encoding='utf-8').read()
+    bm_src = open(os.path.join(ROOT, 'core', 'cph_build_mode.py'),
+                  encoding='utf-8').read()
+
+    check('debug builds carry the libstdc++ assertion macro',
+          '-D_GLIBCXX_ASSERTIONS' in bm_src
+          and "_ASSERTIONS = '-D_GLIBCXX_ASSERTIONS'" in bm_src)
+    for api in ('def parse_frames(', 'def build_gdb_cmd(', 'def split_log(',
+                'def find_crash(', 'def replay(', 'def names_source(',
+                'def find_gdb('):
+        check('the gdb replay offers %s' % api, api in gdb_src)
+    # The backtrace has to be requested BETWEEN the two sentinels: with the
+    # end marker first the slice is empty and every query silently returns
+    # None even though the log plainly holds the frames.
+    _bt = gdb_src.index("ex.append('bt 30')")
+    check('the backtrace is captured between the sentinels',
+          gdb_src.index('ex.append(\'echo \\\\n%s\\\\n\\\\n\' % _SENTINEL)') < _bt
+          < gdb_src.index('ex.append(\'echo \\\\n%s\\\\n\' % _SENTINEL_END)'))
+    # gdb always exits 0 here (measured: 0 for normal exit, for SIGSEGV and
+    # for abort()), so a `quit <code>` would hand every program the same
+    # non-zero status and make whole runs look like RE.
+    check('the gdb verdict never comes from its exit code',
+          "ex.append('quit')" in gdb_src
+          and "ex.append('quit " not in gdb_src
+          and 'ex.append(\'kill\')' in gdb_src)
+    check('the abort breakpoint is the only one (raise does not exist here)',
+          "_BREAKPOINTS = ('abort',)" in gdb_src)
+    check('a segfault counts as a crash even without hitting the breakpoint',
+          'received signal' in gdb_src and '_HIT_SIGNAL' in gdb_src)
+    check('the replay never raises out of the judge path',
+          'except Exception' in gdb_src)
+
+    check('the run manager can replay a crash and name a source line',
+          'def program_path(' in pm_src and 'def locate_crash(' in pm_src
+          and 'find_gdb as _find_gdb' in pm_src
+          and 'replay as _replay_under_gdb' in pm_src)
+    check('the panel asks the run manager for the user frame',
+          'def _replay_crash(' in tm_src
+          and 'crash_location = _replay_crash(' in tm_src)
+    # The RE branch must prefer the replay even when the program's own output
+    # already named something: that something is the libstdc++ header.
+    check('a libstdc++ frame is replaced by the user frame',
+          'if not _names_source(location, source_file):' in tm_src)
+    check('the stress/judge path does the same',
+          'if not _names_source(location, source_file):' in par_src
+          and 'def _replay_crash(' in par_src)
 
     print('')
     print('%d checks, %d failures' % (CHECKS[0], len(FAILURES)))

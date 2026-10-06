@@ -30,6 +30,7 @@ from .core.cph_interactive import (config as interactor_config,
 from .core.cph_resources import read_resource
 from .Highlight.test_interface import get_test_styles
 from .core.cph_verdict import get_verdict, get_verdict_by_code, get_verdict_by_name, build_line_diff, outputs_equal, find_crash_location, looks_like_crash
+from .core.cph_gdb_trace import names_source as _names_source_impl
 from .core.cph_i18n import t
 
 
@@ -154,6 +155,41 @@ def _clean_newlines(s):
 	if not isinstance(s, str):
 		return s
 	return s.replace('\r\n', '\n').replace('\r', '\n')
+
+
+def _replay_crash(pm, source_file, stdin_text, time_limit_ms):
+	"""(file, line) from a gdb replay, or None. Never raises.
+
+	One extra run of the binary under gdb turns "the program died somewhere
+	in libstdc++" - or "it died and printed nothing" - into the user's own
+	frame. It is skipped whenever the answer already exists, and any failure
+	(no gdb, no binary, no symbols, a timeout) degrades to None so the
+	caller keeps the verdict it already had.
+	"""
+	timeout = 5.0
+	try:
+		if time_limit_ms:
+			timeout = min(5.0, max(2.0, float(time_limit_ms) / 1000.0))
+	except (TypeError, ValueError):
+		pass
+	payload = b''
+	if isinstance(stdin_text, str):
+		payload = stdin_text.encode('utf-8', 'replace')
+	try:
+		return pm.locate_crash(source_file=source_file,
+							   stdin_bytes=payload, timeout=timeout)
+	except Exception:
+		return None
+
+
+def _names_source(location, source_file):
+	"""True when `location` already points at the source under test.
+
+	Decides whether the gdb replay is worth running: an abort whose own
+	message named a libstdc++ header (``stl_vector.h:1263``) is real but not
+	actionable, and the user's frame is what they have to fix.
+	"""
+	return _names_source_impl(location, source_file)
 
 
 def _squash_ws(s):
@@ -2311,6 +2347,11 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 		elif self.tester.tests[test_id].expected_output:
 			expected_output = self.tester.tests[test_id].expected_output
 
+		# A crash location recovered by the gdb replay above. Set before the
+		# verdict is chosen so the RE branch below can prefer it over the
+		# libstdc++ header line that appears in the program's own output.
+		crash_location = None
+
 		if getattr(tester, 'tle_killed', False):
 			# The watchdog killed the process at the time limit. Unless the
 			# error stream carries a crash signature: then the program died
@@ -2320,7 +2361,18 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 			if looks_like_crash(stderr or _outp):
 				verdict = get_verdict('runtime_error')
 			else:
-				verdict = get_verdict('time_limit_exceed')
+				# On Windows an aborting program is dead at t=0 but is only
+				# reaped ~4.5s later (Windows Error Reporting on the abort
+				# path), so its assertion text never reaches us before the
+				# watchdog fires and every debug-mode crash came out as a TLE.
+				# Replaying under gdb catches the abort frame in ~0.35s.
+				crash_location = _replay_crash(
+					pm, getattr(pm, 'file', None) or self.dbg_file, _inp,
+					time_limit_ms)
+				if crash_location:
+					verdict = get_verdict('runtime_error')
+				else:
+					verdict = get_verdict('time_limit_exceed')
 		elif getattr(pm, 'terminated', False):
 			# stopped manually by the user -> not a real judge result
 			verdict = get_verdict('skipped')
@@ -2351,7 +2403,19 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 		# parameter that was accepted but never computed.)
 		if verdict['name'] == 'RE':
 			source_file = getattr(pm, 'file', None) or self.dbg_file
-			location = find_crash_location(stderr or _outp, source_file)
+			location = crash_location
+			if not location:
+				location = find_crash_location(stderr or _outp, source_file)
+			# What the program's own output names is usually a libstdc++
+			# header (stl_vector.h:1263 for a vector out-of-bounds read): real,
+			# but useless, because the line the user has to fix is their own.
+			# One gdb replay (~0.35s measured) turns it into their frame, and
+			# is the only source of a line at all when the crash printed
+			# nothing. Skipped when the output already named their file.
+			if not _names_source(location, source_file):
+				_replayed = _replay_crash(pm, source_file, _inp, time_limit_ms)
+				if _replayed:
+					location = _replayed
 			if location:
 				crash_line = '%s:%d' % location
 				self.tester.tests[test_id].crash_line = crash_line

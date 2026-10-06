@@ -316,13 +316,14 @@ STRINGS = {
     # ---- sanitizer 回退 ----
     'sanitizer_fallback': {
         'zh': '本机工具链缺少 sanitizer 运行库 (ld: cannot find -lubsan/-lasan), '
-              '已自动去掉 -fsanitize 参数重新编译一次; 想要 RE 崩溃行号, '
-              '请改用带 sanitizer 运行库的工具链, 或在编译命令加 -D_GLIBCXX_ASSERTIONS',
+              '已自动去掉 -fsanitize 参数重新编译一次; debug 模式的 -D_GLIBCXX_ASSERTIONS '
+              '不依赖该运行库, 越界等未定义行为仍会中止并判 RE',
         'en': 'The local toolchain lacks the sanitizer runtime '
               '(ld: cannot find -lubsan/-lasan). The -fsanitize flags were '
-              'dropped and the build was retried once. For RE line numbers, '
-              'use a toolchain with sanitizer support or add '
-              '-D_GLIBCXX_ASSERTIONS to the compile command',
+              'dropped and the build was retried once. debug mode still passes '
+              '-D_GLIBCXX_ASSERTIONS, which needs no such runtime: '
+              'out-of-bounds and other undefined behaviour still abort and '
+              'are judged RE',
     },
     'diff': {
         'zh': '差异',
