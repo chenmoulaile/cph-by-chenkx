@@ -2103,6 +2103,20 @@ def main():
           'if not _names_source(location, source_file):' in par_src
           and 'def _replay_crash(' in par_src)
 
+    # The program argument for gdb must go through verbatim. Adding quotes is
+    # what a Windows path with spaces invites, and gdb then reports "No
+    # executable specified, use `target exec'" - which surfaced as a bare TLE
+    # with an empty crash line, for a program that does abort. Every fixture
+    # lived under %TEMP%, so the quoted branch was never exercised.
+    _quote_def = gdb_src[gdb_src.index('def _quote('):]
+    _quote_def = _quote_def[:_quote_def.index('\ndef ')]
+    _quote_body = _quote_def[_quote_def.index('"""', _quote_def.index('"""') + 3) + 3:]
+    check('the gdb program path is passed verbatim, never quoted',
+          _quote_body.strip() == 'return path'
+          and '"%s"' not in _quote_body
+          and 'replace(' not in _quote_body,
+          repr(_quote_body.strip()[:120]))
+
     print('')
     print('%d checks, %d failures' % (CHECKS[0], len(FAILURES)))
     if FAILURES:

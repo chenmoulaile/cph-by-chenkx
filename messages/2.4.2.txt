@@ -1,0 +1,29 @@
+cph-by-chenkx 2.4.2
+====================
+
+Fixed - a runtime error was reported as TLE when the source lived in a folder
+whose name contains a space or non-ASCII characters (for example
+"...\2026 CSP-S 复赛赛前模拟赛 day7\"). The crash replay handed gdb a quoted
+program path; gdb treats those quotes as part of the name and then refuses to
+load anything, so the replay found no crash, the panel fell back to the verdict
+it already had, and a program that clearly aborts came out as TLE with an empty
+crash line.
+
+The path is now passed through verbatim - argv already carries the boundaries -
+so the replay locates the frame in the source under test as intended.
+
+Why this went unnoticed: every test fixture for the crash replay lived under the
+system temp directory, whose name has neither spaces nor non-ASCII characters,
+so the quoted branch was never exercised. The crash-line harness now also runs
+the same case from a directory shaped like a real one, and the CI suite asserts
+the program argument is never quoted.
+
+Notes:
+
+* tests/run_tests.py: 327 -> 328 checks.
+* .workbuddy/harness_crash_line.py: 17 -> 22 checks (the spaced-path case
+  reproduces the exact symptom - TLE with an empty crash line - against the
+  previous code and passes against this one).
+* Unchanged: a release build still cannot report a runtime error (silent
+  undefined behaviour exits 0), and a machine without gdb still degrades to the
+  libstdc++ header line instead of failing.

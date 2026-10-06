@@ -137,14 +137,21 @@ def parse_frames(text, source_file=None):
 
 
 def _quote(path):
-    """Quote a path for gdb's ``--args`` without breaking on spaces.
+    """The program argument for gdb's ``--args``, verbatim.
 
-    gdb splits --args on whitespace, so a path with spaces (本机实测就有
-    '2026 CSP-S 复赛赛前模拟赛 day7'）would otherwise arrive in pieces.
+    刻意**不加**引号。子进程传 argv 给 gdb 时边界由 CreateProcess 保证，gdb 把
+    ``--args`` 之后的每个 argv 元素原样当程序名；而一旦自己加引号，gdb 会把引号
+    当成路径的一部分，于是报 ``No executable specified, use `target exec'``。
+    实测（用户真实路径，带空格且含中文）：
+
+        --args "D:\\Code_Source\\...\\day7\\A\\std.exe"  -> 失败，中文还被按
+                                                          ANSI 代码页解码成乱码
+        --args D:\\Code_Source\\...\\day7\\A\\std.exe      -> 成功，0.87s 命中断点
+
+    之前写成"有空格就加引号"，是因为测试夹具全在 %TEMP% 下、没有空格路径，把这个
+    bug 完整地藏住了。
     """
-    if not re.search(r'[\s"]', path):
-        return path
-    return '"%s"' % path.replace('"', '\\"')
+    return path
 
 
 def names_source(location, source_file):
