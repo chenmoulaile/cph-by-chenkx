@@ -1,0 +1,38 @@
+cph-by-chenkx 2.4.3
+====================
+
+Added - the console now names the build the plugin host actually loaded:
+
+    [cph-by-chenkx] 2.4.3 loaded (pid 28072)
+
+Why: Sublime does not hot reload a package's .py files, so after an update the
+host can keep judging runs with code from an earlier install. Until now the only
+symptom was a verdict that "does not match the source on disk" (a TLE for a
+program that clearly aborts, an empty crash line), and telling the two apart
+meant comparing file timestamps against the plugin host's start time by hand.
+Open View > Show Console after a restart and the version is right there; the pid
+is the same one in %TEMP%\cph-gdb-<pid>.log, so the crash-replay log and the
+running code can be tied to the same process in one step.
+
+Fixed - four leftover files were sitting in the package root and would have been
+published by the next release:
+
+* repository-cph-by-chenkx.json - a Package Control registry entry, not part of
+  the plugin. Shipping it inside the package adds a meaningless file to every
+  user's install.
+* Example.sublime-keymap - the single-platform keymap from before the bindings
+  were split per platform. Its bindings have no context entries, so Sublime
+  would have applied them by default and taken over ctrl+alt+t and friends from
+  anyone who installed the package.
+* cph_stress_tmp_section.py and _tmp_leak_probe.py - scratch modules from an
+  earlier refactor. The first one raised
+  NameError("name 're' is not defined") on import, which aborted part of the
+  stress generator; the second imported sublime at package scope for no reason.
+
+Notes:
+
+* tests/check_messages.py now also verifies that plugin_init.VERSION equals the
+  newest key in messages.json, so the banner can never name a build that was
+  never released.
+* tests/run_tests.py: 328 checks, unchanged - the "no active key binding ships
+  by default" check already caught the stray keymap before it could ship.

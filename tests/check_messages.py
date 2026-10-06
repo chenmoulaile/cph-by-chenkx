@@ -168,6 +168,33 @@ def main():
             print('  - %s' % p)
         return 1
     print('release notes and messages.json agree on every version')
+    return check_plugin_version(keys)
+
+
+def check_plugin_version(keys):
+    """`plugin_init.VERSION` must be the newest key in messages.json.
+
+    The startup banner prints it (plugin_init.plugin_loaded), so a stale
+    constant would make the console name a build the host never loaded -
+    precisely the confusion that banner exists to prevent. Lives in this file
+    because this is the one that already owns the release bookkeeping.
+    """
+    path = os.path.join(ROOT, 'plugin_init.py')
+    with open(path, encoding='utf-8') as f:
+        source = f.read()
+    m = re.search(r"^VERSION = '([^']+)'", source, flags=re.M)
+    if not m:
+        print('plugin_init.py declares no VERSION - the startup banner would '
+              'name nothing')
+        return 1
+    declared = m.group(1)
+    newest = max(keys)
+    if declared != newest:
+        print('plugin_init.VERSION is %s but messages.json newest is %s - '
+              'the banner would name a build that was never loaded'
+              % (declared, newest))
+        return 1
+    print('plugin_init    : VERSION %s matches messages.json' % declared)
     return 0
 
 

@@ -5,6 +5,37 @@
 
 ---
 
+# v2.4.3
+
+## 新增与改进
+
+- **控制台直接报出宿主真正加载的版本** —— `[cph-by-chenkx] 2.4.3 loaded (pid 28072)`。
+  Sublime 不热重载插件 `.py`，更新之后宿主可能还在用旧字节码判题，而症状只有一个：
+  判定结果「和磁盘上的源码对不上」（明明 abort 的程序报 TLE、崩溃行为空）。以前要
+  区分「代码没改对」和「进程还在跑旧的」，只能手工比对文件时间戳和插件宿主启动
+  时间。现在重启后打开 `View > Show Console` 就能看到版本，而那个 pid 正是
+  `%TEMP%\cph-gdb-<pid>.log` 里的数字 —— 崩溃重放日志和正在跑的代码一步就对上了。
+
+## 修复
+
+- **清掉包根目录四个本不该发布的残留文件**：
+  - `repository-cph-by-chenkx.json` —— Package Control 的注册表条目，不是插件的一部分，
+    打进包里只会给每个用户的安装目录添一个无意义的文件；
+  - `Example.sublime-keymap` —— 按平台拆分快捷键之前的那份单平台 keymap，它没有
+    context 条目，Sublime 会默认生效，直接抢走任何安装者的 `ctrl+alt+t` 等按键；
+  - `cph_stress_tmp_section.py` 与 `_tmp_leak_probe.py` —— 早前重构遗留的草稿模块。
+    前者 import 时抛 `NameError("name 're' is not defined")`，导致压力生成器的一部分
+    直接崩掉；后者无谓地在包作用域 import sublime。
+
+## 说明
+
+- `tests/check_messages.py` 现在额外校验 `plugin_init.VERSION` 等于 `messages.json`
+  的最新键，启动横幅不会再报出一个从未发布过的版本。
+- 回归测试仍是 328 项 —— `tests/run_tests.py` 里「no active key binding ships by
+  default」那条断言**早就拦住了**那份残留 keymap，没让它发出去。
+
+---
+
 # v2.4.2
 
 ## 修复

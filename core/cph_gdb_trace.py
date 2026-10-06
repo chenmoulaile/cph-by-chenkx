@@ -335,6 +335,12 @@ def replay(gdb, program, log_path, stdin_bytes=None, timeout=5.0, cwd=None):
 
     Returns ('', '') when gdb is unusable, so a missing debugger degrades to
     the previous behaviour instead of failing the run.
+
+    gdb 自己的抱怨会原样留在 ``log_path`` 里（``No executable specified`` 之类）。
+    这不是给用户看的噪音，而是唯一能证明"插件宿主里到底加载了哪份代码"的现场
+    证据：日志文件名带 plugin_host 的 PID，配合进程 StartTime 就能立刻区分
+    "代码没改对"和"进程还在跑旧字节码"。面板只显示 TLE 和空崩溃行时，唯一能
+    指路的就是这份文件。
     """
     cmd = build_gdb_cmd(gdb, program, log_path)
     if not cmd:

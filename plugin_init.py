@@ -1,10 +1,22 @@
 """cph-by-chenkx plugin initialization entrypoint."""
+import os
+
 import sublime
+
+# Kept in sync with messages.json by tests/check_messages.py.
+VERSION = '2.4.3'
 
 
 def plugin_loaded():
     """Called when the package loads."""
     try:
+        # Say which build this host actually loaded. Sublime does not hot
+        # reload the package's .py files, so a run can easily be judged by
+        # code from an earlier install - and the only symptom is a verdict
+        # that "does not match the source on disk". Printing the version at
+        # startup (visible in the console with View > Show Console) plus the
+        # plugin host's StartTime answers that question immediately.
+        print('[cph-by-chenkx] %s loaded (pid %s)' % (VERSION, os.getpid()))
         # Defer language and settings initialization
         sublime.set_timeout(_init, 100)
     except Exception as e:
