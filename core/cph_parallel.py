@@ -1,4 +1,4 @@
-"""cph-by-chenkx - 并行跑全部测试点
+"""Algorithm Competition Assistant - 并行跑全部测试点
 
 串行跑的时候，总耗时 ≈ 时限 × 测试点数：5 个点里有 2 个 TLE，就得干等 2×TL。
 这里用一个小的 worker 池（默认 4）同时跑，墙钟时间大约降到 1/4。

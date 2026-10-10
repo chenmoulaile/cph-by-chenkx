@@ -1,4 +1,4 @@
-"""cph-by-chenkx - 用 gdb 把"静默的未定义行为"变成一行可点击的源码位置
+"""Algorithm Competition Assistant - 用 gdb 把"静默的未定义行为"变成一行可点击的源码位置
 
 问题
 ----

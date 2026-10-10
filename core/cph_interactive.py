@@ -1,4 +1,4 @@
-"""cph-by-chenkx - 交互题（Interactor）
+"""Algorithm Competition Assistant - 交互题（Interactor）
 
 交互题没法用"跑完看输出"来判：选手程序和 interactor 要**来回对话**。这里按
 testlib 的约定接线：

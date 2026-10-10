@@ -1,4 +1,4 @@
-"""cph-by-chenkx - 测试数据合并策略（唯一实现）
+"""Algorithm Competition Assistant - 测试数据合并策略（唯一实现）
 
 导入 / 剪贴板 / Competitive Companion / 对拍反例四条路径以前各写一份合并逻辑，
 语义还不一致：有的按 (输入, 答案) 双键去重，有的按输入单键。结果是同一份输入

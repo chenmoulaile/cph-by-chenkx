@@ -1,5 +1,5 @@
 """
-cph-by-chenkx - Competitive Companion 持久监听器
+Algorithm Competition Assistant - Competitive Companion 持久监听器
 接收来自浏览器扩展 Competitive Companion 的 POST 请求
 参考: https://github.com/jmerle/competitive-companion
 思路来自 FastOlympicCodingHook (https://github.com/DrSwad/FastOlympicCodingHook)
@@ -177,7 +177,7 @@ class _CompanionHandler(BaseHTTPRequestHandler):
                 sublime.status_message(t('import_save_failed'))
                 return
             remember_limits(file_name, time_limit_ms, memory_limit_mb)
-            print('[cph-by-chenkx] %s' % t('new_test_file_path', path=file_name))
+            print('[Algorithm Competition Assistant] %s' % t('new_test_file_path', path=file_name))
 
             count = len(incoming)
             tl = time_limit_ms if time_limit_ms is not None else '-'
@@ -259,7 +259,7 @@ def _auto_create_file(view, problem_name):
             view.close()
     except Exception:
         pass
-    print('[cph-by-chenkx] auto-created %s' % path)
+    print('[Algorithm Competition Assistant] auto-created %s' % path)
     return new_view
 
 
@@ -276,7 +276,7 @@ def _start_listener(view):
             return
         port = 12345
         try:
-            port = int(sublime.load_settings('cph-by-chenkx.sublime-settings')
+            port = int(sublime.load_settings('Algorithm Competition Assistant.sublime-settings')
                        .get('companion_port', 12345) or 12345)
             server = HTTPServer(('localhost', port), _CompanionHandler)
         except Exception as e:
@@ -291,7 +291,7 @@ def _start_listener(view):
         thread.start()
 
     sublime.status_message(t('listener_started', file=file_name, port=port))
-    print('[cph-by-chenkx] ' + t('listener_started', file=file_name, port=port))
+    print('[Algorithm Competition Assistant] ' + t('listener_started', file=file_name, port=port))
 
 
 def _stop_listener():

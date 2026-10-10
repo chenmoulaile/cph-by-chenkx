@@ -1,5 +1,5 @@
 """
-cph-by-chenkx - 设置管理 + 测试数据存储路径解析
+Algorithm Competition Assistant - 设置管理 + 测试数据存储路径解析
 
 支持两种测试数据存储模式:
 1. 传统模式 (FastOlympicCoding 兼容): tests 存在 "{filename}{suffix}" 同目录下
@@ -19,7 +19,7 @@ _package_root = path.dirname(path.dirname(__file__))
 root_dir = _package_root
 base_name = path.split(_package_root)[1]
 
-settings_file = 'cph-by-chenkx.sublime-settings'
+settings_file = 'Algorithm Competition Assistant.sublime-settings'
 
 tests_file_suffix_default = '__tests'
 tests_relative_dir_default = ''
@@ -69,7 +69,7 @@ def try_load_settings():
 		sublime.set_timeout_async(try_load_settings, 200)
 	else:
 		init_settings(_settings)
-		sublime.status_message('cph-by-chenkx: settings loaded')
+		sublime.status_message('Algorithm Competition Assistant: settings loaded')
 
 
 # Per-problem limits received from Competitive Companion, kept in memory
@@ -190,7 +190,7 @@ def load_all_tests(file):
 				seen.add(key)
 				merged.append(test)
 		except Exception as e:
-			print('[cph-by-chenkx] Failed to load tests from %s: %s' % (p, e))
+			print('[Algorithm Competition Assistant] Failed to load tests from %s: %s' % (p, e))
 
 	return merged
 
@@ -270,5 +270,5 @@ def save_tests(file, tests):
 				f.write(sublime.encode_value(tests, True))
 			ok = True
 		except Exception as e:
-			print('[cph-by-chenkx] Failed to save tests to %s: %s' % (path_, e))
+			print('[Algorithm Competition Assistant] Failed to save tests to %s: %s' % (path_, e))
 	return ok

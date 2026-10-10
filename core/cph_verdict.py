@@ -1,5 +1,5 @@
 """
-cph-by-chenkx - 评判系统 (类似 cph-ng)
+Algorithm Competition Assistant - 评判系统 (类似 cph-ng)
 """
 
 import difflib

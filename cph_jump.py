@@ -1,4 +1,4 @@
-"""cph-by-chenkx - 跳到源码位置（命令入口）
+"""Algorithm Competition Assistant - 跳到源码位置（命令入口）
 
 逻辑在 core/cph_jump.py（根级插件模块之间不允许互相 import）。
 """
@@ -14,7 +14,7 @@ class CphJumpToLocationCommand(sublime_plugin.TextCommand):
 
 	def run(self, edit, target=None):
 		if not jump_to(self.view, target):
-			sublime.status_message('[cph-by-chenkx] no such jump target')
+			sublime.status_message('[Algorithm Competition Assistant] no such jump target')
 
 	def is_enabled(self, target=None):
 		return bool(self.view.settings().get('cph_jump_targets'))

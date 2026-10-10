@@ -1,5 +1,5 @@
 """
-cph-by-chenkx - 资源读取（zip 安全）
+Algorithm Competition Assistant - 资源读取（zip 安全）
 
 Package Control 默认把包打成 .sublime-package（其实是一个 zip）。此时
 `__file__` 指向 zip 内部，用内置 open() 读 Highlight/*.html 会直接抛

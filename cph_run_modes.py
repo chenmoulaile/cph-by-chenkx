@@ -1,5 +1,5 @@
 """
-cph-by-chenkx - 运行模式命令（跑完全部 / 只重跑失败 / 强制重新编译）
+Algorithm Competition Assistant - 运行模式命令（跑完全部 / 只重跑失败 / 强制重新编译）
 
 这三个模式以前只能靠改设置或手动一个个点，这里做成命令，方便挂到
 命令面板与快捷键上。
@@ -48,7 +48,7 @@ class _RunModeMixin(object):
 			return
 
 		if not view.file_name():
-			sublime.status_message('[cph-by-chenkx] save the file first')
+			sublime.status_message('[Algorithm Competition Assistant] save the file first')
 			return
 		view.run_command('cph_view_tester', args)
 
@@ -103,7 +103,7 @@ class CphToggleBuildModeCommand(sublime_plugin.TextCommand):
 		view = self.view
 		file_name = view.file_name()
 		if not file_name:
-			sublime.status_message('[cph-by-chenkx] save the file first')
+			sublime.status_message('[Algorithm Competition Assistant] save the file first')
 			return
 		mode = toggle_build_mode(file_name)
 		if mode == MODE_DEBUG:
@@ -111,7 +111,7 @@ class CphToggleBuildModeCommand(sublime_plugin.TextCommand):
 			          'crash lines are clickable, UB is caught')
 		else:
 			detail = 'release (-O2) - timings match the judge'
-		sublime.status_message('[cph-by-chenkx] build mode: %s  |  %s' % (mode, detail))
+		sublime.status_message('[Algorithm Competition Assistant] build mode: %s  |  %s' % (mode, detail))
 
 		# The compile cache key includes the command, so the next run
 		# recompiles automatically; just refresh the panel's status label.
@@ -137,7 +137,7 @@ class CphTestMenuCommand(sublime_plugin.TextCommand):
 			view.run_command('cph_test_manager', {'action': 'show_test_menu'})
 			return
 		if not view.file_name():
-			sublime.status_message('[cph-by-chenkx] save the file first')
+			sublime.status_message('[Algorithm Competition Assistant] save the file first')
 			return
 		view.run_command('cph_view_tester', {'action': 'make_opd'})
 

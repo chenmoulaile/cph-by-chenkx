@@ -1,4 +1,4 @@
-"""cph-by-chenkx - Subtask（子任务）分组计分
+"""Algorithm Competition Assistant - Subtask（子任务）分组计分
 
 NOI / OI 赛制里测试点是分组的：**组内全部 AC 才拿到这一组的分**，否则该组
 0 分（哪怕组里只有一个点挂）。汇总行因此要显示"部分分"，而不是单纯的

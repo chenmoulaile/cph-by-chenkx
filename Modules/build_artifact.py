@@ -187,7 +187,7 @@ def _announce(actual, wanted):
     if key in _ANNOUNCED:
         return
     _ANNOUNCED.add(key)
-    print_safe('[cph-by-chenkx] the binary is %r on disk, not %r'
+    print_safe('[Algorithm Competition Assistant] the binary is %r on disk, not %r'
                % (os.path.basename(actual), os.path.basename(wanted)))
 
 

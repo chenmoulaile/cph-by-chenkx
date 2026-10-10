@@ -1,13 +1,13 @@
 [
 	{
-		"caption": "cph-by-chenkx: Run",
+		"caption": "Algorithm Competition Assistant: Run",
 		"command": "cph_view_tester",
 		"args": {
 			"action": "make_opd"
 		}
 	},
 	{
-		"caption": "cph-by-chenkx: Run with clean tests",
+		"caption": "Algorithm Competition Assistant: Run with clean tests",
 		"command": "cph_view_tester",
 		"args": {
 			"action": "make_opd",
@@ -15,170 +15,170 @@
 		}
 	},
 	{
-		"caption": "cph-by-chenkx: Toggle hide phantoms",
+		"caption": "Algorithm Competition Assistant: Toggle hide phantoms",
 		"command": "cph_test_manager",
 		"args": {
 			"action": "toggle_hide_phantoms"
 		}
 	},
 	{
-		"caption": "cph-by-chenkx: Listen to Competitive Companion",
+		"caption": "Algorithm Competition Assistant: Listen to Competitive Companion",
 		"command": "cph_companion_listener"
 	},
 	{
-		"caption": "cph-by-chenkx: Stop Competitive Companion listener",
+		"caption": "Algorithm Competition Assistant: Stop Competitive Companion listener",
 		"command": "cph_companion_stop_listener"
 	},
 	{
-		"caption": "cph-by-chenkx: Import tests from file...",
+		"caption": "Algorithm Competition Assistant: Import tests from file...",
 		"command": "cph_import_tests"
 	},
 	{
-		"caption": "cph-by-chenkx: Pick and import test file",
+		"caption": "Algorithm Competition Assistant: Pick and import test file",
 		"command": "cph_pick_import_file"
 	},
 	{
-		"caption": "cph-by-chenkx: Import .in/.out tests next to this file",
+		"caption": "Algorithm Competition Assistant: Import .in/.out tests next to this file",
 		"command": "cph_import_tests_here"
 	},
 	{
-		"caption": "cph-by-chenkx: Start stress test",
+		"caption": "Algorithm Competition Assistant: Start stress test",
 		"command": "cph_start_stress_test"
 	},
 	{
-		"caption": "cph-by-chenkx: Stop stress test",
+		"caption": "Algorithm Competition Assistant: Stop stress test",
 		"command": "cph_stop_stress_test"
 	},
 	{
-		"caption": "cph-by-chenkx: Stress test with options (pick files, rounds)",
+		"caption": "Algorithm Competition Assistant: Stress test with options (pick files, rounds)",
 		"command": "cph_stress_with_options"
 	},
 	{
-		"caption": "cph-by-chenkx: Switch to English",
+		"caption": "Algorithm Competition Assistant: Switch to English",
 		"command": "cph_language_set_language",
 		"args": {
 			"language": "en"
 		}
 	},
 	{
-		"caption": "cph-by-chenkx: Switch to Chinese (切换为中文)",
+		"caption": "Algorithm Competition Assistant: Switch to Chinese (切换为中文)",
 		"command": "cph_language_set_language",
 		"args": {
 			"language": "zh"
 		}
 	},
 	{
-		"caption": "cph-by-chenkx: Toggle language",
+		"caption": "Algorithm Competition Assistant: Toggle language",
 		"command": "cph_language_toggle_language"
 	},
 	{
-		"caption": "Preferences: cph-by-chenkx Settings",
+		"caption": "Preferences: Algorithm Competition Assistant Settings",
 		"command": "edit_settings",
 		"args": {
-			"base_file": "${packages}/cph-by-chenkx/cph-by-chenkx.sublime-settings",
+			"base_file": "${packages}/Algorithm Competition Assistant/Algorithm Competition Assistant.sublime-settings",
 			"default": "{\n\t$0\n}\n"
 		}
 	},
 	{
-		"caption": "Preferences: cph-by-chenkx TestSyntax Settings",
+		"caption": "Preferences: Algorithm Competition Assistant TestSyntax Settings",
 		"command": "edit_settings",
 		"args": {
-			"base_file": "${packages}/cph-by-chenkx/TestSyntax.sublime-settings",
+			"base_file": "${packages}/Algorithm Competition Assistant/TestSyntax.sublime-settings",
 			"default": "{\n\t$0\n}\n"
 		}
 	},
 	{
-		"caption": "cph-by-chenkx: Run all tests (keep going after failures)",
+		"caption": "Algorithm Competition Assistant: Run all tests (keep going after failures)",
 		"command": "cph_run_all_tests"
 	},
 	{
-		"caption": "cph-by-chenkx: Re-run failed tests only",
+		"caption": "Algorithm Competition Assistant: Re-run failed tests only",
 		"command": "cph_run_failed_tests"
 	},
 	{
-		"caption": "cph-by-chenkx: Run (force recompile)",
+		"caption": "Algorithm Competition Assistant: Run (force recompile)",
 		"command": "cph_run_force_recompile"
 	},
 	{
-		"caption": "cph-by-chenkx: Add test from clipboard",
+		"caption": "Algorithm Competition Assistant: Add test from clipboard",
 		"command": "cph_add_test_from_clipboard"
 	},
 	{
-		"caption": "cph-by-chenkx: Copy test input",
+		"caption": "Algorithm Competition Assistant: Copy test input",
 		"command": "cph_copy_test_input"
 	},
 	{
-		"caption": "cph-by-chenkx: Copy expected output",
+		"caption": "Algorithm Competition Assistant: Copy expected output",
 		"command": "cph_copy_test_expected"
 	},
 	{
-		"caption": "cph-by-chenkx: Copy actual output",
+		"caption": "Algorithm Competition Assistant: Copy actual output",
 		"command": "cph_copy_test_actual"
 	},
 	{
-		"caption": "cph-by-chenkx: Export tests as .in/.out files",
+		"caption": "Algorithm Competition Assistant: Export tests as .in/.out files",
 		"command": "cph_export_tests"
 	},
 	{
-		"caption": "cph-by-chenkx: Check environment (doctor)",
+		"caption": "Algorithm Competition Assistant: Check environment (doctor)",
 		"command": "cph_doctor"
 	},
 	{
-		"caption": "cph-by-chenkx: Insert template snippet",
+		"caption": "Algorithm Competition Assistant: Insert template snippet",
 		"command": "cph_insert_template"
 	},
 	{
-		"caption": "cph-by-chenkx: Test actions (run / detail / edit a test)",
+		"caption": "Algorithm Competition Assistant: Test actions (run / detail / edit a test)",
 		"command": "cph_test_menu"
 	},
 	{
-		"caption": "cph-by-chenkx: Toggle Debug / Release build mode",
+		"caption": "Algorithm Competition Assistant: Toggle Debug / Release build mode",
 		"command": "cph_toggle_build_mode"
 	},
 	{
-		"caption": "cph-by-chenkx: Run all tests in parallel",
+		"caption": "Algorithm Competition Assistant: Run all tests in parallel",
 		"command": "cph_run_parallel"
 	},
 	{
-		"caption": "cph-by-chenkx: Jump to the last error location",
+		"caption": "Algorithm Competition Assistant: Jump to the last error location",
 		"command": "cph_jump_to_location",
 		"args": {
 			"target": "0"
 		}
 	},
 	{
-		"caption": "cph-by-chenkx: Fetch problem from URL (samples + statement)",
+		"caption": "Algorithm Competition Assistant: Fetch problem from URL (samples + statement)",
 		"command": "cph_fetch_problem"
 	},
 	{
-		"caption": "cph-by-chenkx: View problem statement (Markdown)",
+		"caption": "Algorithm Competition Assistant: View problem statement (Markdown)",
 		"command": "cph_view_statement"
 	},
 	{
-		"caption": "cph-by-chenkx: Benchmark this test (N runs)",
+		"caption": "Algorithm Competition Assistant: Benchmark this test (N runs)",
 		"command": "cph_benchmark"
 	},
 	{
-		"caption": "cph-by-chenkx: Contest timer (start / stop)",
+		"caption": "Algorithm Competition Assistant: Contest timer (start / stop)",
 		"command": "cph_contest_timer"
 	},
 	{
-		"caption": "cph-by-chenkx: Show practice statistics",
+		"caption": "Algorithm Competition Assistant: Show practice statistics",
 		"command": "cph_stats_report"
 	},
 	{
-		"caption": "cph-by-chenkx: Reset practice statistics",
+		"caption": "Algorithm Competition Assistant: Reset practice statistics",
 		"command": "cph_stats_report",
 		"args": {
 			"reset": true
 		}
 	},
 	{
-		"caption": "cph-by-chenkx: Calibrate this machine's speed",
+		"caption": "Algorithm Competition Assistant: Calibrate this machine's speed",
 		"command": "cph_calibrate_machine"
 	},
 	{
-		"caption": "cph-by-chenkx: Stress: replay last counterexample seed",
+		"caption": "Algorithm Competition Assistant: Stress: replay last counterexample seed",
 		"command": "cph_stress_replay"
 	}
 ]

@@ -1,7 +1,7 @@
-"""cph-by-chenkx - 附加命令：抓题、题面预览、比赛计时、benchmark、统计、机器校准
+"""Algorithm Competition Assistant - 附加命令：抓题、题面预览、比赛计时、benchmark、统计、机器校准
 
 这些命令都不改用户设置，数据写在本插件自己的文件里（`Packages/User/` 下的
-`cph-by-chenkx-*.json`）。逻辑放在 core/，这里只做命令外壳。
+`Algorithm Competition Assistant-*.json`）。逻辑放在 core/，这里只做命令外壳。
 """
 
 import os
@@ -38,13 +38,13 @@ def _add_samples_to(view, pairs):
 	"""Append the fetched samples as tests of this source file."""
 	file_name = view.file_name()
 	if not file_name:
-		sublime.status_message('[cph-by-chenkx] ' + t('save_file_first'))
+		sublime.status_message('[Algorithm Competition Assistant] ' + t('save_file_first'))
 		return 0
 	entries = [{'test': inp, 'correct_answers': [out] if out.strip() else []}
 			   for inp, out in pairs]
 	merged, _conflicts = merge_tests(load_all_tests(file_name), entries)
 	if not save_tests(file_name, merged):
-		sublime.status_message('[cph-by-chenkx] ' + t('fetch_failed',
+		sublime.status_message('[Algorithm Competition Assistant] ' + t('fetch_failed',
 													 url=file_name, error='save'))
 		return 0
 	# Refresh an already-open run panel so the new tests show up.
@@ -57,7 +57,7 @@ def _add_samples_to(view, pairs):
 								  {'action': 'make_opd', 'load_session': True,
 								   'run_file': file_name})
 				break
-	sublime.status_message('[cph-by-chenkx] '
+	sublime.status_message('[Algorithm Competition Assistant] '
 						   + t('fetch_added', n=len(entries), total=len(merged)))
 	return len(entries)
 
@@ -85,9 +85,9 @@ class CphFetchProblemCommand(sublime_plugin.TextCommand):
 	def fetch_and_add(self, url, open_statement=False):
 		url = (url or '').strip()
 		if not looks_like_url(url):
-			sublime.status_message('[cph-by-chenkx] ' + t('fetch_bad_url', url=url))
+			sublime.status_message('[Algorithm Competition Assistant] ' + t('fetch_bad_url', url=url))
 			return
-		sublime.status_message('[cph-by-chenkx] ' + url)
+		sublime.status_message('[Algorithm Competition Assistant] ' + url)
 
 		view = self.view
 
@@ -95,7 +95,7 @@ class CphFetchProblemCommand(sublime_plugin.TextCommand):
 			html, error = fetch(url)
 			if error:
 				sublime.set_timeout(
-					lambda: sublime.status_message('[cph-by-chenkx] ' + error), 0)
+					lambda: sublime.status_message('[Algorithm Competition Assistant] ' + error), 0)
 				return
 			pairs = samples(html)
 			title = title_of(html)
@@ -104,9 +104,9 @@ class CphFetchProblemCommand(sublime_plugin.TextCommand):
 				if pairs:
 					_add_samples_to(view, pairs)
 				else:
-					sublime.status_message('[cph-by-chenkx] ' + t('fetch_no_samples'))
+					sublime.status_message('[Algorithm Competition Assistant] ' + t('fetch_no_samples'))
 				if title:
-					sublime.status_message('[cph-by-chenkx] %s | %s'
+					sublime.status_message('[Algorithm Competition Assistant] %s | %s'
 										   % (title, describe_samples(pairs)))
 				if open_statement:
 					_open_markdown(statement(html, url))
@@ -132,14 +132,14 @@ class CphViewStatementCommand(sublime_plugin.TextCommand):
 				return
 		url = (url or '').strip()
 		if not looks_like_url(url):
-			sublime.status_message('[cph-by-chenkx] ' + t('fetch_bad_url', url=url))
+			sublime.status_message('[Algorithm Competition Assistant] ' + t('fetch_bad_url', url=url))
 			return
 
 		def worker():
 			html, error = fetch(url)
 			if error:
 				sublime.set_timeout(
-					lambda: sublime.status_message('[cph-by-chenkx] ' + error), 0)
+					lambda: sublime.status_message('[Algorithm Competition Assistant] ' + error), 0)
 				return
 			markdown = statement(html, url)
 			sublime.set_timeout(lambda: _open_markdown(markdown), 0)
@@ -151,7 +151,7 @@ class CphViewStatementCommand(sublime_plugin.TextCommand):
 
 def _open_markdown(markdown):
 	if not markdown or not markdown.strip():
-		sublime.status_message('[cph-by-chenkx] ' + t('statement_empty'))
+		sublime.status_message('[Algorithm Competition Assistant] ' + t('statement_empty'))
 		return
 	window = sublime.active_window()
 	if window is None:
@@ -176,17 +176,17 @@ class CphCalibrateMachineCommand(sublime_plugin.TextCommand):
 	"""
 
 	def run(self, edit):
-		sublime.status_message('[cph-by-chenkx] calibrating...')
+		sublime.status_message('[Algorithm Competition Assistant] calibrating...')
 
 		def worker():
 			factor, score, seconds, error = calibrate_measure()
 			if error:
 				sublime.set_timeout(
-					lambda: sublime.status_message('[cph-by-chenkx] ' + error), 0)
+					lambda: sublime.status_message('[Algorithm Competition Assistant] ' + error), 0)
 				return
 			report = calibrate_report(factor, score, seconds)
 			sublime.set_timeout(
-				lambda: sublime.status_message('[cph-by-chenkx] ' + report), 0)
+				lambda: sublime.status_message('[Algorithm Competition Assistant] ' + report), 0)
 
 		thread = threading.Thread(target=worker)
 		thread.daemon = True
@@ -199,7 +199,7 @@ class CphStatsCommand(sublime_plugin.TextCommand):
 	def run(self, edit, days=None, reset=False):
 		if reset:
 			stats_reset()
-			sublime.status_message('[cph-by-chenkx] ' + t('stats_reset_done'))
+			sublime.status_message('[Algorithm Competition Assistant] ' + t('stats_reset_done'))
 			return
 		try:
 			days = int(days or _settings().get('stats_days', 7) or 7)
@@ -207,7 +207,7 @@ class CphStatsCommand(sublime_plugin.TextCommand):
 			days = 7
 		report = stats_summary(days)
 		if not report or not report.strip():
-			sublime.status_message('[cph-by-chenkx] ' + t('stats_empty'))
+			sublime.status_message('[Algorithm Competition Assistant] ' + t('stats_empty'))
 			return
 		window = self.view.window() or sublime.active_window()
 		if window is None:
@@ -233,7 +233,7 @@ class CphContestTimerCommand(sublime_plugin.TextCommand):
 			self.STATE['until'] = 0.0
 			self.STATE['warned'] = set()
 			self._paint('')
-			sublime.status_message('[cph-by-chenkx] ' + t('contest_stopped'))
+			sublime.status_message('[Algorithm Competition Assistant] ' + t('contest_stopped'))
 			return
 		if minutes is None:
 			default = str(_settings().get('contest_duration_minutes', 120) or 120)
@@ -253,7 +253,7 @@ class CphContestTimerCommand(sublime_plugin.TextCommand):
 		self.STATE['until'] = time.time() + minutes * 60
 		self.STATE['total'] = minutes
 		self.STATE['warned'] = set()
-		sublime.status_message('[cph-by-chenkx] '
+		sublime.status_message('[Algorithm Competition Assistant] '
 							   + t('contest_started', minutes=int(minutes)))
 		self.tick()
 
@@ -264,7 +264,7 @@ class CphContestTimerCommand(sublime_plugin.TextCommand):
 		if remaining <= 0:
 			self.STATE['until'] = 0.0
 			self._paint('')
-			sublime.status_message('[cph-by-chenkx] ' + t('contest_finished'))
+			sublime.status_message('[Algorithm Competition Assistant] ' + t('contest_finished'))
 			return
 		hours = int(remaining // 3600)
 		minutes = int((remaining % 3600) // 60)
@@ -273,7 +273,7 @@ class CphContestTimerCommand(sublime_plugin.TextCommand):
 		for mark in (30, 10, 5):
 			if remaining <= mark * 60 and mark not in self.STATE['warned']:
 				self.STATE['warned'].add(mark)
-				sublime.status_message('[cph-by-chenkx] '
+				sublime.status_message('[Algorithm Competition Assistant] '
 									   + t('contest_warning', minutes=mark))
 		sublime.set_timeout(self.tick, 1000)
 
@@ -300,4 +300,4 @@ class CphBenchmarkCommand(sublime_plugin.TextCommand):
 				if (other.name() or '') == target:
 					other.run_command('cph_test_manager', {'action': 'benchmark'})
 					return
-		sublime.status_message('[cph-by-chenkx] ' + t('benchmark_no_test'))
+		sublime.status_message('[Algorithm Competition Assistant] ' + t('benchmark_no_test'))

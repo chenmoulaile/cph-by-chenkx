@@ -1,4 +1,4 @@
-"""cph-by-chenkx - 本插件适用于哪些视图
+"""Algorithm Competition Assistant - 本插件适用于哪些视图
 
 Package Control 的审查要求：
 

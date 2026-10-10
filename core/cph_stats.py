@@ -1,4 +1,4 @@
-"""cph-by-chenkx - 本地练习统计存储
+"""Algorithm Competition Assistant - 本地练习统计存储
 
 纯标准库（os / sys / json / time / tempfile），不 import 任何其它插件模块，
 可以被根级插件、core 子包或独立脚本安全加载。宿主是 Python 3.3，所以这里

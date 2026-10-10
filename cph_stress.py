@@ -1,5 +1,5 @@
 """
-cph-by-chenkx - 对拍 (Stress Test) 功能
+Algorithm Competition Assistant - 对拍 (Stress Test) 功能
 """
 
 import sublime
@@ -476,13 +476,13 @@ def _start_flow(view, choose=False):
     # silently overwrite the state of the loop that is still running. Other
     # files are free to start their own run next to it.
     if _running_for(user_file):
-        sublime.status_message('cph-by-chenkx: ' + t('stress_already_running'))
+        sublime.status_message('Algorithm Competition Assistant: ' + t('stress_already_running'))
         return
 
     window = view.window()
     if window is None:
         return
-    settings = sublime.load_settings('cph-by-chenkx.sublime-settings')
+    settings = sublime.load_settings('Algorithm Competition Assistant.sublime-settings')
     src_dir = os.path.dirname(user_file)
 
     # Look next to the file under test first: that is where the std and the
@@ -504,7 +504,7 @@ def _start_flow(view, choose=False):
             return
         settings.set('stress_std_file', std_file)
         settings.set('stress_generator_file', gen_file)
-        sublime.save_settings('cph-by-chenkx.sublime-settings')
+        sublime.save_settings('Algorithm Competition Assistant.sublime-settings')
 
         try:
             time_limit = float(get_settings().get('stress_time_limit_seconds', 2) or 2)
@@ -519,7 +519,7 @@ def _start_flow(view, choose=False):
             ask_limits(window, user_file, std_file, gen_file, time_limit,
                        max_rounds, view)
             return
-        sublime.status_message('cph-by-chenkx: %s / %s'
+        sublime.status_message('Algorithm Competition Assistant: %s / %s'
                                % (os.path.basename(std_file),
                                   os.path.basename(gen_file)))
         _launch(view, user_file, std_file, gen_file, time_limit, max_rounds)
@@ -583,11 +583,11 @@ class CphStopStressTestCommand(sublime_plugin.TextCommand):
                 sess = running[0]
             elif running:
                 sublime.status_message(
-                    'cph-by-chenkx: ' + t('stress_multi_running', n=len(running)))
+                    'Algorithm Competition Assistant: ' + t('stress_multi_running', n=len(running)))
                 return
             else:
                 sublime.status_message(
-                    'cph-by-chenkx: ' + t('stress_none_running'))
+                    'Algorithm Competition Assistant: ' + t('stress_none_running'))
                 return
         if sess['running']:
             sess['stop_requested'] = True
@@ -599,13 +599,13 @@ class CphStopStressTestCommand(sublime_plugin.TextCommand):
                 killer = threading.Thread(target=_kill_tree, args=(proc,))
                 killer.daemon = True
                 killer.start()
-            sublime.status_message('cph-by-chenkx: ' + t('process_terminated'))
+            sublime.status_message('Algorithm Competition Assistant: ' + t('process_terminated'))
         else:
             # This run is already over; clear anything it left behind so
             # starting works again.
             _finish_stress(sess)
             sublime.status_message(
-                'cph-by-chenkx: ' + t('stress_none_running'))
+                'Algorithm Competition Assistant: ' + t('stress_none_running'))
 
 
 def _hidden_startupinfo():
@@ -618,7 +618,7 @@ def _hidden_startupinfo():
 
 def _lang_entry(file):
     """run_settings entry matching this file, or None."""
-    run_settings = sublime.load_settings('cph-by-chenkx.sublime-settings') \
+    run_settings = sublime.load_settings('Algorithm Competition Assistant.sublime-settings') \
         .get('run_settings') or []
     ext = os.path.splitext(file)[1][1:]
     for entry in run_settings:
@@ -680,7 +680,7 @@ def _compile_program(file, time_limit=30, sess=None):
     """
     entry = _lang_entry(file)
     if entry is None:
-        print_safe('[cph-by-chenkx] stress: no run_settings entry for %s' % file)
+        print_safe('[Algorithm Competition Assistant] stress: no run_settings entry for %s' % file)
         return False, None, 'no run_settings entry for this file type'
 
     if not os.path.exists(file):
@@ -720,7 +720,7 @@ def _compile_program(file, time_limit=30, sess=None):
             abort=(lambda: sess['stop_requested']) if sess is not None else None,
             sess=sess)
         if rc != 0:
-            print_safe('[cph-by-chenkx] Compile error in %s:\n%s' % (file, err))
+            print_safe('[Algorithm Competition Assistant] Compile error in %s:\n%s' % (file, err))
             detail = (err or out or '').strip().splitlines()
             return False, None, ('compiler exit code %s%s'
                                  % (rc, (': ' + detail[0][:200]) if detail else ''))
@@ -729,12 +729,12 @@ def _compile_program(file, time_limit=30, sess=None):
         # now so the message points at the real problem.
         real = resolve_artifact(exe_path, artifact_dir, started_at)
         if real is None:
-            print_safe('[cph-by-chenkx] stress: %s compiled but %r is missing'
+            print_safe('[Algorithm Competition Assistant] stress: %s compiled but %r is missing'
                        % (file, os.path.basename(exe_path)))
             return False, None, ('the compiler produced no %s'
                                  % os.path.basename(exe_path))
         if real != exe_path:
-            print_safe('[cph-by-chenkx] stress: binary of %s is %r on disk'
+            print_safe('[Algorithm Competition Assistant] stress: binary of %s is %r on disk'
                        % (base, os.path.basename(real)))
         return True, real, ''
     except _Aborted:
@@ -742,7 +742,7 @@ def _compile_program(file, time_limit=30, sess=None):
         # not that the program failed to build.
         raise
     except Exception as e:
-        print_safe('[cph-by-chenkx] Compile error: %s' % str(e))
+        print_safe('[Algorithm Competition Assistant] Compile error: %s' % str(e))
         return False, None, str(e)[:200]
 
 
@@ -1007,13 +1007,13 @@ def _run_stress_loop(sess):
         sess['build_root'] = None
     try:
         sublime.set_timeout(
-            lambda: _append_stress(sess, '[cph-by-chenkx] Compiling programs...\n'), 0)
+            lambda: _append_stress(sess, '[Algorithm Competition Assistant] Compiling programs...\n'), 0)
 
         ok1, user_exe, why1 = _compile_program(user_file, sess=sess)
         if not ok1:
             sublime.set_timeout(
                 lambda w=why1: _append_stress(sess, 
-                    '[cph-by-chenkx] Failed to compile user program: '
+                    '[Algorithm Competition Assistant] Failed to compile user program: '
                     + os.path.basename(user_file) + (': ' + w if w else '') + '\n'), 0)
             _stop_stress(sess)
             return
@@ -1022,7 +1022,7 @@ def _run_stress_loop(sess):
         if not ok2:
             sublime.set_timeout(
                 lambda w=why2: _append_stress(sess, 
-                    '[cph-by-chenkx] Failed to compile std: '
+                    '[Algorithm Competition Assistant] Failed to compile std: '
                     + os.path.basename(std_file) + (': ' + w if w else '') + '\n'), 0)
             _stop_stress(sess)
             return
@@ -1031,7 +1031,7 @@ def _run_stress_loop(sess):
         if not ok3:
             sublime.set_timeout(
                 lambda w=why3: _append_stress(sess, 
-                    '[cph-by-chenkx] Failed to compile generator: '
+                    '[Algorithm Competition Assistant] Failed to compile generator: '
                     + os.path.basename(gen_file) + (': ' + w if w else '') + '\n'), 0)
             _stop_stress(sess)
             return
@@ -1067,7 +1067,7 @@ def _run_stress_loop(sess):
             if not exe:
                 sublime.set_timeout(
                     lambda w=why: _append_stress(sess, 
-                        '[cph-by-chenkx] Failed to build checker: %s\n' % w), 0)
+                        '[Algorithm Competition Assistant] Failed to build checker: %s\n' % w), 0)
                 _stop_stress(sess)
                 return
             checker_exe = exe
@@ -1087,7 +1087,7 @@ def _run_stress_loop(sess):
 
         sublime.set_timeout(
             lambda: _append_stress(sess, 
-                '[cph-by-chenkx] Stress test started\n'
+                '[Algorithm Competition Assistant] Stress test started\n'
                 '  user: %s\n  std:  %s\n  gen:  %s\n'
                 '  time limit: %ss/round, generator limit: %ss, max rounds: %d\n'
                 '%s\n'
@@ -1108,21 +1108,21 @@ def _run_stress_loop(sess):
         for round_count in range(1, max_rounds + 1):
             if sess['stop_requested']:
                 sublime.set_timeout(
-                    lambda: _append_stress(sess, '\n[cph-by-chenkx] ' + t('process_terminated') + ' at round %d\n' % round_count), 0)
+                    lambda: _append_stress(sess, '\n[Algorithm Competition Assistant] ' + t('process_terminated') + ' at round %d\n' % round_count), 0)
                 break
             if wall_limit > 0 and time.time() - wall_start >= wall_limit:
                 # A run that is still going after this long is not going to
                 # finish any time soon; say so instead of hanging.
                 sublime.set_timeout(
                     lambda l=wall_limit: _append_stress(sess, 
-                        '\n[cph-by-chenkx] ' + t('stress_wall_limit', limit=l) + '\n'), 0)
+                        '\n[Algorithm Competition Assistant] ' + t('stress_wall_limit', limit=l) + '\n'), 0)
                 break
             if round_count == 1 or round_count % 10 == 0:
                 # Without this there is no way to tell a slow run from a hung
                 # one, which is what "it never ends" looked like.
                 sublime.set_timeout(
                     lambda r=round_count: sublime.status_message(
-                        'cph-by-chenkx: ' + t('stress_round', round=r)
+                        'Algorithm Competition Assistant: ' + t('stress_round', round=r)
                         + ' / %d' % max_rounds), 0)
 
             sess['current_round'] = round_count
@@ -1146,18 +1146,18 @@ def _run_stress_loop(sess):
                 gen_timeouts += 1
                 sublime.set_timeout(
                     lambda r=round_count, l=generator_limit: _append_stress(sess, 
-                        '[cph-by-chenkx] ' + t('stress_generator_tle', round=r, limit=l) + '\n'), 0)
+                        '[Algorithm Competition Assistant] ' + t('stress_generator_tle', round=r, limit=l) + '\n'), 0)
                 if gen_timeouts >= 3:
                     sublime.set_timeout(
                         lambda l=generator_limit: _append_stress(sess, 
-                            '[cph-by-chenkx] ' + t('stress_generator_limit_hint', limit=l) + '\n'), 0)
+                            '[Algorithm Competition Assistant] ' + t('stress_generator_limit_hint', limit=l) + '\n'), 0)
                     break
                 continue
             if ret != 0:
                 # Say *why*: exit code plus whatever the generator printed.
                 sublime.set_timeout(
                     lambda r=round_count, rc=ret, e=gen_err: _append_stress(sess, 
-                        '[cph-by-chenkx] ' + t('stress_generator_failed', round=r, code=rc)
+                        '[Algorithm Competition Assistant] ' + t('stress_generator_failed', round=r, code=rc)
                         + ('\n  ' + e.strip()[:500] if e.strip() else '') + '\n'), 0)
                 break
 
@@ -1166,7 +1166,7 @@ def _run_stress_loop(sess):
             if tle1:
                 sublime.set_timeout(
                     lambda r=round_count: _append_stress(sess, 
-                        '[cph-by-chenkx] Round %d: user program TLE\n' % r), 0)
+                        '[Algorithm Competition Assistant] Round %d: user program TLE\n' % r), 0)
                 if not tle_hint_shown:
                     # By far the most common cause on a correct solution: the
                     # compile command defines LOCAL, so a debug macro left
@@ -1175,14 +1175,14 @@ def _run_stress_loop(sess):
                     tle_hint_shown = True
                     sublime.set_timeout(
                         lambda: _append_stress(sess, 
-                            '[cph-by-chenkx] ' + t('stress_tle_hint') + '\n'), 0)
+                            '[Algorithm Competition Assistant] ' + t('stress_tle_hint') + '\n'), 0)
                 continue
             if ret1 < 0 and user_err:
                 # The program never started (missing binary, bad command):
                 # comparing its empty output as a wrong answer hid this.
                 sublime.set_timeout(
                     lambda e=user_err: _append_stress(sess, 
-                        '[cph-by-chenkx] ' + t('stress_cannot_run',
+                        '[Algorithm Competition Assistant] ' + t('stress_cannot_run',
                                                program=os.path.basename(user_file),
                                                reason=e.strip()[:300]) + '\n'), 0)
                 break
@@ -1192,12 +1192,12 @@ def _run_stress_loop(sess):
             if tle2:
                 sublime.set_timeout(
                     lambda r=round_count: _append_stress(sess, 
-                        '[cph-by-chenkx] Round %d: std program TLE\n' % r), 0)
+                        '[Algorithm Competition Assistant] Round %d: std program TLE\n' % r), 0)
                 continue
             if ret2 < 0 and std_err:
                 sublime.set_timeout(
                     lambda e=std_err: _append_stress(sess, 
-                        '[cph-by-chenkx] ' + t('stress_cannot_run',
+                        '[Algorithm Competition Assistant] ' + t('stress_cannot_run',
                                                program=os.path.basename(std_file),
                                                reason=e.strip()[:300]) + '\n'), 0)
                 break
@@ -1239,35 +1239,35 @@ def _run_stress_loop(sess):
             if compared:
                 sublime.set_timeout(
                     lambda: _append_stress(sess, 
-                        '\n[cph-by-chenkx] ' + t('stress_passed', rounds=round_count) + '\n'
+                        '\n[Algorithm Competition Assistant] ' + t('stress_passed', rounds=round_count) + '\n'
                     ), 0)
             else:
                 # Every round hit `continue` (TLE), so nothing was ever
                 # compared: the for/else used to still announce "passed".
                 sublime.set_timeout(
                     lambda: _append_stress(sess, 
-                        '\n[cph-by-chenkx] ' + t('stress_all_timeout') + '\n'
+                        '\n[Algorithm Competition Assistant] ' + t('stress_all_timeout') + '\n'
                     ), 0)
         # Always say the run is over: a panel that just stopped growing is
         # what "it never ends" looked like.
         elapsed = time.time() - wall_start
         sublime.set_timeout(
             lambda e=elapsed: _append_stress(sess, 
-                '\n[cph-by-chenkx] ' + t('stress_finished', seconds='%.1f' % e) + '\n'
+                '\n[Algorithm Competition Assistant] ' + t('stress_finished', seconds='%.1f' % e) + '\n'
             ), 0)
         sublime.set_timeout(
             lambda e=elapsed: sublime.status_message(
-                'cph-by-chenkx: ' + t('stress_finished', seconds='%.1f' % e)), 0)
+                'Algorithm Competition Assistant: ' + t('stress_finished', seconds='%.1f' % e)), 0)
     except _Aborted:
         sublime.set_timeout(
-            lambda: _append_stress(sess, '\n[cph-by-chenkx] ' + t('process_terminated') + '\n'), 0)
+            lambda: _append_stress(sess, '\n[Algorithm Competition Assistant] ' + t('process_terminated') + '\n'), 0)
     except Exception as e:
         # Bind `e` as a default argument: Python deletes the except-variable
         # when the block ends, so a bare `lambda: ... % e` raised NameError
         # by the time the deferred callback actually ran (the message never
         # appeared and the real error was swallowed).
         sublime.set_timeout(
-            lambda e=e: _append_stress(sess, '[cph-by-chenkx] Error: %s\n' % str(e)), 0)
+            lambda e=e: _append_stress(sess, '[Algorithm Competition Assistant] Error: %s\n' % str(e)), 0)
     finally:
         _finish_stress(sess)
 
@@ -1321,17 +1321,17 @@ def _on_stress_failed(round_count, inp, user_out, std_out, checker_message='',
     }
 
     text = '\n' + '=' * 60 + '\n'
-    text += '[cph-by-chenkx] ' + t('stress_failed', round=round_count) + '\n'
+    text += '[Algorithm Competition Assistant] ' + t('stress_failed', round=round_count) + '\n'
     text += '=' * 60 + '\n\n'
     seed = sess.get('current_seed')
     if seed is not None:
         # Without the seed the counterexample cannot be regenerated; say it
         # out loud so it can be replayed (or set CPH_SEED by hand).
-        text += '[cph-by-chenkx] ' + t('stress_seed', seed=seed) + '\n\n'
+        text += '[Algorithm Competition Assistant] ' + t('stress_seed', seed=seed) + '\n\n'
     if checker_message:
         # testlib's quitf message: the only explanation of *why* the two
         # outputs are not both valid.
-        text += '[cph-by-chenkx] ' + t('stress_checker_message',
+        text += '[Algorithm Competition Assistant] ' + t('stress_checker_message',
                                        message=checker_message[:500]) + '\n\n'
     text += '[' + t('stress_input') + ']\n'
     text += inp + '\n'
@@ -1364,7 +1364,7 @@ def _on_stress_failed(round_count, inp, user_out, std_out, checker_message='',
                 size = _utf8_size(inp)
                 if limit >= 0 and size > limit:
                     # Say why nothing was saved instead of failing silently.
-                    text += '\n[cph-by-chenkx] ' + \
+                    text += '\n[Algorithm Competition Assistant] ' + \
                         t('stress_counterexample_too_big', size=size,
                           limit=limit) + '\n'
                 else:
@@ -1376,10 +1376,10 @@ def _on_stress_failed(round_count, inp, user_out, std_out, checker_message='',
                         # 'Stress: replay last seed' can reproduce it exactly.
                         'seed': sess.get('current_seed')}])
                     if save_tests(user_file, merged):
-                        text += '\n[cph-by-chenkx] ' + \
+                        text += '\n[Algorithm Competition Assistant] ' + \
                             t('stress_counterexample_added', total=len(merged)) + '\n'
     except Exception as e:
-        print_safe('[cph-by-chenkx] failed to save counterexample: %s' % e)
+        print_safe('[Algorithm Competition Assistant] failed to save counterexample: %s' % e)
 
     _append_stress(sess, text)
     _stop_stress(sess)
@@ -1399,52 +1399,52 @@ class CphStressReplayCommand(sublime_plugin.TextCommand):
 		sess = _sessions.get(self.view.id())
 		state = sess.get('last_counterexample') if sess else None
 		if not state or state.get('seed') is None:
-			sublime.status_message('[cph-by-chenkx] ' + t('stress_no_counterexample'))
+			sublime.status_message('[Algorithm Competition Assistant] ' + t('stress_no_counterexample'))
 			return
 		gen_file = sess.get('generator_file')
 		user_file = sess.get('user_file')
 		std_file = sess.get('std_file')
 		if not (gen_file and user_file and std_file):
-			sublime.status_message('[cph-by-chenkx] ' + t('stress_no_counterexample'))
+			sublime.status_message('[Algorithm Competition Assistant] ' + t('stress_no_counterexample'))
 			return
 
 		seed = state['seed']
-		_append_stress(sess, '\n[cph-by-chenkx] ' + t('stress_replaying', seed=seed) + '\n')
+		_append_stress(sess, '\n[Algorithm Competition Assistant] ' + t('stress_replaying', seed=seed) + '\n')
 
 		def worker():
 			try:
 				ok, gen_exe, why = _compile_program(gen_file, sess=sess)
 				if not ok:
-					_append_stress(sess, '[cph-by-chenkx] generator: %s\n' % (why or 'failed'))
+					_append_stress(sess, '[Algorithm Competition Assistant] generator: %s\n' % (why or 'failed'))
 					return
 				rc, inp, err, tle = _run_program(
 					gen_exe, '', time_limit=float(
 						get_settings().get('stress_generator_time_limit_seconds', 10) or 10),
 					env={'CPH_SEED': str(seed)}, sess=sess)
 				if rc != 0 or tle:
-					_append_stress(sess, '[cph-by-chenkx] generator failed: rc=%s %s\n'
+					_append_stress(sess, '[Algorithm Competition Assistant] generator failed: rc=%s %s\n'
 								   % (rc, err[:200]))
 					return
-				_append_stress(sess, '[cph-by-chenkx] regenerated %d bytes\n' % len(inp))
+				_append_stress(sess, '[Algorithm Competition Assistant] regenerated %d bytes\n' % len(inp))
 				ok1, user_exe, why1 = _compile_program(user_file, sess=sess)
 				ok2, std_exe, why2 = _compile_program(std_file, sess=sess)
 				if not (ok1 and ok2):
-					_append_stress(sess, '[cph-by-chenkx] compile failed: %s%s\n'
+					_append_stress(sess, '[Algorithm Competition Assistant] compile failed: %s%s\n'
 								   % (why1 or '', why2 or ''))
 					return
 				limit = float(get_settings().get('stress_time_limit_seconds', 2) or 2)
 				_rc1, user_out, _e1, tle1 = _run_program(user_exe, inp, time_limit=limit, sess=sess)
 				_rc2, std_out, _e2, _tle2 = _run_program(std_exe, inp, time_limit=limit, sess=sess)
 				if tle1:
-					_append_stress(sess, '[cph-by-chenkx] ' + t('stress_replay_tle') + '\n')
+					_append_stress(sess, '[Algorithm Competition Assistant] ' + t('stress_replay_tle') + '\n')
 					return
 				if normalize_lines(user_out) == normalize_lines(std_out):
-					_append_stress(sess, '[cph-by-chenkx] ' + t('stress_replay_same') + '\n')
+					_append_stress(sess, '[Algorithm Competition Assistant] ' + t('stress_replay_same') + '\n')
 				else:
 					_on_stress_failed(state.get('round') or 0, inp, user_out, std_out,
 										  sess=sess)
 			except Exception as e:
-				_append_stress(sess, '[cph-by-chenkx] replay error: %s\n' % e)
+				_append_stress(sess, '[Algorithm Competition Assistant] replay error: %s\n' % e)
 
 		thread = threading.Thread(target=worker)
 		thread.daemon = True

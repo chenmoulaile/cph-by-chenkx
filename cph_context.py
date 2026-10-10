@@ -1,4 +1,4 @@
-"""cph-by-chenkx - 自定义快捷键上下文
+"""Algorithm Competition Assistant - 自定义快捷键上下文
 
 Package Control 审查要求包内快捷键必须带具体 context（不能用"全局绑定"），
 所以这里提供几个自定义 context key，让快捷键只在真正有意义时生效：

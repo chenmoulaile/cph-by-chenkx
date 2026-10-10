@@ -1,4 +1,4 @@
-"""cph-by-chenkx - 从题目 URL 抓题面与样例（没有 Competitive Companion 时用）
+"""Algorithm Competition Assistant - 从题目 URL 抓题面与样例（没有 Competitive Companion 时用）
 
 用标准库抓取网页，交给 core/cph_html 解析：样例变成测试点，题面转成 Markdown
 可以在 Sublime 里读。

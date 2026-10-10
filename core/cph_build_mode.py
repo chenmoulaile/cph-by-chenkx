@@ -1,4 +1,4 @@
-"""cph-by-chenkx - Debug / Release 编译模式
+"""Algorithm Competition Assistant - Debug / Release 编译模式
 
 README 里一直写着"想要 RE 行号请手动给 compile_cmd 加 -fsanitize"——这很别扭：
 加了之后程序慢几十倍，本地时限就没意义了；去掉又拿不到崩溃位置。

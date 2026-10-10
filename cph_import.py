@@ -1,5 +1,5 @@
 """
-cph-by-chenkx - 从文件导入测试数据
+Algorithm Competition Assistant - 从文件导入测试数据
 
 支持四种来源:
 1. in/out 文件对 (自动探测同名 .out/.ans 或 out.txt 等)
@@ -311,7 +311,7 @@ class CphImportTestsCommand(sublime_plugin.TextCommand):
 
                 new_tests.append({'test': inp, 'correct_answers': [out] if out else []})
             except Exception as e:
-                print('[cph-by-chenkx] Failed to import %s: %s' % (in_file, e))
+                print('[Algorithm Competition Assistant] Failed to import %s: %s' % (in_file, e))
 
         if new_tests:
             self._save_and_show(new_tests, selected_path, append=True)

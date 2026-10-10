@@ -1,27 +1,27 @@
 [
 	{
-		"caption": "cph-by-chenkx: Run",
+		"caption": "Algorithm Competition Assistant: Run",
 		"command": "cph_view_tester",
 		"args": {"action": "make_opd"}
 	},
 	{
-		"caption": "cph-by-chenkx: Import tests from file...",
+		"caption": "Algorithm Competition Assistant: Import tests from file...",
 		"command": "cph_import_tests"
 	},
 	{
-		"caption": "cph-by-chenkx: Pick and import test file",
+		"caption": "Algorithm Competition Assistant: Pick and import test file",
 		"command": "cph_pick_import_file"
 	},
 	{
-		"caption": "cph-by-chenkx: Listen to Competitive Companion",
+		"caption": "Algorithm Competition Assistant: Listen to Competitive Companion",
 		"command": "cph_companion_listener"
 	},
 	{
-		"caption": "cph-by-chenkx: Start stress test",
+		"caption": "Algorithm Competition Assistant: Start stress test",
 		"command": "cph_start_stress_test"
 	},
 	{
-		"caption": "cph-by-chenkx: Stop stress test",
+		"caption": "Algorithm Competition Assistant: Stop stress test",
 		"command": "cph_stop_stress_test"
 	}
 ]

@@ -1,5 +1,5 @@
 """
-cph-by-chenkx - 环境自检 (doctor)
+Algorithm Competition Assistant - 环境自检 (doctor)
 
 一条命令把"为什么跑不起来"的常见原因全查一遍，输出到独立视图：
 - 每种语言配置的编译器/解释器是否真的在 PATH 里
@@ -190,7 +190,7 @@ class CphDoctorCommand(sublime_plugin.TextCommand):
 		lines.append(t('doctor_markdown_hint'))
 		lines.append('')
 		lines.append('```markdown')
-		lines.append('### cph-by-chenkx doctor report')
+		lines.append('### Algorithm Competition Assistant doctor report')
 		lines.append('')
 		lines.append('- Sublime Text: build %s' % sublime.version())
 		lines.append('- Platform: %s (%s)' % (sublime.platform(), sys.platform))
@@ -213,7 +213,7 @@ class CphDoctorCommand(sublime_plugin.TextCommand):
 		report = '\n'.join(lines)
 		window = self.view.window()
 		view = window.new_file()
-		view.set_name('cph-by-chenkx - doctor')
+		view.set_name('Algorithm Competition Assistant - doctor')
 		view.set_scratch(True)
 		view.settings().set('word_wrap', False)
 		view.run_command('cph_test_detail_view', {'text': report})

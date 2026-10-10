@@ -1,4 +1,4 @@
-"""cph-by-chenkx - 自定义判定器（Special Judge / SPJ）
+"""Algorithm Competition Assistant - 自定义判定器（Special Judge / SPJ）
 
 只有 token 比较 + 浮点容差时，"输出任意合法方案"的多解题根本没法测。这里支持
 挂一个 checker 程序来判定，兼容 testlib。

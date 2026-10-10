@@ -1,4 +1,4 @@
-"""cph-by-chenkx - 跨模块共享的运行时状态
+"""Algorithm Competition Assistant - 跨模块共享的运行时状态
 
 放在子包里是有原因的：Sublime 会把包根目录下的每个 .py 当成独立插件加载，
 根级模块之间互相 import 会被 Package Control 审查判为错误

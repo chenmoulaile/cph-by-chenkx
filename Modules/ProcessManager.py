@@ -54,7 +54,7 @@ def _sanitizer_fallback_note():
 		msg = ('本机工具链缺少 sanitizer 运行库 (ld: cannot find -lubsan/-lasan), '
 			   '已自动去掉 -fsanitize 参数重新编译一次; debug 模式的 -D_GLIBCXX_ASSERTIONS '
 			   '不依赖该运行库, 越界等未定义行为仍会中止并判 RE')
-	return '[cph-by-chenkx] %s\n' % msg
+	return '[Algorithm Competition Assistant] %s\n' % msg
 
 
 _SHELL_METACHARS = set('|&;<>()`$\n*?[]{}~')
@@ -234,7 +234,7 @@ class ProcessManager(object):
 			if unknown is None:
 				unknown = self.unknown_placeholders = set()
 			unknown.update(values.unknown)
-			print('[cph-by-chenkx] unknown placeholder(s) in command: %s'
+			print('[Algorithm Competition Assistant] unknown placeholder(s) in command: %s'
 				  % ', '.join(sorted(values.unknown)))
 		return out
 
@@ -367,10 +367,10 @@ class ProcessManager(object):
 		if wanted is None:
 			return ''
 		if actual is None:
-			return ('[cph-by-chenkx] the compiler exited successfully but no '
+			return ('[Algorithm Competition Assistant] the compiler exited successfully but no '
 					'%s was produced\n' % path.basename(wanted))
 		if actual != wanted:
-			return ('[cph-by-chenkx] the binary was written as %s (the '
+			return ('[Algorithm Competition Assistant] the binary was written as %s (the '
 					'compiler did not use the -o name)\n' % path.basename(actual))
 		return ''
 
@@ -476,18 +476,18 @@ class ProcessManager(object):
 				p.kill()
 			except Exception:
 				pass
-			return (1, '[cph-by-chenkx] compile timed out after 30s\n(cmd: %s)' % cmd)
+			return (1, '[Algorithm Competition Assistant] compile timed out after 30s\n(cmd: %s)' % cmd)
 		unknown = sorted(getattr(self, 'unknown_placeholders', ()) or ())
 		if unknown:
 			# A typo like {file_nmae} silently becomes '' and the user just
 			# sees a weird command; say which name was ignored.
-			compile_result = ('[cph-by-chenkx] ignored unknown placeholder(s): %s\n' % ', '.join(unknown)) + compile_result
+			compile_result = ('[Algorithm Competition Assistant] ignored unknown placeholder(s): %s\n' % ', '.join(unknown)) + compile_result
 		return (p.returncode, compile_result)
 
 	def compile(self, wait_close=True):
 		cmd = self.get_compile_cmd()
 		if cmd == -1:
-			return (1, '[cph-by-chenkx] no compile command configured for this file extension')
+			return (1, '[Algorithm Competition Assistant] no compile command configured for this file extension')
 		if cmd is not None:
 			try:
 				returncode, compile_result = self._popen_compile(cmd)
@@ -514,7 +514,7 @@ class ProcessManager(object):
 					compile_result = compile_result + self._artifact_note(cmd)
 				return (returncode, compile_result)
 			except Exception as e:
-				return (1, '[cph-by-chenkx] failed to run compile command: %s\n(cmd: %s)' % (e, cmd))
+				return (1, '[Algorithm Competition Assistant] failed to run compile command: %s\n(cmd: %s)' % (e, cmd))
 
 	def run_file(self, args=[]):
 		if self.is_run:
@@ -646,9 +646,9 @@ class ProcessManager(object):
 			# on a closed stdin). Drop the input instead of letting the
 			# exception escape into the command stack / listener thread.
 			self.stdin_closed = True
-			sublime.status_message('[cph-by-chenkx] %s'
+			sublime.status_message('[Algorithm Competition Assistant] %s'
 								   % t('process_already_exited'))
-			print('[cph-by-chenkx] stdin closed (%s), input dropped' % e)
+			print('[Algorithm Competition Assistant] stdin closed (%s), input dropped' % e)
 
 	def close_stdin(self):
 		"""Signal EOF: the program's input is complete.

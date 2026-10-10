@@ -1,5 +1,5 @@
 """
-cph-by-chenkx - 主测试管理器
+Algorithm Competition Assistant - 主测试管理器
 """
 
 import sublime, sublime_plugin
@@ -273,10 +273,10 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 	REGION_BEGIN_KEY = 'test_begin_%d'
 	REGION_OUT_KEY = 'test_out_%d'
 	REGION_END_KEY = 'test_end_%d'
-	REGION_BEGIN_PROP = ['string', 'Packages/cph-by-chenkx/icons/arrow_right.png', \
+	REGION_BEGIN_PROP = ['string', 'Packages/Algorithm Competition Assistant/icons/arrow_right.png', \
 				sublime.DRAW_NO_FILL | sublime.DRAW_STIPPLED_UNDERLINE | \
 					sublime.DRAW_NO_OUTLINE | sublime.DRAW_EMPTY_AS_OVERWRITE]
-	REGION_END_PROP = ['variable.c++', 'Packages/cph-by-chenkx/icons/arrow_left.png', sublime.HIDDEN]
+	REGION_END_PROP = ['variable.c++', 'Packages/Algorithm Competition Assistant/icons/arrow_left.png', sublime.HIDDEN]
 
 	# Dispatched actions that index the test model. A failed compile leaves
 	# the -run panel open with tester = None, yet the bindings scoped to
@@ -807,7 +807,7 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 					self.prog_out[n] += marker
 					self.tests[n].message = t('output_truncated_warn')
 					self.on_out(marker, epoch=self.epoch)
-					print('[cph-by-chenkx] %s' % t('output_truncated_warn'))
+					print('[Algorithm Competition Assistant] %s' % t('output_truncated_warn'))
 				return
 			self.prog_out[n] += s
 			self.on_out(s, epoch=self.epoch)
@@ -852,7 +852,7 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 				# Draining the output must never skip the memory-sampler stop
 				# and on_stop below: an exception here used to leak a thread
 				# polling a dead pid and leave the status stuck on RUNNING.
-				print('[cph-by-chenkx] output listener error: %s' % e)
+				print('[Algorithm Competition Assistant] output listener error: %s' % e)
 			if gen != self._active_gen:
 				return
 			# Only the time the program was actually working with its input
@@ -1351,7 +1351,7 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 			if verdicts:
 				stats_record_run(file_name, verdicts)
 		except Exception as e:
-			print('[cph-by-chenkx] stats: %s' % e)
+			print('[Algorithm Competition Assistant] stats: %s' % e)
 
 	def manager_factory(self, time_limit_ms=None, memory_limit_mb=None):
 		"""A fresh ProcessManager factory for one test.
@@ -1413,7 +1413,7 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 		"""
 		tester = self.tester
 		if tester is None or not tester.tests:
-			sublime.status_message('[cph-by-chenkx] ' + t('benchmark_no_test'))
+			sublime.status_message('[Algorithm Competition Assistant] ' + t('benchmark_no_test'))
 			return
 		index = self.test_index_at_cursor()
 		if index is None or index >= len(tester.tests):
@@ -1439,7 +1439,7 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 		except Exception:
 			pass
 
-		sublime.status_message('[cph-by-chenkx] ' + t('benchmark_running', n=runs))
+		sublime.status_message('[Algorithm Competition Assistant] ' + t('benchmark_running', n=runs))
 		self.set_compile_bar(t('benchmark_running', n=runs))
 		run_parallel_batch(
 			self.manager_factory(time_limit_ms, memory_limit_mb),
@@ -1456,14 +1456,14 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 		times = [value for value in times if value > 0]
 		if not times:
 			self.set_compile_bar('')
-			sublime.status_message('[cph-by-chenkx] ' + t('benchmark_no_test'))
+			sublime.status_message('[Algorithm Competition Assistant] ' + t('benchmark_no_test'))
 			return
 		best = min(times)
 		worst = max(times)
 		average = int(sum(times) / float(len(times)))
 		text = t('benchmark_done', n=len(times), best=best, avg=average, worst=worst)
 		self.set_compile_bar(text)
-		sublime.status_message('[cph-by-chenkx] ' + text)
+		sublime.status_message('[Algorithm Competition Assistant] ' + text)
 		try:
 			self.tester.tests[index].message = text
 		except Exception:
@@ -1524,7 +1524,7 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 		if cfg:
 			exe, error = checker_executable(cfg)
 			if error:
-				sublime.status_message('[cph-by-chenkx] ' + error)
+				sublime.status_message('[Algorithm Competition Assistant] ' + error)
 			else:
 				def checker_hook(input_text, stdout, expected, default_verdict):
 					result = checker_judge(cfg, exe, input_text, stdout, expected)
@@ -1541,7 +1541,7 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 			if cfg:
 				exe, error = interactor_executable(cfg)
 			if error:
-				sublime.status_message('[cph-by-chenkx] ' + error)
+				sublime.status_message('[Algorithm Competition Assistant] ' + error)
 				self.set_compile_bar(error)
 				return
 			if exe and cfg:
@@ -1634,7 +1634,7 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 		self.set_compile_bar(t('parallel_done', total=len(tests)))
 		self.update_configs()
 		self.record_stats()
-		sublime.status_message('[cph-by-chenkx] '
+		sublime.status_message('[Algorithm Competition Assistant] '
 							   + t('parallel_done', total=len(tests)))
 
 	def is_skippable(self, i):
@@ -2292,7 +2292,7 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 		# drain bytes, and those would be inserted into the *new* run view at
 		# the new delta_input, corrupting it.
 		if epoch is not None and epoch != getattr(self, 'tester_epoch', None):
-			print('[cph-by-chenkx] dropped stale on_out from killed process')
+			print('[Algorithm Competition Assistant] dropped stale on_out from killed process')
 			return
 		self.view.run_command('cph_test_manager', {'action': 'insert_opd_out', 'text': s})
 		if not self.out_region_set:
@@ -2303,7 +2303,7 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 		# Drop callbacks from a stale listener thread whose process was
 		# killed by a re-run: they would corrupt the new tester's state
 		if epoch is not None and epoch != getattr(self, 'tester_epoch', None):
-			print('[cph-by-chenkx] dropped stale on_stop from killed process')
+			print('[Algorithm Competition Assistant] dropped stale on_stop from killed process')
 			return
 		tester = self.tester
 
@@ -2424,7 +2424,7 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 				self.tester.tests[test_id].crash_lineno = location[1]
 				self.tester.tests[test_id].message = t('runtime_error_at',
 													   location=crash_line)
-				sublime.status_message('[cph-by-chenkx] '
+				sublime.status_message('[Algorithm Competition Assistant] '
 									   + t('runtime_error_at', location=crash_line))
 
 		# A TLE is the verdict the user can least explain, so say what is
@@ -2721,7 +2721,7 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 		# here avoids an AttributeError half way through the setup, which
 		# left an empty -run tab behind.
 		if v.window() is None:
-			print('[cph-by-chenkx] the run view has no window any more, ignoring')
+			print('[Algorithm Competition Assistant] the run view has no window any more, ignoring')
 			return
 
 		# Re-entry guard: only block while a compile is genuinely in flight.
@@ -2729,7 +2729,7 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 		# is auto-cleared after 30s so the user is never stuck forever.
 		compiling_since = getattr(self, 'compiling_since', None)
 		if compiling_since is not None and (time() - compiling_since) < 30:
-			sublime.status_message('[cph-by-chenkx] compiling in progress, wait or press again after 30s')
+			sublime.status_message('[Algorithm Competition Assistant] compiling in progress, wait or press again after 30s')
 			return
 
 		if v.get_status('process_status') == 'RUNNING' or \
@@ -2827,7 +2827,7 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 			v.set_status('opd_info', run_view_status_label(
 				run_file, time_limit_ms, memory_limit_mb))
 		except Exception as e:
-			print('[cph-by-chenkx] status label failed: %s' % e)
+			print('[Algorithm Competition Assistant] status label failed: %s' % e)
 		self.clear_all()
 		self.close_edit_views()
 		if load_session:
@@ -2848,7 +2848,7 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 				time_limit_ms = self.session.get('time_limit_ms')
 				memory_limit_mb = self.session.get('memory_limit_mb')
 		else:
-			print('[cph-by-chenkx] session saved')
+			print('[Algorithm Competition Assistant] session saved')
 			self.session = {
 				'run_file': run_file,
 				'build_sys': build_sys,
@@ -2889,7 +2889,7 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 					with open(tests_path, 'w', encoding='utf-8') as f:
 						f.write('[]')
 				except Exception as e:
-					print('[cph-by-chenkx] failed to clear %s: %s' % (tests_path, e))
+					print('[Algorithm Competition Assistant] failed to clear %s: %s' % (tests_path, e))
 			tests = []
 
 		if not load_session:
@@ -2937,13 +2937,13 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 				if should_skip_compile(process_manager, force_compile):
 					cached = True
 					cmp_data = (0, t('compile_cached'))
-					print('[cph-by-chenkx] compile skipped (source unchanged)')
+					print('[Algorithm Competition Assistant] compile skipped (source unchanged)')
 				else:
 					cmp_data = process_manager.compile()
-					print('[cph-by-chenkx] compile rc: %s' % (cmp_data[0] if cmp_data else None))
+					print('[Algorithm Competition Assistant] compile rc: %s' % (cmp_data[0] if cmp_data else None))
 			except Exception as e:
-				print('[cph-by-chenkx] compile exception: %s' % e)
-				cmp_data = (1, '[cph-by-chenkx] compile failed: %s' % e)
+				print('[Algorithm Competition Assistant] compile exception: %s' % e)
+				cmp_data = (1, '[Algorithm Competition Assistant] compile failed: %s' % e)
 			finally:
 				self.compiling_since = None
 			self.change_process_status('COMPILED')
@@ -3249,7 +3249,7 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 				if self.tester is not None:
 					self.tester.terminate()
 			except:
-				print('[cph-by-chenkx] process terminating error')
+				print('[Algorithm Competition Assistant] process terminating error')
 
 		elif action == 'new_test':
 			self.new_test(edit)
@@ -3289,7 +3289,7 @@ class CphTestManagerCommand(sublime_plugin.TextCommand):
 			try:
 				tester.terminate()
 			except Exception as e:
-				print('[cph-by-chenkx] terminate failed: %s' % e)
+				print('[Algorithm Competition Assistant] terminate failed: %s' % e)
 				sublime.status_message(t('no_running_process'))
 
 		elif action == 'sync_read_only':

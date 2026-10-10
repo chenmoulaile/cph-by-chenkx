@@ -1,4 +1,4 @@
-# cph-by-chenkx
+# Algorithm Competition Assistant
 
 **Sublime Text 上更「能打」的算法竞赛测评插件** —— 一个测试点卡片 + 彩色 verdict + 逐行 diff 详情 + 真实内存/超时判定的完整闭环。
 
@@ -10,7 +10,7 @@
 
 ## English
 
-**cph-by-chenkx** is a competitive-programming test runner for **Sublime Text 4** (build 4095+).
+**Algorithm Competition Assistant** is a competitive-programming test runner for **Sublime Text 4** (build 4095+).
 It is a rework of [FastOlympicCoding](https://github.com/Jatana/FastOlympicCoding) (Jatana), with the
 verdict display rebuilt after VSCode's [cph-ng](https://github.com/langningchen/cph-ng), and
 [Competitive Companion](https://github.com/jmerle/competitive-companion) support inspired by
@@ -29,9 +29,9 @@ verdict display rebuilt after VSCode's [cph-ng](https://github.com/langningchen/
 - Chinese / English UI (`language` setting).
 
 **Getting started**: open a source file, then use `Ctrl+Shift+P` → `cph` (every command is in the
-command palette) or the `View → cph-by-chenkx` menu. The default `run_settings` cover C++ (`g++`,
+command palette) or the `View → Algorithm Competition Assistant` menu. The default `run_settings` cover C++ (`g++`,
 `-std=c++17 -O2`), Python, Java, C, Rust, Go, Pascal and JavaScript (Node.js) — edit them under
-`Preferences → Package Settings → cph-by-chenkx → Settings` to match your toolchain (the compiler has
+`Preferences → Package Settings → Algorithm Competition Assistant → Settings` to match your toolchain (the compiler has
 to be on `PATH`; the *Check environment (doctor)* command reports anything that is missing).
 `-O2` matters: without optimisation a local run is orders of magnitude slower than the judge, so a
 correct program gets reported as TLE.
@@ -49,7 +49,7 @@ copy-paste reference if you want to change one.
 
 ## 相比原版 FastOlympicCoding，多了什么
 
-| 能力 | FastOlympicCoding | cph-by-chenkx |
+| 能力 | FastOlympicCoding | Algorithm Competition Assistant |
 | --- | --- | --- |
 | 彩色 verdict 徽章（AC/WA/TLE/MLE/RE/PE/CE…） | ❌ 只有纯文本 | ✅ 类 cph-ng 的徽章样式 |
 | **真实内存判定（MLE）** | ❌ 内存是死配置 | ✅ 跨平台采样进程峰值内存，超限真判 MLE |
@@ -106,7 +106,7 @@ copy-paste reference if you want to change one.
 ### 4. 集成 Competitive Companion 浏览器插件
 
 1. 在 Sublime Text 中打开要做题的代码文件
-2. 右键选择 `cph-by-chenkx: Listen to Competitive Companion`
+2. 右键选择 `Algorithm Competition Assistant: Listen to Competitive Companion`
 3. 浏览器打开题目页，点 Competitive Companion 扩展的绿色 `+`
 4. 样例与时间/内存限制自动发送到 Sublime Text、存进测试文件并自动运行
 
@@ -118,8 +118,8 @@ copy-paste reference if you want to change one.
 
 默认中文，可切换：
 
-- **菜单**：`Tools` → `cph-by-chenkx` → `Switch language (中/EN)`
-- **命令面板**：`cph-by-chenkx: Switch to English` / `切换为中文`
+- **菜单**：`Tools` → `Algorithm Competition Assistant` → `Switch language (中/EN)`
+- **命令面板**：`Algorithm Competition Assistant: Switch to English` / `切换为中文`
 - **右键菜单**：`Switch language (中/EN)`
 - **设置**：`"language": "en"` 或 `"zh"`
 
@@ -134,7 +134,7 @@ copy-paste reference if you want to change one.
 - **自定义判定器（SPJ）**：`run_settings` 里填 `checker` 即可用 testlib 风格的 checker（三个文件参数 + 退出码判定），多解题不再只能靠 token 比较
 - **交互题**：填 `interactor` 即按 testlib 约定接线，选手程序与 interactor 双向对话，退出码即判决
 - **Subtask 分组**：`subtasks` 里分组，组内全 AC 才拿分，汇总行显示部分分
-- **Benchmark / 机器校准 / 练习统计 / 比赛计时 / 抓题与题面预览 / 保存自动运行**：命令面板里搜 `cph-by-chenkx:` 都能找到
+- **Benchmark / 机器校准 / 练习统计 / 比赛计时 / 抓题与题面预览 / 保存自动运行**：命令面板里搜 `Algorithm Competition Assistant:` 都能找到
 - **错误位置可点击**：RE 的 `文件:行:号` 和编译器的每条诊断都会渲染成链接，点一下直接跳到源码那一行（已经打开的标签会被复用，不会新开一个）
 - **Debug / Release 一键切换**（`Ctrl+Alt+G`）：Debug 去掉优化并加 `-g -fsanitize=address,undefined`，崩溃时能给出精确行号；Release 保证 `-O2` 并去掉 sanitizer，计时与评测机可比。按文件记忆，**不写你的设置文件**；当前模式显示在运行面板状态栏
 - **并行运行**（`Ctrl+Alt+Shift+P`）：每个测试点一个独立进程、`parallel_workers`（默认 4）个 worker 同时跑。串行时 5 个点里有 2 个 TLE 要等 2×时限，并行约 1/4
@@ -160,7 +160,7 @@ copy-paste reference if you want to change one.
 ## 安装
 
 1. 克隆或下载本仓库
-2. 把 `cph-by-chenkx` 文件夹复制到 Sublime Text 的 `Packages` 目录
+2. 把 `Algorithm Competition Assistant` 文件夹复制到 Sublime Text 的 `Packages` 目录
 3. 重启 Sublime Text
 
 ## 使用方法
@@ -271,8 +271,8 @@ int main() {
 
 在**你的程序**的编辑视图里任选一种：
 
-- 菜单：`View` → `cph-by-chenkx` → `Start stress test`
-- 命令面板：`cph-by-chenkx: Start stress test`
+- 菜单：`View` → `Algorithm Competition Assistant` → `Start stress test`
+- 命令面板：`Algorithm Competition Assistant: Start stress test`
 - 快捷键：`Ctrl+Alt+S` (Mac: `Cmd+Alt+S`)
 
 **不需要填路径**：命令会先在当前源文件所在目录里按名字找 std 和生成器
@@ -282,7 +282,7 @@ int main() {
 系统「打开文件」对话框，**起始目录就是当前源文件所在目录**，其它平台用命令面板浏览
 （`stress_file_picker` 可改成 `native` / `panel`）。
 
-想每次都自己指定，用命令面板里的 `cph-by-chenkx: Stress test with options (pick files, rounds)`，
+想每次都自己指定，用命令面板里的 `Algorithm Competition Assistant: Stress test with options (pick files, rounds)`，
 它会依次问 std、生成器、每轮时限和最大轮数。
 
 ### 3. 查看结果
@@ -331,7 +331,7 @@ int main() {
 
 ## 设置示例
 
-在 `cph-by-chenkx.sublime-settings` 中：
+在 `Algorithm Competition Assistant.sublime-settings` 中：
 
 ```json
 {

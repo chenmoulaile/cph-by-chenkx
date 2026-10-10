@@ -1,4 +1,4 @@
-"""cph-by-chenkx - 保存后自动运行 / 自动格式化
+"""Algorithm Competition Assistant - 保存后自动运行 / 自动格式化
 
 两个都是 CP Editor 的标配，但都会"抢方向盘"，所以**默认关闭**，由设置打开：
 
@@ -102,7 +102,7 @@ def _start_run(view, settings, file_name):
 			else:
 				view.run_command('cph_view_tester', {'action': 'make_opd'})
 		except Exception as e:
-			print('[cph-by-chenkx] auto run failed: %s' % e)
+			print('[Algorithm Competition Assistant] auto run failed: %s' % e)
 
 	sublime.set_timeout(fire, int(_debounce_seconds(settings) * 1000))
 
@@ -129,7 +129,7 @@ def _format_file(view, entry, file_name):
 							 cwd=os.path.dirname(file_name) or None,
 							 startupinfo=_hidden_startupinfo()).wait()
 		except Exception as e:
-			print('[cph-by-chenkx] format failed: %s' % e)
+			print('[Algorithm Competition Assistant] format failed: %s' % e)
 			return
 		after = ''
 		try:

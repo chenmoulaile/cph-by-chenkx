@@ -1,5 +1,5 @@
 """
-cph-by-chenkx - 国际化 / Internationalization
+Algorithm Competition Assistant - 国际化 / Internationalization
 默认中文 (可切换为英文)
 Default Chinese, switchable to English
 """
@@ -338,8 +338,8 @@ STRINGS = {
         'en': 'Listen to Competitive Companion',
     },
     'server_started': {
-        'zh': 'cph-by-chenkx 监听已启动，等待 Competitive Companion 发送数据...',
-        'en': 'cph-by-chenkx listener started, waiting for Competitive Companion...',
+        'zh': 'Algorithm Competition Assistant 监听已启动，等待 Competitive Companion 发送数据...',
+        'en': 'Algorithm Competition Assistant listener started, waiting for Competitive Companion...',
     },
     'tests_loaded': {
         'zh': '已加载 {count} 个测试用例',
@@ -374,12 +374,12 @@ STRINGS = {
         'en': 'Can\'t restore session',
     },
     'session_saved': {
-        'zh': 'cph-by-chenkx: 会话已保存',
-        'en': 'cph-by-chenkx: session saved',
+        'zh': 'Algorithm Competition Assistant: 会话已保存',
+        'en': 'Algorithm Competition Assistant: session saved',
     },
     'settings_loaded': {
-        'zh': 'cph-by-chenkx: 设置已加载',
-        'en': 'cph-by-chenkx: settings loaded',
+        'zh': 'Algorithm Competition Assistant: 设置已加载',
+        'en': 'Algorithm Competition Assistant: settings loaded',
     },
     'next_test': {
         'zh': '下一个测试',
@@ -813,8 +813,8 @@ STRINGS = {
               'to save it anyway)',
     },
     'doctor_title': {
-        'zh': 'cph-by-chenkx 环境自检',
-        'en': 'cph-by-chenkx environment check',
+        'zh': 'Algorithm Competition Assistant 环境自检',
+        'en': 'Algorithm Competition Assistant environment check',
     },
     'doctor_no_run_settings': {
         'zh': 'run_settings 为空，先去设置里配置语言',

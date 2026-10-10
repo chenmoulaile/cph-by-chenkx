@@ -1,5 +1,5 @@
 """
-cph-by-chenkx - 测试编辑窗口
+Algorithm Competition Assistant - 测试编辑窗口
 两个独立标签页:
   - "test N -edit"   编辑测试输入
   - "test N -answer" 编辑标准答案 (预期输出)
@@ -76,7 +76,7 @@ class CphTestEditCommand(sublime_plugin.TextCommand):
 		if event == 'test-save':
 			source = self._find_source_view()
 			if source is None:
-				sublime.status_message('[cph-by-chenkx] source run view is gone')
+				sublime.status_message('[Algorithm Competition Assistant] source run view is gone')
 				return
 
 			content = self._content()

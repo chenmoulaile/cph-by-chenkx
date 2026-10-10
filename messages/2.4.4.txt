@@ -1,0 +1,22 @@
+Algorithm Competition Assistant 2.4.4
+=====================================
+
+The package is now published as **Algorithm Competition Assistant**. The
+repository keeps its existing URL, so old links keep working.
+
+Changed:
+
+* The default settings file moved from `cph-by-chenkx.sublime-settings` to
+  `Algorithm Competition Assistant.sublime-settings`.
+* The two palette entries now read `Preferences: Algorithm Competition
+  Assistant Settings` and `Preferences: Algorithm Competition Assistant
+  TestSyntax Settings`.
+* `Main.sublime-menu` gained the matching `Package Settings` entry.
+* Every path reaching into the package (`${packages}/...`) now points at the
+  installed package name instead of the repository name.
+
+Notes:
+
+* Settings you customised live under `Packages/User/` and are untouched.
+* The machine-calibration and practice-statistics files under `Packages/User/`
+  keep their previous names, so existing data is preserved.

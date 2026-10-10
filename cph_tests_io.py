@@ -1,5 +1,5 @@
 """
-cph-by-chenkx - 测试数据杂项 I/O
+Algorithm Competition Assistant - 测试数据杂项 I/O
 
 - 从剪贴板新增测试点（"输入 --- 输出" 或整段当输入）
 - 复制某个测试点的 输入 / 预期输出 / 实际输出

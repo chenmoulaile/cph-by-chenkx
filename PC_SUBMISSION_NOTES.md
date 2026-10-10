@@ -1,8 +1,26 @@
-# cph-by-chenkx — Package Control Submission Notes
+# Algorithm Competition Assistant — Package Control Submission Notes
 
-Package version: v2.3.0
+Package version: v2.4.4
 Repository: https://github.com/chenmoulaile/cph-by-chenkx
-Channel entry file: `repository/c/cph-by-chenkx.json` (see snippet at the bottom)
+Channel entry file: `repository/a.json` (see snippet at the bottom)
+
+## v2.4.4 notes
+
+- The published package name is **Algorithm Competition Assistant** (the
+  channel entry carries an explicit `name`; the repository keeps its URL).
+  The old name `cph-by-chenkx` was opaque - "cph" is also Copenhagen Airport -
+  and the maintainer suggested a descriptive name.
+- The rename is applied consistently inside the package, which is what the
+  reviewer bot failed over:
+  - default settings file is now
+    `Algorithm Competition Assistant.sublime-settings` (a settings file has to
+    be named after the package or a syntax you ship)
+  - palette entries are `Preferences: Algorithm Competition Assistant ...`
+  - `Main.sublime-menu` has a `Package Settings` entry with that name
+  - every `${packages}/...` path points at the installed package name
+- The channel entry moved from `repository/c.json` to `repository/a.json`.
+- User data files under `Packages/User/` keep their previous names on purpose,
+  so an existing calibration/statistics file is not orphaned.
 
 ## v2.3.0 notes
 

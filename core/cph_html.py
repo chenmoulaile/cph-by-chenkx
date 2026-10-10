@@ -1,4 +1,4 @@
-"""cph-by-chenkx - HTML helpers / HTML 处理助手（零依赖）
+"""Algorithm Competition Assistant - HTML helpers / HTML 处理助手（零依赖）
 
 把题目页面（Codeforces / 洛谷 / AtCoder / 多数评测站）的 HTML 转成能在
 Sublime 里阅读的 Markdown，并尽量抽出样例输入输出。

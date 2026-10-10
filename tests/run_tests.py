@@ -1,4 +1,4 @@
-"""cph-by-chenkx regression tests.
+"""Algorithm Competition Assistant regression tests.
 
 Runs with plain CPython - no Sublime Text, no third party packages:
 
@@ -603,7 +603,7 @@ def main():
     # contains {extra_sources} / {include_dirs}, which are NOT format keys, so
     # str.format() raised KeyError on the very first run of a fresh install.
     import tempfile
-    raw = open(os.path.join(ROOT, 'cph-by-chenkx.sublime-settings'), encoding='utf-8').read()
+    raw = open(os.path.join(ROOT, 'Algorithm Competition Assistant.sublime-settings'), encoding='utf-8').read()
     raw = re.sub(r'//[^\n]*', '', raw)
     shipped = json.loads(raw)
     tmpdir = tempfile.mkdtemp()
@@ -795,7 +795,7 @@ def main():
     check('PE stays PE by default', pe_strict['name'] == 'PE', pe_strict['name'])
     check('regard_pe_as_ac=true turns PE into AC',
           pe_lenient['name'] == 'AC', pe_lenient['name'])
-    with open(os.path.join(ROOT, 'cph-by-chenkx.sublime-settings'), encoding='utf-8') as f:
+    with open(os.path.join(ROOT, 'Algorithm Competition Assistant.sublime-settings'), encoding='utf-8') as f:
         settings_text = f.read()
     check('the setting is documented in the default settings',
           '"regard_pe_as_ac"' in settings_text)
@@ -938,7 +938,7 @@ def main():
             # `${packages}/Default/...` in a Key Bindings entry (only User/ and
             # our own directory are fine).
             if ref.startswith('${packages}/') and not ref.startswith(
-                    ('${packages}/cph-by-chenkx/', '${packages}/User/')):
+                    ('${packages}/Algorithm Competition Assistant/', '${packages}/User/')):
                 outside.append('%s -> %s' % (caption, ref))
             for child in item.get('children') or []:
                 walk_menu([child])
@@ -950,7 +950,7 @@ def main():
           '; '.join(outside))
 
     # 6. The context menu switch is documented in the shipped settings.
-    with open(os.path.join(ROOT, 'cph-by-chenkx.sublime-settings'), encoding='utf-8') as f:
+    with open(os.path.join(ROOT, 'Algorithm Competition Assistant.sublime-settings'), encoding='utf-8') as f:
         settings_text = f.read()
     check('context_menu setting is shipped',
           '"context_menu"' in settings_text)
@@ -1048,7 +1048,7 @@ def main():
             # '中文' and the mangled latin-1 lookalike are both unprintable
             # on cp1252; this is the exact message that broke the CI job.
             artifacts.print_safe(
-                '[cph-by-chenkx] the binary is %r on disk, not %r'
+                '[Algorithm Competition Assistant] the binary is %r on disk, not %r'
                 % ('ÖÐÎÄ.exe', '中文.exe'))
         narrow_ok = True
     except Exception as e:
@@ -1945,7 +1945,7 @@ def main():
           '"a  b.cpp"' in stress._strip_local_define(
               'g++ "a  b.cpp" -DLOCAL -o "x.exe"'))
     check('the shipped default settings have no -DLOCAL',
-          '-DLOCAL' not in io.open(os.path.join(ROOT, 'cph-by-chenkx.sublime-settings'),
+          '-DLOCAL' not in io.open(os.path.join(ROOT, 'Algorithm Competition Assistant.sublime-settings'),
                                    encoding='utf-8').read())
 
     # Several files can be stress tested at the same time; each run owns a

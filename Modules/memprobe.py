@@ -1,5 +1,5 @@
 """
-cph-by-chenkx - 子进程峰值内存采样（零第三方依赖）
+Algorithm Competition Assistant - 子进程峰值内存采样（零第三方依赖）
 
 用途：让 MLE（内存超限）判定真正生效。此前 memory_limit_mb 只是传给了判定
 函数，但从未有人把"实际用了多少内存"喂进去，所以 MLE 永远判不出来。

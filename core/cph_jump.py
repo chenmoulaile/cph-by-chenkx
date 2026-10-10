@@ -1,4 +1,4 @@
-"""cph-by-chenkx - 把输出里的 `文件:行:列` 变成可点的跳转链接
+"""Algorithm Competition Assistant - 把输出里的 `文件:行:列` 变成可点的跳转链接
 
 运行错误的位置（`find_crash_location` 解析出的 `main.cpp:12`）和编译器诊断都
 带着 `文件:行:列`，以前只是纯文本。这里把它们变成 minihtml 链接，点一下直接

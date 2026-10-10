@@ -1,7 +1,28 @@
-# cph-by-chenkx 更新说明
+# Algorithm Competition Assistant 更新说明
 
 按版本从新到旧，每节分「修复 / 新增与改进 / 说明」三类。
 完整的设置项说明见 README，快捷键见 README 的快捷键表。
+
+---
+
+# v2.4.4
+
+## 新增与改进
+
+- **发布名改为 Algorithm Competition Assistant，并在包内统一**：
+  - 默认设置文件 `cph-by-chenkx.sublime-settings` →
+    `Algorithm Competition Assistant.sublime-settings`
+  - 命令面板的两条设置项改为 `Preferences: Algorithm Competition Assistant Settings`
+    与 `Preferences: Algorithm Competition Assistant TestSyntax Settings`
+  - `Main.sublime-menu` 补上对应的 `Package Settings` 入口
+  - 所有 `${packages}/...` 路径改指向安装后的包名（此前指向的是仓库名）
+- 频道条目从 `repository/c.json` 移到 `repository/a.json`（跟随新名字的首字母）。
+
+## 说明
+
+- 仓库地址不变（`chenmoulaile/cph-by-chenkx`）：Package Control 允许条目里的
+  `name` 与仓库名不同，旧链接不会失效。
+- `Packages/User/` 下的机器校准系数与练习统计文件名保持原样，已有数据不受影响。
 
 ---
 

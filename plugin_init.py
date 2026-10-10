@@ -1,10 +1,10 @@
-"""cph-by-chenkx plugin initialization entrypoint."""
+"""Algorithm Competition Assistant plugin initialization entrypoint."""
 import os
 
 import sublime
 
 # Kept in sync with messages.json by tests/check_messages.py.
-VERSION = '2.4.3'
+VERSION = '2.4.4'
 
 
 def plugin_loaded():
@@ -16,15 +16,15 @@ def plugin_loaded():
         # that "does not match the source on disk". Printing the version at
         # startup (visible in the console with View > Show Console) plus the
         # plugin host's StartTime answers that question immediately.
-        print('[cph-by-chenkx] %s loaded (pid %s)' % (VERSION, os.getpid()))
+        print('[Algorithm Competition Assistant] %s loaded (pid %s)' % (VERSION, os.getpid()))
         # Defer language and settings initialization
         sublime.set_timeout(_init, 100)
     except Exception as e:
-        print('[cph-by-chenkx] Error in plugin_loaded: %s' % str(e))
+        print('[Algorithm Competition Assistant] Error in plugin_loaded: %s' % str(e))
 
 
 def plugin_unloaded():
-    print('[cph-by-chenkx] plugin unloaded')
+    print('[Algorithm Competition Assistant] plugin unloaded')
     try:
         # Drop cached HTML/CSS so an updated package is picked up, and stop
         # any listener so the port is released.
@@ -44,7 +44,7 @@ def _init():
     try:
         from .core.cph_i18n import set_lang, LANG_ZH, LANG_EN
         # Load language from platform settings file
-        settings_file = 'cph-by-chenkx.sublime-settings'
+        settings_file = 'Algorithm Competition Assistant.sublime-settings'
         settings = sublime.load_settings(settings_file)
         lang = settings.get('language', 'zh')
         if lang in (LANG_ZH, LANG_EN):
@@ -60,12 +60,12 @@ def _init():
                 pass
 
         settings.add_on_change('cph_language', _on_settings_change)
-        print('[cph-by-chenkx] plugin loaded, language: %s' % lang)
+        print('[Algorithm Competition Assistant] plugin loaded, language: %s' % lang)
     except Exception as e:
-        print('[cph-by-chenkx] Error setting up language: %s' % str(e))
+        print('[Algorithm Competition Assistant] Error setting up language: %s' % str(e))
 
     try:
         from .core.cph_settings import try_load_settings
         try_load_settings()
     except Exception as e:
-        print('[cph-by-chenkx] Error loading settings: %s' % str(e))
+        print('[Algorithm Competition Assistant] Error loading settings: %s' % str(e))
